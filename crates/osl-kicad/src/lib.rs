@@ -593,6 +593,10 @@ impl KicadSchematic {
                 name: name.to_string(),
                 value: value.to_string(),
                 at,
+                hide: None,
+                show_name: None,
+                do_not_autoplace: None,
+                effects: None,
             });
         }
 
@@ -2089,6 +2093,8 @@ impl KicadSchematic {
                 "  \"board_excluded_count\": {},\n",
                 "  \"mirrored_symbol_count\": {},\n",
                 "  \"fields_autoplaced_count\": {},\n",
+                "  \"hidden_property_count\": {},\n",
+                "  \"property_effect_count\": {},\n",
                 "  \"embedded_fonts\": {},\n",
                 "  \"library_graphic_count\": {}\n",
                 "}}"
@@ -2141,6 +2147,8 @@ impl KicadSchematic {
             self.board_excluded_count(),
             self.mirrored_symbol_count(),
             self.fields_autoplaced_count(),
+            self.hidden_property_count(),
+            self.property_effect_count(),
             json_bool_option(self.embedded_fonts),
             self.library_symbols
                 .iter()
@@ -2250,6 +2258,34 @@ impl KicadSchematic {
                 .sheets
                 .iter()
                 .filter(|sheet| sheet.fields_autoplaced == Some(true))
+                .count()
+    }
+
+    fn hidden_property_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .flat_map(|symbol| &symbol.properties)
+            .filter(|property| property.hide == Some(true))
+            .count()
+            + self
+                .sheets
+                .iter()
+                .flat_map(|sheet| &sheet.properties)
+                .filter(|property| property.hide == Some(true))
+                .count()
+    }
+
+    fn property_effect_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .flat_map(|symbol| &symbol.properties)
+            .filter(|property| property.effects.is_some())
+            .count()
+            + self
+                .sheets
+                .iter()
+                .flat_map(|sheet| &sheet.properties)
+                .filter(|property| property.effects.is_some())
                 .count()
     }
 }
@@ -4382,6 +4418,10 @@ pub struct KicadProperty {
     pub name: String,
     pub value: String,
     pub at: Option<KicadAt>,
+    pub hide: Option<bool>,
+    pub show_name: Option<bool>,
+    pub do_not_autoplace: Option<bool>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 impl KicadProperty {
@@ -4401,7 +4441,50 @@ impl KicadProperty {
                 format_number(at.rotation)
             ));
         }
-        output.push_str(" (effects (font (size 1.27 1.27))))\n");
+        output.push('\n');
+        write_optional_bool_sexpr(output, indent + 2, "hide", self.hide);
+        write_optional_bool_sexpr(output, indent + 2, "show_name", self.show_name);
+        write_optional_bool_sexpr(
+            output,
+            indent + 2,
+            "do_not_autoplace",
+            self.do_not_autoplace,
+        );
+        match &self.effects {
+            Some(effects) => effects.write_effects_sexpr(output, indent + 2),
+            None => output.push_str(&format!("{}  (effects (font (size 1.27 1.27)))\n", pad)),
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadTextEffects {
+    pub font_size: Option<KicadSize>,
+    pub justify: Vec<String>,
+}
+
+impl KicadTextEffects {
+    fn write_effects_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(effects", pad));
+        if let Some(size) = self.font_size {
+            output.push_str(&format!(
+                " (font (size {} {}))",
+                format_number(size.width),
+                format_number(size.height)
+            ));
+        } else {
+            output.push_str(" (font (size 1.27 1.27))");
+        }
+        if !self.justify.is_empty() {
+            output.push_str(" (justify");
+            for token in &self.justify {
+                output.push_str(&format!(" {}", sexpr_atom_or_string(token)));
+            }
+            output.push(')');
+        }
+        output.push_str(")\n");
     }
 }
 
@@ -5432,7 +5515,30 @@ fn parse_property(node: &Sexp) -> Option<KicadProperty> {
         name: list_value(node, 1)?,
         value: list_value(node, 2)?,
         at: child(items, "at").and_then(parse_at),
+        hide: child_value(items, "hide").and_then(parse_kicad_bool_value),
+        show_name: child_value(items, "show_name").and_then(parse_kicad_bool_value),
+        do_not_autoplace: child_value(items, "do_not_autoplace").and_then(parse_kicad_bool_value),
+        effects: child(items, "effects").map(parse_text_effects),
     })
+}
+
+fn parse_text_effects(node: &Sexp) -> KicadTextEffects {
+    let items = list_items(node);
+    KicadTextEffects {
+        font_size: child(items, "font")
+            .and_then(|font| child(list_items(font), "size"))
+            .and_then(parse_size),
+        justify: child(items, "justify")
+            .map(|justify| {
+                list_items(justify)
+                    .iter()
+                    .skip(1)
+                    .filter_map(atom_text)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
 }
 
 fn parse_wire(node: &Sexp) -> KicadWire {
@@ -6531,6 +6637,10 @@ fn symbol_instance_properties(
             at: property
                 .at
                 .map(|property_at| transform_local_at(property_at, symbol_at)),
+            hide: property.hide,
+            show_name: property.show_name,
+            do_not_autoplace: property.do_not_autoplace,
+            effects: property.effects.clone(),
         })
         .collect::<Vec<_>>();
 
@@ -6546,6 +6656,10 @@ fn symbol_instance_properties(
                 y: symbol_at.y - 2.54,
                 rotation: symbol_at.rotation,
             }),
+            hide: None,
+            show_name: None,
+            do_not_autoplace: None,
+            effects: None,
         });
     }
     if !properties.iter().any(|property| property.name == "Value") {
@@ -6557,6 +6671,10 @@ fn symbol_instance_properties(
                 y: symbol_at.y + 2.54,
                 rotation: symbol_at.rotation,
             }),
+            hide: None,
+            show_name: None,
+            do_not_autoplace: None,
+            effects: None,
         });
     }
 
@@ -6573,6 +6691,10 @@ fn sheet_properties(name: &str, file: &str, at: KicadAt, size: KicadSize) -> Vec
                 y: at.y - 1.27,
                 rotation: 0.0,
             }),
+            hide: None,
+            show_name: None,
+            do_not_autoplace: None,
+            effects: None,
         },
         KicadProperty {
             name: "Sheetfile".to_string(),
@@ -6582,6 +6704,10 @@ fn sheet_properties(name: &str, file: &str, at: KicadAt, size: KicadSize) -> Vec
                 y: at.y + size.height + 1.27,
                 rotation: 0.0,
             }),
+            hide: None,
+            show_name: None,
+            do_not_autoplace: None,
+            effects: None,
         },
     ]
 }
@@ -7617,6 +7743,86 @@ mod tests {
         assert_eq!(reparsed.symbols[0].dnp, Some(true));
         assert_eq!(reparsed.sheets[0].on_board, Some(false));
         assert_eq!(reparsed.sheets[0].fields_autoplaced, Some(true));
+    }
+
+    #[test]
+    fn preserves_property_display_flags_and_effects() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20251028)
+  (generator "eeschema")
+  (paper "A4")
+  (lib_symbols)
+  (symbol
+    (lib_id "Device:R")
+    (at 10 20 0)
+    (unit 1)
+    (uuid "11111111-1111-4111-8111-111111111111")
+    (property "Reference" "R1"
+      (at 10 17.46 0)
+      (hide yes)
+      (show_name no)
+      (do_not_autoplace no)
+      (effects
+        (font
+          (size 1.524 1.016)
+        )
+        (justify left bottom)
+      )
+    )
+    (property "Value" "1k"
+      (at 10 22.54 0)
+      (effects
+        (font
+          (size 1.27 1.27)
+        )
+      )
+    )
+    (pin "1" (uuid "22222222-2222-4222-8222-222222222222"))
+  )
+)"#,
+            "property_effects.kicad_sch",
+        )
+        .unwrap();
+
+        let property = &schematic.symbols[0].properties[0];
+        assert_eq!(property.hide, Some(true));
+        assert_eq!(property.show_name, Some(false));
+        assert_eq!(property.do_not_autoplace, Some(false));
+        let effects = property.effects.as_ref().unwrap();
+        assert_close(effects.font_size.unwrap().width, 1.524);
+        assert_close(effects.font_size.unwrap().height, 1.016);
+        assert_eq!(
+            effects.justify,
+            vec!["left".to_string(), "bottom".to_string()]
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"hidden_property_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"property_effect_count\": 2")
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(hide yes)"));
+        assert!(roundtrip.contains("(show_name no)"));
+        assert!(roundtrip.contains("(do_not_autoplace no)"));
+        assert!(roundtrip.contains("(font (size 1.524 1.016))"));
+        assert!(roundtrip.contains("(justify left bottom)"));
+        let reparsed =
+            parse_kicad_schematic(&roundtrip, "property_effects_roundtrip.kicad_sch").unwrap();
+        let property = &reparsed.symbols[0].properties[0];
+        assert_eq!(property.hide, Some(true));
+        assert_eq!(property.show_name, Some(false));
+        assert_eq!(property.do_not_autoplace, Some(false));
+        assert_eq!(
+            property.effects.as_ref().unwrap().justify,
+            vec!["left".to_string(), "bottom".to_string()]
+        );
     }
 
     #[test]
