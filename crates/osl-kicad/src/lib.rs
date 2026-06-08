@@ -109,6 +109,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         images: direct_children(root_list, "image")
             .filter_map(parse_image)
             .collect(),
+        tables: direct_children(root_list, "table")
+            .filter_map(parse_table)
+            .collect(),
         labels: direct_children(root_list, "label")
             .filter_map(|node| parse_label(node, KicadLabelKind::Local))
             .chain(
@@ -213,6 +216,7 @@ pub struct KicadSchematic {
     pub bus_entries: Vec<KicadBusEntry>,
     pub graphics: Vec<KicadSchematicGraphic>,
     pub images: Vec<KicadImage>,
+    pub tables: Vec<KicadTable>,
     pub labels: Vec<KicadLabel>,
     pub sheets: Vec<KicadSheet>,
     pub no_connects: Vec<KicadNoConnect>,
@@ -1143,6 +1147,9 @@ impl KicadSchematic {
         for image in &self.images {
             image.write_image_sexpr(&mut output, 2);
         }
+        for table in &self.tables {
+            table.write_table_sexpr(&mut output, 2);
+        }
         for junction in &self.junctions {
             junction.write_junction_sexpr(&mut output, 2);
         }
@@ -1887,6 +1894,16 @@ impl KicadSchematic {
                 uuids.insert(uuid.clone());
             }
         }
+        for table in &self.tables {
+            if let Some(uuid) = &table.uuid {
+                uuids.insert(uuid.clone());
+            }
+            for cell in &table.cells {
+                if let Some(uuid) = &cell.uuid {
+                    uuids.insert(uuid.clone());
+                }
+            }
+        }
         for label in &self.labels {
             if let Some(uuid) = &label.uuid {
                 uuids.insert(uuid.clone());
@@ -1989,6 +2006,8 @@ impl KicadSchematic {
                 "  \"bus_entry_count\": {},\n",
                 "  \"schematic_graphic_count\": {},\n",
                 "  \"image_count\": {},\n",
+                "  \"table_count\": {},\n",
+                "  \"table_cell_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
@@ -2011,6 +2030,11 @@ impl KicadSchematic {
             self.bus_entries.len(),
             self.graphics.len(),
             self.images.len(),
+            self.tables.len(),
+            self.tables
+                .iter()
+                .map(|table| table.cells.len())
+                .sum::<usize>(),
             self.labels.len(),
             self.junctions.len(),
             self.no_connects.len(),
@@ -2357,6 +2381,7 @@ pub struct KicadCanvasScene {
     pub sheets: Vec<KicadCanvasSheet>,
     pub graphics: Vec<KicadCanvasGraphic>,
     pub images: Vec<KicadCanvasImage>,
+    pub tables: Vec<KicadCanvasTable>,
     pub wires: Vec<KicadCanvasWire>,
     pub buses: Vec<KicadCanvasBus>,
     pub bus_entries: Vec<KicadCanvasBusEntry>,
@@ -2487,6 +2512,38 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let tables = schematic
+            .tables
+            .iter()
+            .map(|table| {
+                let cells = table
+                    .cells
+                    .iter()
+                    .map(|cell| {
+                        if let Some(cell_bounds) = cell.bounding_box() {
+                            bounds.include_box(cell_bounds);
+                        } else if let Some(at) = cell.at {
+                            bounds.include(at.point());
+                        }
+                        KicadCanvasTableCell {
+                            text: cell.text.clone(),
+                            at: cell.at,
+                            size: cell.size,
+                            margins: cell.margins,
+                            column_span: cell.column_span,
+                            row_span: cell.row_span,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                KicadCanvasTable {
+                    column_count: table.column_count,
+                    column_widths: table.column_widths.clone(),
+                    row_heights: table.row_heights.clone(),
+                    cells,
+                }
+            })
+            .collect::<Vec<_>>();
+
         let buses = schematic
             .buses
             .iter()
@@ -2585,6 +2642,7 @@ impl KicadCanvasScene {
             sheets,
             graphics,
             images,
+            tables,
             wires,
             buses,
             bus_entries,
@@ -2623,6 +2681,8 @@ impl KicadCanvasScene {
                 "  \"graphic_count\": {},\n",
                 "  \"schematic_graphic_count\": {},\n",
                 "  \"image_count\": {},\n",
+                "  \"table_count\": {},\n",
+                "  \"table_cell_count\": {},\n",
                 "  \"pin_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"wire_count\": {},\n",
@@ -2643,6 +2703,11 @@ impl KicadCanvasScene {
             graphic_count,
             self.graphics.len(),
             self.images.len(),
+            self.tables.len(),
+            self.tables
+                .iter()
+                .map(|table| table.cells.len())
+                .sum::<usize>(),
             pin_count,
             self.sheets
                 .iter()
@@ -2762,6 +2827,24 @@ pub struct KicadCanvasImage {
     pub data_base64: String,
     pub mime_type: String,
     pub image_size: Option<KicadSize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasTable {
+    pub column_count: usize,
+    pub column_widths: Vec<f64>,
+    pub row_heights: Vec<f64>,
+    pub cells: Vec<KicadCanvasTableCell>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasTableCell {
+    pub text: String,
+    pub at: Option<KicadAt>,
+    pub size: Option<KicadSize>,
+    pub margins: Option<KicadMargins>,
+    pub column_span: usize,
+    pub row_span: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3806,6 +3889,149 @@ impl KicadImage {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadTable {
+    pub column_count: usize,
+    pub column_widths: Vec<f64>,
+    pub row_heights: Vec<f64>,
+    pub cells: Vec<KicadTableCell>,
+    pub uuid: Option<String>,
+    pub locked: Option<bool>,
+}
+
+impl KicadTable {
+    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
+        let mut bounds = KicadBoundingBoxBuilder::default();
+        for cell in &self.cells {
+            if let Some(cell_bounds) = cell.bounding_box() {
+                bounds.include_box(cell_bounds);
+            }
+        }
+        bounds.finish()
+    }
+
+    fn write_table_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(table\n{}  (column_count {})\n",
+            pad, pad, self.column_count
+        ));
+        output.push_str(&format!(
+            "{}  (border (external yes) (header yes) (stroke (width 0) (type solid)))\n",
+            pad
+        ));
+        output.push_str(&format!(
+            "{}  (separators (rows yes) (cols yes) (stroke (width 0) (type solid)))\n",
+            pad
+        ));
+        output.push_str(&format!("{}  (column_widths", pad));
+        for width in &self.column_widths {
+            output.push_str(&format!(" {}", format_number(*width)));
+        }
+        output.push_str(")\n");
+        output.push_str(&format!("{}  (row_heights", pad));
+        for height in &self.row_heights {
+            output.push_str(&format!(" {}", format_number(*height)));
+        }
+        output.push_str(")\n");
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        if self.locked == Some(true) {
+            output.push_str(&format!("{}  (locked yes)\n", pad));
+        }
+        output.push_str(&format!("{}  (cells\n", pad));
+        for cell in &self.cells {
+            cell.write_table_cell_sexpr(output, indent + 4);
+        }
+        output.push_str(&format!("{}  )\n", pad));
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadTableCell {
+    pub text: String,
+    pub at: Option<KicadAt>,
+    pub size: Option<KicadSize>,
+    pub margins: Option<KicadMargins>,
+    pub column_span: usize,
+    pub row_span: usize,
+    pub exclude_from_sim: Option<bool>,
+    pub uuid: Option<String>,
+    pub locked: Option<bool>,
+}
+
+impl KicadTableCell {
+    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
+        let at = self.at?;
+        let size = self.size?;
+        Some(KicadBoundingBox {
+            min: at.point(),
+            max: KicadPoint {
+                x: at.x + size.width,
+                y: at.y + size.height,
+            },
+        })
+    }
+
+    fn write_table_cell_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(table_cell {}\n",
+            pad,
+            sexpr_string(&self.text)
+        ));
+        if let Some(exclude_from_sim) = self.exclude_from_sim {
+            output.push_str(&format!(
+                "{}  (exclude_from_sim {})\n",
+                pad,
+                if exclude_from_sim { "yes" } else { "no" }
+            ));
+        }
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                "{}  (at {} {} {})\n",
+                pad,
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        if let Some(size) = self.size {
+            output.push_str(&format!(
+                "{}  (size {} {})\n",
+                pad,
+                format_number(size.width),
+                format_number(size.height)
+            ));
+        }
+        if let Some(margins) = self.margins {
+            output.push_str(&format!(
+                "{}  (margins {} {} {} {})\n",
+                pad,
+                format_number(margins.left),
+                format_number(margins.top),
+                format_number(margins.right),
+                format_number(margins.bottom)
+            ));
+        }
+        output.push_str(&format!(
+            "{}  (span {} {})\n",
+            pad, self.column_span, self.row_span
+        ));
+        output.push_str(&format!("{}  (fill (type none))\n", pad));
+        output.push_str(&format!("{}  (effects (font (size 1.27 1.27)))\n", pad));
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        if self.locked == Some(true) {
+            output.push_str(&format!("{}  (locked yes)\n", pad));
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KicadBoundingBox {
     pub min: KicadPoint,
@@ -4687,6 +4913,46 @@ fn parse_image(node: &Sexp) -> Option<KicadImage> {
     })
 }
 
+fn parse_table(node: &Sexp) -> Option<KicadTable> {
+    let items = list_items(node);
+    Some(KicadTable {
+        column_count: child_value(items, "column_count")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(0),
+        column_widths: child(items, "column_widths")
+            .map(parse_number_list)
+            .unwrap_or_default(),
+        row_heights: child(items, "row_heights")
+            .map(parse_number_list)
+            .unwrap_or_default(),
+        cells: child(items, "cells")
+            .map(|cells| {
+                direct_children(list_items(cells), "table_cell")
+                    .filter_map(parse_table_cell)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        uuid: child_value(items, "uuid"),
+        locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
+    })
+}
+
+fn parse_table_cell(node: &Sexp) -> Option<KicadTableCell> {
+    let items = list_items(node);
+    let (column_span, row_span) = child(items, "span").map(parse_span).unwrap_or((1, 1));
+    Some(KicadTableCell {
+        text: list_value(node, 1)?,
+        at: child(items, "at").and_then(parse_at),
+        size: child(items, "size").and_then(parse_size),
+        margins: child(items, "margins").and_then(parse_margins),
+        column_span,
+        row_span,
+        exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
+        uuid: child_value(items, "uuid"),
+        locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
+    })
+}
+
 fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
     let items = list_items(node);
     Some(KicadLabel {
@@ -4802,6 +5068,21 @@ fn parse_margins(node: &Sexp) -> Option<KicadMargins> {
     })
 }
 
+fn parse_span(node: &Sexp) -> (usize, usize) {
+    let items = list_items(node);
+    let columns = items
+        .get(1)
+        .and_then(atom_text)
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1);
+    let rows = items
+        .get(2)
+        .and_then(atom_text)
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1);
+    (columns, rows)
+}
+
 fn parse_at(node: &Sexp) -> Option<KicadAt> {
     let items = list_items(node);
     Some(KicadAt {
@@ -4907,6 +5188,15 @@ fn parse_data_chunks(node: &Sexp) -> String {
         .skip(1)
         .filter_map(atom_text)
         .collect::<String>()
+}
+
+fn parse_number_list(node: &Sexp) -> Vec<f64> {
+    list_items(node)
+        .iter()
+        .skip(1)
+        .filter_map(atom_text)
+        .filter_map(|value| value.parse().ok())
+        .collect()
 }
 
 fn list_value(node: &Sexp, index: usize) -> Option<String> {
@@ -6267,6 +6557,90 @@ mod tests {
         assert_eq!(reparsed.images.len(), 1);
         assert_eq!(reparsed.images[0].mime_type(), "image/png");
         assert_eq!(reparsed.canvas_scene().images.len(), 1);
+    }
+
+    #[test]
+    fn parses_schematic_tables_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (table
+    (column_count 2)
+    (border (external yes) (header yes) (stroke (width 0) (type solid)))
+    (separators (rows yes) (cols yes) (stroke (width 0) (type solid)))
+    (column_widths 26.67 21.59)
+    (row_heights 2.54 2.54)
+    (uuid "67676767-6767-4767-8767-676767676767")
+    (cells
+      (table_cell "LED pin"
+        (exclude_from_sim no)
+        (at 122.555 29.21 0)
+        (size 26.67 2.54)
+        (margins 0.9525 0.9525 0.9525 0.9525)
+        (span 1 1)
+        (fill (type none))
+        (effects (font (size 1.27 1.27)) (justify left top))
+        (uuid "68686868-6868-4868-8868-686868686868")
+      )
+      (table_cell "Expected net"
+        (exclude_from_sim no)
+        (at 149.225 29.21 0)
+        (size 21.59 2.54)
+        (margins 0.9525 0.9525 0.9525 0.9525)
+        (span 1 1)
+        (fill (type none))
+        (effects (font (size 1.27 1.27)) (justify left top))
+        (uuid "69696969-6969-4969-8969-696969696969")
+      )
+    )
+  )
+)"#,
+            "table.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.tables.len(), 1);
+        assert_eq!(schematic.tables[0].column_count, 2);
+        assert_eq!(schematic.tables[0].cells.len(), 2);
+        assert_eq!(schematic.tables[0].cells[0].text, "LED pin");
+        assert_close(schematic.tables[0].column_widths[0], 26.67);
+        assert_close(schematic.tables[0].row_heights[0], 2.54);
+        assert_eq!(
+            schematic.tables[0].uuid.as_deref(),
+            Some("67676767-6767-4767-8767-676767676767")
+        );
+        assert_eq!(
+            schematic.tables[0].cells[0].uuid.as_deref(),
+            Some("68686868-6868-4868-8868-686868686868")
+        );
+        assert!(schematic.to_summary_json().contains("\"table_count\": 1"));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"table_cell_count\": 2")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.tables.len(), 1);
+        assert_eq!(scene.tables[0].cells.len(), 2);
+        assert!(scene.to_summary_json().contains("\"table_count\": 1"));
+        assert!(scene.to_summary_json().contains("\"table_cell_count\": 2"));
+        assert_close(scene.bounds.unwrap().width(), 48.26);
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(table"));
+        assert!(roundtrip.contains("(column_count 2)"));
+        assert!(roundtrip.contains("(column_widths 26.67 21.59)"));
+        assert!(roundtrip.contains("(table_cell \"LED pin\""));
+        assert!(roundtrip.contains("(uuid \"67676767-6767-4767-8767-676767676767\")"));
+        assert!(roundtrip.contains("(uuid \"68686868-6868-4868-8868-686868686868\")"));
+        let reparsed = parse_kicad_schematic(&roundtrip, "table_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.tables.len(), 1);
+        assert_eq!(reparsed.tables[0].cells.len(), 2);
+        assert_eq!(reparsed.canvas_scene().tables.len(), 1);
     }
 
     #[test]

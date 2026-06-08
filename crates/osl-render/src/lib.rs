@@ -1,7 +1,8 @@
 use osl_core::html_escape;
 use osl_kicad::{
     KicadAt, KicadBoundingBox, KicadCanvasGraphic, KicadCanvasImage, KicadCanvasScene,
-    KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTextBox, KicadLabelKind, KicadPoint,
+    KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable, KicadCanvasTextBox, KicadLabelKind,
+    KicadPoint,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -58,6 +59,9 @@ pub fn render_kicad_scene_svg_with_options(
     }
     for image in &scene.images {
         render_image(&mut output, &viewport, image);
+    }
+    for table in &scene.tables {
+        render_table(&mut output, &viewport, table);
     }
     for bus in &scene.buses {
         render_polyline(&mut output, &viewport, &bus.points, "#2563eb", 3.2);
@@ -339,6 +343,48 @@ fn render_image(output: &mut String, viewport: &SvgViewport, image: &KicadCanvas
         html_escape(&image.mime_type),
         html_escape(&image.data_base64)
     ));
+}
+
+fn render_table(output: &mut String, viewport: &SvgViewport, table: &KicadCanvasTable) {
+    if table.cells.is_empty() {
+        return;
+    }
+
+    output.push_str(&format!(
+        "    <g data-kicad-table=\"true\" data-column-count=\"{}\">\n",
+        table.column_count
+    ));
+    for cell in &table.cells {
+        let Some(at) = cell.at else {
+            continue;
+        };
+        let Some(size) = cell.size else {
+            continue;
+        };
+        let origin = viewport.project(at_point(at));
+        let width = size.width * viewport.scale;
+        let height = size.height * viewport.scale;
+        output.push_str(&format!(
+            "      <rect data-table-cell=\"true\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"#64748b\" stroke-width=\"1\" fill=\"#ffffff\" fill-opacity=\"0.55\"/>\n",
+            fmt(origin.x),
+            fmt(origin.y),
+            fmt(width),
+            fmt(height)
+        ));
+        if !cell.text.is_empty() {
+            let margin = cell
+                .margins
+                .map(|margins| margins.left.max(0.0) * viewport.scale)
+                .unwrap_or(4.0);
+            output.push_str(&format!(
+                "      <text x=\"{}\" y=\"{}\" fill=\"#334155\" stroke=\"none\">{}</text>\n",
+                fmt(origin.x + margin),
+                fmt(origin.y + margin + 10.0),
+                html_escape(&cell.text)
+            ));
+        }
+    }
+    output.push_str("    </g>\n");
 }
 
 fn render_graphic(
@@ -695,5 +741,47 @@ mod tests {
         assert!(svg.contains("<image"));
         assert!(svg.contains("href=\"data:image/png;base64,"));
         assert!(svg.contains("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"));
+    }
+
+    #[test]
+    fn renders_schematic_tables_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (table
+    (column_count 2)
+    (border (external yes) (header yes) (stroke (width 0) (type solid)))
+    (separators (rows yes) (cols yes) (stroke (width 0) (type solid)))
+    (column_widths 26.67 21.59)
+    (row_heights 2.54)
+    (cells
+      (table_cell "LED pin"
+        (at 122.555 29.21 0)
+        (size 26.67 2.54)
+        (margins 0.9525 0.9525 0.9525 0.9525)
+        (span 1 1)
+      )
+      (table_cell "Expected net"
+        (at 149.225 29.21 0)
+        (size 21.59 2.54)
+        (margins 0.9525 0.9525 0.9525 0.9525)
+        (span 1 1)
+      )
+    )
+  )
+)"#,
+            "table.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-kicad-table=\"true\""));
+        assert!(svg.contains("data-table-cell=\"true\""));
+        assert!(svg.contains("LED pin"));
+        assert!(svg.contains("Expected net"));
     }
 }
