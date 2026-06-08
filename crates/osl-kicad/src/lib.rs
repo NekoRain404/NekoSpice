@@ -674,6 +674,7 @@ impl KicadSchematic {
             exclude_from_sim: None,
             properties,
             pins,
+            instances: Vec::new(),
         });
 
         Ok(KicadEditSummary {
@@ -962,6 +963,7 @@ impl KicadSchematic {
             exclude_from_sim: None,
             properties: sheet_properties(name, file, at, size),
             pins: checked_pins,
+            instances: Vec::new(),
         });
 
         Ok(KicadEditSummary {
@@ -2070,6 +2072,9 @@ impl KicadSchematic {
                 "  \"spice_directive_count\": {},\n",
                 "  \"sheet_instance_count\": {},\n",
                 "  \"symbol_instance_count\": {},\n",
+                "  \"embedded_project_instance_count\": {},\n",
+                "  \"embedded_instance_path_count\": {},\n",
+                "  \"variant_instance_count\": {},\n",
                 "  \"embedded_fonts\": {},\n",
                 "  \"library_graphic_count\": {}\n",
                 "}}"
@@ -2114,12 +2119,64 @@ impl KicadSchematic {
             self.spice_directives().len(),
             self.sheet_instances.len(),
             self.symbol_instances.len(),
+            self.embedded_project_instance_count(),
+            self.embedded_instance_path_count(),
+            self.variant_instance_count(),
             json_bool_option(self.embedded_fonts),
             self.library_symbols
                 .iter()
                 .map(|symbol| symbol.graphics.len())
                 .sum::<usize>()
         )
+    }
+
+    fn embedded_project_instance_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .map(|symbol| symbol.instances.len())
+            .sum::<usize>()
+            + self
+                .sheets
+                .iter()
+                .map(|sheet| sheet.instances.len())
+                .sum::<usize>()
+    }
+
+    fn embedded_instance_path_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .flat_map(|symbol| &symbol.instances)
+            .map(|instance| instance.paths.len())
+            .sum::<usize>()
+            + self
+                .sheets
+                .iter()
+                .flat_map(|sheet| &sheet.instances)
+                .map(|instance| instance.paths.len())
+                .sum::<usize>()
+    }
+
+    fn variant_instance_count(&self) -> usize {
+        let embedded_variants = self
+            .symbols
+            .iter()
+            .flat_map(|symbol| &symbol.instances)
+            .flat_map(|instance| &instance.paths)
+            .map(|path| path.variants.len())
+            .sum::<usize>()
+            + self
+                .sheets
+                .iter()
+                .flat_map(|sheet| &sheet.instances)
+                .flat_map(|instance| &instance.paths)
+                .map(|path| path.variants.len())
+                .sum::<usize>();
+        let top_level_variants = self
+            .symbol_instances
+            .iter()
+            .map(|instance| instance.variants.len())
+            .sum::<usize>();
+        embedded_variants + top_level_variants
     }
 }
 
@@ -3398,6 +3455,7 @@ pub struct KicadSymbolInstance {
     pub exclude_from_sim: Option<bool>,
     pub properties: Vec<KicadProperty>,
     pub pins: Vec<KicadSymbolPinRef>,
+    pub instances: Vec<KicadProjectInstance>,
 }
 
 impl KicadSymbolInstance {
@@ -3526,6 +3584,7 @@ impl KicadSymbolInstance {
         for pin in &self.pins {
             pin.write_pin_ref_sexpr(output, indent + 2);
         }
+        write_project_instances_sexpr(output, &self.instances, indent + 2);
         output.push_str(&format!("{})\n", pad));
     }
 }
@@ -4307,6 +4366,30 @@ pub struct KicadSymbolPathInstance {
     pub unit: Option<u32>,
     pub value: Option<String>,
     pub footprint: Option<String>,
+    pub variants: Vec<KicadVariantInstance>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadProjectInstance {
+    pub name: String,
+    pub paths: Vec<KicadInstancePath>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadInstancePath {
+    pub path: String,
+    pub page: Option<String>,
+    pub reference: Option<String>,
+    pub unit: Option<u32>,
+    pub value: Option<String>,
+    pub footprint: Option<String>,
+    pub variants: Vec<KicadVariantInstance>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadVariantInstance {
+    pub name: Option<String>,
+    pub dnp: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4464,6 +4547,7 @@ pub struct KicadSheet {
     pub exclude_from_sim: Option<bool>,
     pub properties: Vec<KicadProperty>,
     pub pins: Vec<KicadSheetPin>,
+    pub instances: Vec<KicadProjectInstance>,
 }
 
 impl KicadSheet {
@@ -4529,6 +4613,7 @@ impl KicadSheet {
         for pin in &self.pins {
             pin.write_sheet_pin_sexpr(output, indent + 2);
         }
+        write_project_instances_sexpr(output, &self.instances, indent + 2);
         output.push_str(&format!("{})\n", pad));
     }
 }
@@ -4939,6 +5024,9 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
         pins: direct_children(items, "pin")
             .filter_map(parse_symbol_pin_ref)
             .collect(),
+        instances: child(items, "instances")
+            .map(parse_project_instances)
+            .unwrap_or_default(),
     })
 }
 
@@ -4991,13 +5079,53 @@ fn parse_symbol_path_instances(node: &Sexp) -> Vec<KicadSymbolPathInstance> {
 }
 
 fn parse_symbol_path_instance(node: &Sexp) -> Option<KicadSymbolPathInstance> {
-    let items = list_items(node);
+    let path = parse_instance_path(node)?;
     Some(KicadSymbolPathInstance {
+        path: path.path,
+        reference: path.reference,
+        unit: path.unit,
+        value: path.value,
+        footprint: path.footprint,
+        variants: path.variants,
+    })
+}
+
+fn parse_project_instances(node: &Sexp) -> Vec<KicadProjectInstance> {
+    direct_children(list_items(node), "project")
+        .filter_map(parse_project_instance)
+        .collect()
+}
+
+fn parse_project_instance(node: &Sexp) -> Option<KicadProjectInstance> {
+    let items = list_items(node);
+    Some(KicadProjectInstance {
+        name: list_value(node, 1)?,
+        paths: direct_children(items, "path")
+            .filter_map(parse_instance_path)
+            .collect(),
+    })
+}
+
+fn parse_instance_path(node: &Sexp) -> Option<KicadInstancePath> {
+    let items = list_items(node);
+    Some(KicadInstancePath {
         path: list_value(node, 1)?,
+        page: child_value(items, "page"),
         reference: child_value(items, "reference"),
         unit: child_value(items, "unit").and_then(|value| value.parse().ok()),
         value: child_value(items, "value"),
         footprint: child_value(items, "footprint"),
+        variants: direct_children(items, "variant")
+            .filter_map(parse_variant_instance)
+            .collect(),
+    })
+}
+
+fn parse_variant_instance(node: &Sexp) -> Option<KicadVariantInstance> {
+    let items = list_items(node);
+    Some(KicadVariantInstance {
+        name: child_value(items, "name"),
+        dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
     })
 }
 
@@ -5051,7 +5179,86 @@ fn write_symbol_path_instances_sexpr(
                 sexpr_string(footprint)
             ));
         }
+        for variant in &instance.variants {
+            write_variant_instance_sexpr(output, variant, indent + 4);
+        }
         output.push_str(&format!("{}  )\n", pad));
+    }
+    output.push_str(&format!("{})\n", pad));
+}
+
+fn write_project_instances_sexpr(
+    output: &mut String,
+    instances: &[KicadProjectInstance],
+    indent: usize,
+) {
+    if instances.is_empty() {
+        return;
+    }
+    let pad = " ".repeat(indent);
+    output.push_str(&format!("{}(instances\n", pad));
+    for instance in instances {
+        output.push_str(&format!(
+            "{}  (project {}\n",
+            pad,
+            sexpr_string(&instance.name)
+        ));
+        for path in &instance.paths {
+            write_instance_path_sexpr(output, path, indent + 4);
+        }
+        output.push_str(&format!("{}  )\n", pad));
+    }
+    output.push_str(&format!("{})\n", pad));
+}
+
+fn write_instance_path_sexpr(output: &mut String, path: &KicadInstancePath, indent: usize) {
+    let pad = " ".repeat(indent);
+    output.push_str(&format!("{}(path {}\n", pad, sexpr_string(&path.path)));
+    if let Some(page) = &path.page {
+        output.push_str(&format!("{}  (page {})\n", pad, sexpr_string(page)));
+    }
+    if let Some(reference) = &path.reference {
+        output.push_str(&format!(
+            "{}  (reference {})\n",
+            pad,
+            sexpr_string(reference)
+        ));
+    }
+    if let Some(unit) = path.unit {
+        output.push_str(&format!("{}  (unit {})\n", pad, unit));
+    }
+    if let Some(value) = &path.value {
+        output.push_str(&format!("{}  (value {})\n", pad, sexpr_string(value)));
+    }
+    if let Some(footprint) = &path.footprint {
+        output.push_str(&format!(
+            "{}  (footprint {})\n",
+            pad,
+            sexpr_string(footprint)
+        ));
+    }
+    for variant in &path.variants {
+        write_variant_instance_sexpr(output, variant, indent + 2);
+    }
+    output.push_str(&format!("{})\n", pad));
+}
+
+fn write_variant_instance_sexpr(
+    output: &mut String,
+    variant: &KicadVariantInstance,
+    indent: usize,
+) {
+    let pad = " ".repeat(indent);
+    output.push_str(&format!("{}(variant\n", pad));
+    if let Some(name) = &variant.name {
+        output.push_str(&format!("{}  (name {})\n", pad, sexpr_string(name)));
+    }
+    if let Some(dnp) = variant.dnp {
+        output.push_str(&format!(
+            "{}  (dnp {})\n",
+            pad,
+            if dnp { "yes" } else { "no" }
+        ));
     }
     output.push_str(&format!("{})\n", pad));
 }
@@ -5255,6 +5462,9 @@ fn parse_sheet(node: &Sexp) -> Option<KicadSheet> {
         pins: direct_children(items, "pin")
             .filter_map(parse_sheet_pin)
             .collect(),
+        instances: child(items, "instances")
+            .map(parse_project_instances)
+            .unwrap_or_default(),
     })
 }
 
@@ -7094,6 +7304,100 @@ mod tests {
         assert_eq!(reparsed.sheet_instances.len(), 2);
         assert_eq!(reparsed.symbol_instances.len(), 1);
         assert_eq!(reparsed.embedded_fonts, Some(false));
+    }
+
+    #[test]
+    fn preserves_embedded_project_instances_and_variants() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20251028)
+  (generator "eeschema")
+  (paper "A4")
+  (lib_symbols)
+  (symbol
+    (lib_id "Connector:J")
+    (at 10 20 0)
+    (unit 1)
+    (uuid "11111111-1111-4111-8111-111111111111")
+    (property "Reference" "J1" (at 10 17.46 0))
+    (property "Value" "Conn" (at 10 22.54 0))
+    (pin "1" (uuid "22222222-2222-4222-8222-222222222222"))
+    (instances
+      (project "variants"
+        (path "/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          (reference "J1")
+          (unit 1)
+          (variant
+            (name "Variant 1")
+            (dnp yes)
+          )
+        )
+      )
+    )
+  )
+  (sheet
+    (at 40 20)
+    (size 20 10)
+    (uuid "33333333-3333-4333-8333-333333333333")
+    (property "Sheetname" "Sub" (at 40 17.46 0))
+    (property "Sheetfile" "sub.kicad_sch" (at 40 32.54 0))
+    (instances
+      (project "variants"
+        (path "/33333333-3333-4333-8333-333333333333"
+          (page "2")
+        )
+      )
+    )
+  )
+)"#,
+            "embedded_instances.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.symbols[0].instances.len(), 1);
+        assert_eq!(schematic.symbols[0].instances[0].name, "variants");
+        assert_eq!(schematic.symbols[0].instances[0].paths.len(), 1);
+        let symbol_path = &schematic.symbols[0].instances[0].paths[0];
+        assert_eq!(symbol_path.reference.as_deref(), Some("J1"));
+        assert_eq!(symbol_path.unit, Some(1));
+        assert_eq!(symbol_path.variants.len(), 1);
+        assert_eq!(symbol_path.variants[0].name.as_deref(), Some("Variant 1"));
+        assert_eq!(symbol_path.variants[0].dnp, Some(true));
+        assert_eq!(schematic.sheets[0].instances.len(), 1);
+        assert_eq!(
+            schematic.sheets[0].instances[0].paths[0].page.as_deref(),
+            Some("2")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"embedded_project_instance_count\": 2")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"embedded_instance_path_count\": 2")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"variant_instance_count\": 1")
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(instances"));
+        assert!(roundtrip.contains("(project \"variants\""));
+        assert!(roundtrip.contains("(reference \"J1\")"));
+        assert!(roundtrip.contains("(name \"Variant 1\")"));
+        assert!(roundtrip.contains("(dnp yes)"));
+        assert!(roundtrip.contains("(page \"2\")"));
+        let reparsed =
+            parse_kicad_schematic(&roundtrip, "embedded_instances_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.symbols[0].instances[0].paths[0].variants.len(), 1);
+        assert_eq!(
+            reparsed.sheets[0].instances[0].paths[0].page.as_deref(),
+            Some("2")
+        );
     }
 
     #[test]
