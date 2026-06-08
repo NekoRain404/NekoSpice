@@ -3798,6 +3798,31 @@ impl KicadSymbolLibrary {
                     + usize::from(pin.number_effects().is_some())
             })
             .sum::<usize>();
+        let power_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.power.is_some())
+            .count();
+        let symbol_in_bom_setting_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.in_bom.is_some())
+            .count();
+        let symbol_on_board_setting_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.on_board.is_some())
+            .count();
+        let symbol_in_pos_files_setting_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.in_pos_files.is_some())
+            .count();
+        let duplicate_pin_numbers_are_jumpers_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.duplicate_pin_numbers_are_jumpers == Some(true))
+            .count();
 
         format!(
             concat!(
@@ -3809,7 +3834,12 @@ impl KicadSymbolLibrary {
                 "  \"graphic_count\": {},\n",
                 "  \"pin_count\": {},\n",
                 "  \"pin_display_setting_count\": {},\n",
-                "  \"pin_text_effect_count\": {}\n",
+                "  \"pin_text_effect_count\": {},\n",
+                "  \"power_symbol_count\": {},\n",
+                "  \"symbol_in_bom_setting_count\": {},\n",
+                "  \"symbol_on_board_setting_count\": {},\n",
+                "  \"symbol_in_pos_files_setting_count\": {},\n",
+                "  \"duplicate_pin_numbers_are_jumpers_count\": {}\n",
                 "}}"
             ),
             json_escape(&self.source),
@@ -3822,7 +3852,12 @@ impl KicadSymbolLibrary {
                 .sum::<usize>(),
             pin_count,
             pin_display_setting_count,
-            pin_text_effect_count
+            pin_text_effect_count,
+            power_symbol_count,
+            symbol_in_bom_setting_count,
+            symbol_on_board_setting_count,
+            symbol_in_pos_files_setting_count,
+            duplicate_pin_numbers_are_jumpers_count
         )
     }
 }
@@ -4216,7 +4251,12 @@ impl KicadSymbolPinRef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadSymbolDef {
     pub name: String,
+    pub power: Option<KicadSymbolPower>,
     pub exclude_from_sim: Option<bool>,
+    pub in_bom: Option<bool>,
+    pub on_board: Option<bool>,
+    pub in_pos_files: Option<bool>,
+    pub duplicate_pin_numbers_are_jumpers: Option<bool>,
     pub pin_names: Option<KicadPinDisplay>,
     pub pin_numbers: Option<KicadPinDisplay>,
     pub properties: Vec<KicadProperty>,
@@ -4258,6 +4298,13 @@ impl KicadSymbolDef {
     fn write_symbol_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(symbol {}\n", pad, sexpr_string(&self.name)));
+        if let Some(power) = self.power {
+            match power {
+                KicadSymbolPower::Bare => output.push_str(&format!("{}  (power)\n", pad)),
+                KicadSymbolPower::Global => output.push_str(&format!("{}  (power global)\n", pad)),
+                KicadSymbolPower::Local => output.push_str(&format!("{}  (power local)\n", pad)),
+            }
+        }
         if let Some(exclude_from_sim) = self.exclude_from_sim {
             output.push_str(&format!(
                 "{}  (exclude_from_sim {})\n",
@@ -4265,6 +4312,15 @@ impl KicadSymbolDef {
                 if exclude_from_sim { "yes" } else { "no" }
             ));
         }
+        write_optional_bool_sexpr(output, indent + 2, "in_bom", self.in_bom);
+        write_optional_bool_sexpr(output, indent + 2, "on_board", self.on_board);
+        write_optional_bool_sexpr(output, indent + 2, "in_pos_files", self.in_pos_files);
+        write_optional_bool_sexpr(
+            output,
+            indent + 2,
+            "duplicate_pin_numbers_are_jumpers",
+            self.duplicate_pin_numbers_are_jumpers,
+        );
         if let Some(pin_numbers) = &self.pin_numbers {
             pin_numbers.write_pin_numbers_sexpr(output, indent + 2);
         }
@@ -4288,6 +4344,13 @@ impl KicadSymbolDef {
         output.push_str(&format!("{}  )\n", pad));
         output.push_str(&format!("{})\n", pad));
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KicadSymbolPower {
+    Bare,
+    Global,
+    Local,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6603,7 +6666,13 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     let items = list_items(node);
     Some(KicadSymbolDef {
         name: list_value(node, 1)?,
+        power: child(items, "power").map(parse_symbol_power),
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
+        in_bom: child_value(items, "in_bom").and_then(parse_kicad_bool_value),
+        on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
+        in_pos_files: child_value(items, "in_pos_files").and_then(parse_kicad_bool_value),
+        duplicate_pin_numbers_are_jumpers: child_value(items, "duplicate_pin_numbers_are_jumpers")
+            .and_then(parse_kicad_bool_value),
         pin_names: child(items, "pin_names").map(parse_pin_display),
         pin_numbers: child(items, "pin_numbers").map(parse_pin_display),
         properties: direct_children(items, "property")
@@ -6612,6 +6681,19 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
         graphics: collect_graphics(node),
         pins: collect_pin_defs(node),
     })
+}
+
+fn parse_symbol_power(node: &Sexp) -> KicadSymbolPower {
+    match list_value(node, 1)
+        .as_deref()
+        .map(str::trim)
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("global") => KicadSymbolPower::Global,
+        Some("local") => KicadSymbolPower::Local,
+        _ => KicadSymbolPower::Bare,
+    }
 }
 
 fn parse_symbol_library_table_row(node: &Sexp) -> Option<KicadSymbolLibraryTableRow> {
@@ -8186,9 +8268,9 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 mod tests {
     use super::{
         KicadAt, KicadColor, KicadDiagnosticSeverity, KicadGraphic, KicadLabelKind, KicadPoint,
-        KicadSchematicEdit, KicadSheetPin, KicadSize, parse_kicad_project, parse_kicad_schematic,
-        parse_kicad_symbol_library, parse_kicad_symbol_library_table, parse_sexpr,
-        read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
+        KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolPower, parse_kicad_project,
+        parse_kicad_schematic, parse_kicad_symbol_library, parse_kicad_symbol_library_table,
+        parse_sexpr, read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
         read_kicad_symbol_library, read_kicad_symbol_library_index,
         read_kicad_symbol_library_table,
     };
@@ -11201,6 +11283,117 @@ mod tests {
         assert_eq!(
             reparsed_symbol.pins[0].number_effects().unwrap().justify,
             vec!["right"]
+        );
+    }
+
+    #[test]
+    fn preserves_kicad_symbol_definition_flags_and_roundtrips() {
+        let library = parse_kicad_symbol_library(
+            r##"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "NekoSpice:PowerBare"
+    (power)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board yes)
+    (in_pos_files no)
+    (duplicate_pin_numbers_are_jumpers yes)
+    (property "Reference" "#PWR" (at 0 0 0))
+    (property "Value" "PowerBare" (at 0 -2.54 0))
+    (symbol "PowerBare_0_1"
+      (pin power_in line (at 0 0 0) (length 0) (name "VCC") (number "1"))
+    )
+  )
+  (symbol "NekoSpice:PowerGlobal"
+    (power global)
+    (in_bom yes)
+    (on_board no)
+    (in_pos_files yes)
+    (property "Reference" "#PWR" (at 0 0 0))
+    (property "Value" "PowerGlobal" (at 0 -2.54 0))
+  )
+  (symbol "NekoSpice:PowerLocal"
+    (power local)
+    (property "Reference" "#PWR" (at 0 0 0))
+    (property "Value" "PowerLocal" (at 0 -2.54 0))
+  )
+)"##,
+            "symbol_flags.kicad_sym",
+        )
+        .unwrap();
+
+        let bare = library.symbol("NekoSpice:PowerBare").unwrap();
+        assert_eq!(bare.power, Some(KicadSymbolPower::Bare));
+        assert_eq!(bare.exclude_from_sim, Some(false));
+        assert_eq!(bare.in_bom, Some(false));
+        assert_eq!(bare.on_board, Some(true));
+        assert_eq!(bare.in_pos_files, Some(false));
+        assert_eq!(bare.duplicate_pin_numbers_are_jumpers, Some(true));
+        assert_eq!(
+            library.symbol("NekoSpice:PowerGlobal").unwrap().power,
+            Some(KicadSymbolPower::Global)
+        );
+        assert_eq!(
+            library.symbol("NekoSpice:PowerGlobal").unwrap().in_bom,
+            Some(true)
+        );
+        assert_eq!(
+            library.symbol("NekoSpice:PowerGlobal").unwrap().on_board,
+            Some(false)
+        );
+        assert_eq!(
+            library
+                .symbol("NekoSpice:PowerGlobal")
+                .unwrap()
+                .in_pos_files,
+            Some(true)
+        );
+        assert_eq!(
+            library.symbol("NekoSpice:PowerLocal").unwrap().power,
+            Some(KicadSymbolPower::Local)
+        );
+
+        let summary = library.to_summary_json();
+        assert!(summary.contains("\"power_symbol_count\": 3"));
+        assert!(summary.contains("\"symbol_in_bom_setting_count\": 2"));
+        assert!(summary.contains("\"symbol_on_board_setting_count\": 2"));
+        assert!(summary.contains("\"symbol_in_pos_files_setting_count\": 2"));
+        assert!(summary.contains("\"duplicate_pin_numbers_are_jumpers_count\": 1"));
+
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(power)"));
+        assert!(exported.contains("(power global)"));
+        assert!(exported.contains("(power local)"));
+        assert!(exported.contains("(exclude_from_sim no)"));
+        assert!(exported.contains("(in_bom no)"));
+        assert!(exported.contains("(in_bom yes)"));
+        assert!(exported.contains("(on_board no)"));
+        assert!(exported.contains("(on_board yes)"));
+        assert!(exported.contains("(in_pos_files no)"));
+        assert!(exported.contains("(in_pos_files yes)"));
+        assert!(exported.contains("(duplicate_pin_numbers_are_jumpers yes)"));
+
+        let reparsed =
+            parse_kicad_symbol_library(&exported, "symbol_flags_roundtrip.kicad_sym").unwrap();
+        assert_eq!(
+            reparsed.symbol("NekoSpice:PowerBare").unwrap().power,
+            Some(KicadSymbolPower::Bare)
+        );
+        assert_eq!(
+            reparsed
+                .symbol("NekoSpice:PowerBare")
+                .unwrap()
+                .duplicate_pin_numbers_are_jumpers,
+            Some(true)
+        );
+        assert_eq!(
+            reparsed.symbol("NekoSpice:PowerGlobal").unwrap().power,
+            Some(KicadSymbolPower::Global)
+        );
+        assert_eq!(
+            reparsed.symbol("NekoSpice:PowerLocal").unwrap().power,
+            Some(KicadSymbolPower::Local)
         );
     }
 
