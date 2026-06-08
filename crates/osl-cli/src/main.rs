@@ -3,7 +3,7 @@ use osl_core::{
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
-use osl_netlist::ImportReport;
+use osl_netlist::{ImportReport, NormalizedDependency};
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
 use osl_waveform::{
     MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
@@ -264,8 +264,9 @@ fn import_command(args: &[String]) -> OslResult<i32> {
         &output_dir.join("report.html"),
         &report.to_html(report_css()),
     )?;
-    let project = report.normalized_project(&source_netlist);
     let project_dir = output_dir.join("project");
+    let dependencies = copy_import_dependencies(&report, input_path, &project_dir)?;
+    let project = report.normalized_project_with_dependencies(&source_netlist, &dependencies);
     write_text(&project_dir.join(&project.netlist_path), &project.netlist)?;
     write_text(
         &project_dir.join(&project.validation_path),
@@ -326,6 +327,54 @@ fn waveform_command(args: &[String]) -> OslResult<i32> {
     }
 
     Ok(0)
+}
+
+fn copy_import_dependencies(
+    report: &ImportReport,
+    input_path: &Path,
+    project_dir: &Path,
+) -> OslResult<Vec<NormalizedDependency>> {
+    let base_dir = input_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut dependencies = Vec::new();
+
+    for include in &report.includes {
+        let include_path = Path::new(&include.path);
+        if include_path.is_absolute() {
+            continue;
+        }
+        let Some(file_name) = include_path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let source_path = base_dir.join(include_path);
+        if !source_path.is_file() {
+            continue;
+        }
+        let project_path = Path::new("models").join(sanitize_dependency_file_name(file_name));
+        let content = read_text(&source_path)?;
+        write_text(&project_dir.join(&project_path), &content)?;
+        dependencies.push(NormalizedDependency {
+            source: include.path.clone(),
+            project_path: project_path.display().to_string(),
+        });
+    }
+
+    Ok(dependencies)
+}
+
+fn sanitize_dependency_file_name(file_name: &str) -> String {
+    let mut output = String::with_capacity(file_name.len());
+    for character in file_name.chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
+            output.push(character);
+        } else {
+            output.push('_');
+        }
+    }
+    if output.is_empty() {
+        "dependency.lib".to_string()
+    } else {
+        output
+    }
 }
 
 fn report_command(args: &[String]) -> OslResult<i32> {

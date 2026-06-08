@@ -31,6 +31,7 @@ cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output reports/import_001
+cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output reports/import_with_models_001
 cargo run -p osl-cli -- waveform runs/rc_001/waveform.raw --signal v(out) --from 8us --to 10us --points 200 --output reports/vout-envelope.json
 ```
 
@@ -85,7 +86,7 @@ cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.osl.yaml --output /tmp/nekospice_import/kicad_rc_verify
 ```
 
-`import` writes `import.json`, `report.html`, and a normalized `project/` directory. The project contains `input.cir`, `project.osl.yaml`, and `manifest.json`, so imported KiCad/LTspice/generic SPICE netlists can be handed directly to `osl verify`. The compatibility report counts components, symbols, directives, includes, and emits diagnostics before the netlist is handed to ngspice.
+`import` writes `import.json`, `report.html`, and a normalized `project/` directory. The project contains `input.cir`, `project.osl.yaml`, and `manifest.json`, so imported KiCad/LTspice/generic SPICE netlists can be handed directly to `osl verify`. Relative `.include`, `.inc`, and `.lib` dependencies are copied into `project/models/` and referenced from the normalized netlist. The compatibility report counts components, symbols, directives, includes, and emits diagnostics before the netlist is handed to ngspice.
 
 ## Validation
 
@@ -96,6 +97,8 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --out
 cargo run -p osl-cli -- verify examples/structured_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/structured
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.osl.yaml --output /tmp/nekospice_import/kicad_rc_verify
+cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output /tmp/nekospice_import/kicad_with_models
+cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_with_models/project/project.osl.yaml --output /tmp/nekospice_import/kicad_with_models_verify
 cargo run -p osl-cli -- waveform /tmp/nekospice_reports/basic/runs/rc_filter/waveform.raw --signal 'v(out)' --points 100 --output /tmp/nekospice_reports/basic/vout-envelope.json
 bash -lc 'cargo run -p osl-cli -- verify examples/failing_validation.osl.yaml --output /tmp/nekospice_reports/failing; test $? -eq 2'
 bash -lc 'cargo run -p osl-cli -- model-check examples/vendor_model_issues --output /tmp/nekospice_modelcheck/bad; test $? -eq 2'

@@ -93,6 +93,7 @@ impl SimulatorBackend for NgspiceCliBackend {
         let working_source =
             apply_parameter_overrides(&ensure_ngspice_control_exports(&source), parameters);
         write_text(&working_netlist, &working_source)?;
+        copy_relative_dependencies(&source_abs, &source, &output_abs)?;
 
         let started_unix_ms = now_unix_ms();
         let timer = Instant::now();
@@ -186,6 +187,72 @@ fn artifact_kind(file_name: &str) -> &'static str {
     } else {
         "file"
     }
+}
+
+fn copy_relative_dependencies(
+    source_netlist: &Path,
+    source: &str,
+    output_dir: &Path,
+) -> OslResult<()> {
+    let base_dir = source_netlist.parent().unwrap_or_else(|| Path::new("."));
+    for dependency in relative_dependencies(source) {
+        let dependency_path = Path::new(&dependency);
+        let source_path = base_dir.join(dependency_path);
+        if !source_path.is_file() {
+            continue;
+        }
+        let destination = output_dir.join(dependency_path);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|err| OslError::io(format!("create {}", parent.display()), err))?;
+        }
+        fs::copy(&source_path, &destination).map_err(|err| {
+            OslError::io(
+                format!(
+                    "copy {} to {}",
+                    source_path.display(),
+                    destination.display()
+                ),
+                err,
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn relative_dependencies(source: &str) -> Vec<String> {
+    source
+        .lines()
+        .filter_map(relative_dependency_from_line)
+        .collect()
+}
+
+fn relative_dependency_from_line(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('*') || trimmed.starts_with(';') {
+        return None;
+    }
+    let tokens = trimmed.split_whitespace().collect::<Vec<_>>();
+    if tokens.len() < 2 {
+        return None;
+    }
+    let directive = tokens[0].to_ascii_lowercase();
+    if !matches!(directive.as_str(), ".include" | ".inc" | ".lib") {
+        return None;
+    }
+    let path = tokens[1].trim_matches('"').trim_matches('\'');
+    if path.is_empty() {
+        return None;
+    }
+    let path = Path::new(path);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return None;
+    }
+    Some(path.display().to_string())
 }
 
 fn ensure_ngspice_control_exports(source: &str) -> String {
@@ -294,7 +361,7 @@ fn defines_overridden_parameter(line: &str, parameter_names: &[String]) -> bool 
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_parameter_overrides, ensure_ngspice_control_exports};
+    use super::{apply_parameter_overrides, ensure_ngspice_control_exports, relative_dependencies};
     use osl_core::ParameterOverride;
 
     #[test]
@@ -339,5 +406,26 @@ mod tests {
         assert!(output.contains(".param rload=2000"));
         assert!(output.contains("* NekoSpice removed overridden parameter: .param rload=1000"));
         assert!(!output.contains("\n.param rload=1000\n"));
+    }
+
+    #[test]
+    fn finds_relative_include_dependencies() {
+        let dependencies = relative_dependencies(
+            r#"
+* comment
+.include "models/ideal.lib"
+.lib vendor/opamp.lib fast
+.include /usr/share/global.lib
+.include ../outside.lib
+"#,
+        );
+
+        assert_eq!(
+            dependencies,
+            vec![
+                "models/ideal.lib".to_string(),
+                "vendor/opamp.lib".to_string()
+            ]
+        );
     }
 }

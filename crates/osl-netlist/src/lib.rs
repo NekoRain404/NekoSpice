@@ -210,12 +210,25 @@ impl ImportReport {
     }
 
     pub fn normalized_project(&self, source_netlist: &str) -> NormalizedImportProject {
+        self.normalized_project_with_dependencies(source_netlist, &[])
+    }
+
+    pub fn normalized_project_with_dependencies(
+        &self,
+        source_netlist: &str,
+        dependencies: &[NormalizedDependency],
+    ) -> NormalizedImportProject {
         let project_name = normalized_project_name(&self.source);
         let netlist_path = "input.cir".to_string();
         let validation_path = "project.osl.yaml".to_string();
         let manifest_path = "manifest.json".to_string();
         let run_name = sanitize_identifier(&project_name);
-        let normalized_netlist = normalize_imported_netlist(source_netlist);
+        let normalized_netlist = normalize_imported_netlist(source_netlist, dependencies);
+        let dependencies_json = dependencies
+            .iter()
+            .map(NormalizedDependency::to_json)
+            .collect::<Vec<_>>()
+            .join(",\n");
         let validation_yaml = format!(
             concat!(
                 "project: {}\n",
@@ -245,7 +258,10 @@ impl ImportReport {
                 "  \"directive_count\": {},\n",
                 "  \"include_count\": {},\n",
                 "  \"errors\": {},\n",
-                "  \"warnings\": {}\n",
+                "  \"warnings\": {},\n",
+                "  \"dependencies\": [\n",
+                "{}\n",
+                "  ]\n",
                 "}}\n"
             ),
             json_escape(&project_name),
@@ -259,7 +275,8 @@ impl ImportReport {
             self.directive_count(),
             self.includes.len(),
             self.error_count(),
-            self.warning_count()
+            self.warning_count(),
+            dependencies_json
         );
 
         NormalizedImportProject {
@@ -270,7 +287,24 @@ impl ImportReport {
             netlist: normalized_netlist,
             validation_yaml,
             manifest_json,
+            dependencies: dependencies.to_vec(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NormalizedDependency {
+    pub source: String,
+    pub project_path: String,
+}
+
+impl NormalizedDependency {
+    pub fn to_json(&self) -> String {
+        format!(
+            "    {{ \"source\": \"{}\", \"project_path\": \"{}\" }}",
+            json_escape(&self.source),
+            json_escape(&self.project_path)
+        )
     }
 }
 
@@ -283,6 +317,7 @@ pub struct NormalizedImportProject {
     pub netlist: String,
     pub validation_yaml: String,
     pub manifest_json: String,
+    pub dependencies: Vec<NormalizedDependency>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -753,10 +788,47 @@ fn sanitize_identifier(input: &str) -> String {
     }
 }
 
-fn normalize_imported_netlist(source: &str) -> String {
-    let mut output = source.trim_end().to_string();
+fn normalize_imported_netlist(source: &str, dependencies: &[NormalizedDependency]) -> String {
+    let mut output = source
+        .lines()
+        .map(|line| rewrite_dependency_line(line, dependencies))
+        .collect::<Vec<_>>()
+        .join("\n");
     output.push('\n');
     output
+}
+
+fn rewrite_dependency_line(line: &str, dependencies: &[NormalizedDependency]) -> String {
+    let trimmed_start = line.trim_start();
+    let indent_len = line.len() - trimmed_start.len();
+    let indent = &line[..indent_len];
+    let tokens = trimmed_start.split_whitespace().collect::<Vec<_>>();
+    if tokens.len() < 2 {
+        return line.to_string();
+    }
+    let directive = tokens[0].to_ascii_lowercase();
+    if !matches!(directive.as_str(), ".include" | ".inc" | ".lib") {
+        return line.to_string();
+    }
+
+    let raw_path = tokens[1];
+    let path = raw_path.trim_matches('"').trim_matches('\'');
+    let Some(dependency) = dependencies
+        .iter()
+        .find(|dependency| dependency.source == path)
+    else {
+        return line.to_string();
+    };
+
+    let suffix = tokens
+        .iter()
+        .skip(2)
+        .map(|token| format!(" {}", token))
+        .collect::<String>();
+    format!(
+        "{}{} \"{}\"{}",
+        indent, tokens[0], dependency.project_path, suffix
+    )
 }
 
 fn yaml_scalar(value: &str) -> String {
@@ -772,7 +844,7 @@ fn yaml_scalar(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{ComponentKind, NetlistFlavor, parse_netlist};
+    use super::{ComponentKind, NetlistFlavor, NormalizedDependency, parse_netlist};
 
     #[test]
     fn parses_kicad_style_netlist_summary() {
@@ -825,5 +897,26 @@ XU1 in out vcc vee GOODAMP
                 .manifest_json
                 .contains("\"validation\": \"project.osl.yaml\"")
         );
+    }
+
+    #[test]
+    fn rewrites_normalized_include_dependencies() {
+        let source = "* KiCad netlist\n.include \"models.lib\"\nV1 in 0 DC 5\n.tran 1u 1m\n.end\n";
+        let report = parse_netlist(source, "examples/kicad_import/kicad_with_model.cir").unwrap();
+        let dependencies = vec![NormalizedDependency {
+            source: "models.lib".to_string(),
+            project_path: "models/models.lib".to_string(),
+        }];
+
+        let project = report.normalized_project_with_dependencies(source, &dependencies);
+
+        assert!(project.netlist.contains(".include \"models/models.lib\""));
+        assert!(project.manifest_json.contains("\"source\": \"models.lib\""));
+        assert!(
+            project
+                .manifest_json
+                .contains("\"project_path\": \"models/models.lib\"")
+        );
+        assert_eq!(project.dependencies.len(), 1);
     }
 }
