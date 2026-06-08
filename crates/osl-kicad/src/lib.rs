@@ -4135,6 +4135,10 @@ impl KicadSymbolLibraryIndex {
                             source: resolved_path.display().to_string(),
                             pin_count: symbol.pins.len(),
                             graphic_count: symbol.graphics.len(),
+                            unit_count: symbol_unit_count(symbol),
+                            units: indexed_symbol_units(symbol),
+                            extends: symbol.extends.clone(),
+                            power: symbol.power.map(|power| power.as_str().to_string()),
                             bounding_box: symbol.bounding_box(),
                         });
                     }
@@ -4167,6 +4171,21 @@ impl KicadSymbolLibraryIndex {
     }
 
     pub fn to_summary_json(&self) -> String {
+        let unit_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.unit_count)
+            .sum::<usize>();
+        let extended_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.extends.is_some())
+            .count();
+        let power_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.power.is_some())
+            .count();
         let diagnostics = self
             .diagnostics
             .iter()
@@ -4187,6 +4206,9 @@ impl KicadSymbolLibraryIndex {
                 "  \"source\": \"{}\",\n",
                 "  \"library_count\": {},\n",
                 "  \"symbol_count\": {},\n",
+                "  \"unit_count\": {},\n",
+                "  \"extended_symbol_count\": {},\n",
+                "  \"power_symbol_count\": {},\n",
                 "  \"diagnostic_count\": {},\n",
                 "  \"diagnostics\": [\n",
                 "{}\n",
@@ -4196,6 +4218,9 @@ impl KicadSymbolLibraryIndex {
             json_escape(&self.source),
             self.libraries.len(),
             self.symbols.len(),
+            unit_count,
+            extended_symbol_count,
+            power_symbol_count,
             self.diagnostics.len(),
             diagnostics
         )
@@ -4217,7 +4242,17 @@ pub struct KicadIndexedSymbol {
     pub source: String,
     pub pin_count: usize,
     pub graphic_count: usize,
+    pub unit_count: usize,
+    pub units: Vec<KicadIndexedSymbolUnit>,
+    pub extends: Option<String>,
+    pub power: Option<String>,
     pub bounding_box: Option<KicadBoundingBox>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KicadIndexedSymbolUnit {
+    pub unit: u32,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4808,6 +4843,16 @@ pub enum KicadSymbolPower {
     Bare,
     Global,
     Local,
+}
+
+impl KicadSymbolPower {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Bare => "bare",
+            Self::Global => "global",
+            Self::Local => "local",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8476,6 +8521,31 @@ fn qualify_library_symbol_name(symbol: &mut KicadSymbolDef, library_name: &str) 
     }
 }
 
+fn indexed_symbol_units(symbol: &KicadSymbolDef) -> Vec<KicadIndexedSymbolUnit> {
+    let mut units = symbol
+        .pins
+        .iter()
+        .map(|pin| pin.unit)
+        .chain(symbol.graphics.iter().map(|graphic| graphic.unit))
+        .chain(symbol.unit_names.keys().copied())
+        .filter(|unit| *unit != 0)
+        .collect::<BTreeSet<_>>();
+    if units.is_empty() {
+        units.insert(1);
+    }
+    units
+        .into_iter()
+        .map(|unit| KicadIndexedSymbolUnit {
+            unit,
+            name: symbol.unit_names.get(&unit).cloned(),
+        })
+        .collect()
+}
+
+fn symbol_unit_count(symbol: &KicadSymbolDef) -> usize {
+    indexed_symbol_units(symbol).len()
+}
+
 fn spice_primitive_for_device(device: &str) -> Option<String> {
     let device = device.to_ascii_uppercase();
     let primitive = match device.as_str() {
@@ -8952,12 +9022,13 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        KicadAt, KicadColor, KicadDiagnosticSeverity, KicadGraphic, KicadLabelKind, KicadPoint,
-        KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolBodyStyles, KicadSymbolPower,
-        parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
-        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
-        read_kicad_schematic_with_libraries, read_kicad_symbol_library,
-        read_kicad_symbol_library_index, read_kicad_symbol_library_table,
+        KicadAt, KicadColor, KicadDiagnosticSeverity, KicadGraphic, KicadIndexedSymbolUnit,
+        KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSize,
+        KicadSymbolBodyStyles, KicadSymbolPower, parse_kicad_project, parse_kicad_schematic,
+        parse_kicad_symbol_library, parse_kicad_symbol_library_table, parse_sexpr,
+        read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
+        read_kicad_symbol_library, read_kicad_symbol_library_index,
+        read_kicad_symbol_library_table,
     };
     use std::fs;
     use std::path::Path;
@@ -13055,6 +13126,90 @@ mod tests {
         assert_eq!(resistor.graphic_count, 1);
         assert!(resistor.bounding_box.is_some());
         assert!(index.to_summary_json().contains("\"symbol_count\": 3"));
+    }
+
+    #[test]
+    fn indexes_kicad_symbol_library_browser_metadata() {
+        let project_dir = std::env::temp_dir().join(format!(
+            "nekospice_kicad_symbol_index_metadata_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project_dir);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::write(
+            project_dir.join("browser.kicad_sym"),
+            r##"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "Parent"
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Parent" (at 0 -2.54 0))
+    (symbol "Parent_0_1"
+      (rectangle (start -1 -1) (end 1 1) (stroke (width 0.127) (type default)) (fill (type none)))
+    )
+  )
+  (symbol "Derived"
+    (extends "Parent")
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Derived" (at 0 -2.54 0))
+    (symbol "Derived_1_1"
+      (unit_name "Logic")
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "A") (number "1"))
+    )
+    (symbol "Derived_2_1"
+      (unit_name "Power")
+      (pin power_in line (at 2.54 0 180) (length 2.54) (name "VCC") (number "2"))
+    )
+  )
+  (symbol "PWR" (power global)
+    (property "Reference" "#PWR" (at 0 0 0))
+    (property "Value" "PWR" (at 0 -2.54 0))
+  )
+)"##,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("sym-lib-table"),
+            r#"(sym_lib_table
+  (version 7)
+  (lib (name "Browser")(type "KiCad")(uri "${KIPRJMOD}/browser.kicad_sym")(options "")(descr ""))
+)"#,
+        )
+        .unwrap();
+
+        let index = read_kicad_symbol_library_index(&project_dir.join("sym-lib-table")).unwrap();
+        let derived = index.symbol("Browser:Derived").unwrap();
+        let power = index.symbol("Browser:PWR").unwrap();
+
+        assert_eq!(derived.unit_count, 2);
+        assert_eq!(
+            derived.units,
+            vec![
+                KicadIndexedSymbolUnit {
+                    unit: 1,
+                    name: Some("Logic".to_string())
+                },
+                KicadIndexedSymbolUnit {
+                    unit: 2,
+                    name: Some("Power".to_string())
+                }
+            ]
+        );
+        assert_eq!(derived.extends.as_deref(), Some("Parent"));
+        assert_eq!(power.power.as_deref(), Some("global"));
+        assert!(index.to_summary_json().contains("\"unit_count\": 4"));
+        assert!(
+            index
+                .to_summary_json()
+                .contains("\"extended_symbol_count\": 1")
+        );
+        assert!(
+            index
+                .to_summary_json()
+                .contains("\"power_symbol_count\": 1")
+        );
+
+        let _ = fs::remove_dir_all(project_dir);
     }
 
     #[test]
