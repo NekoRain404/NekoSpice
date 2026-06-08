@@ -14,3 +14,5 @@ osl-model = { path = "../osl-model" }
 osl-netlist = { path = "../osl-netlist" }
 osl-sim = { path = "../osl-sim" }
 osl-waveform = { path = "../osl-waveform" }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"

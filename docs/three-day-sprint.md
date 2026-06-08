@@ -27,7 +27,7 @@ cargo run -p osl-cli -- run examples/rc_filter/rc.cir --output runs/rc_001
 目标：
 
 - 实现 `osl verify <project.osl.yaml>`。
-- 支持一个最小 YAML 子集：`project` 和 `runs`。
+- 使用 `serde_yaml` 解析验证配置，支持标准 YAML map/list、flow-style 写法、quoted 字符串和带 SPICE 后缀的数值字符串。
 - 批量运行多个 netlist。
 - 支持 ngspice binary / ASCII raw 自动解析。
 - 支持最小测量检查：`final_value`、`avg`、`min`、`max`、`pp`、`rms`。
@@ -65,6 +65,7 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output repor
 ```bash
 cargo fmt --check
 cargo test --workspace
+cargo run -p osl-cli -- verify examples/structured_validation.osl.yaml --jobs 3 --output reports/structured_001
 cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
@@ -77,6 +78,6 @@ cargo run -p osl-cli -- waveform runs/kicad_rc_001/waveform.raw --signal 'v(out)
 
 优先级从高到低：
 
-1. richer YAML parser：替换当前最小子集解析器。
-2. normalized import：把 KiCad / LTspice 项目导入为 NekoSpice project、验证配置和可追溯 artifact。
-3. waveform data layer：持久 LOD cache、mmap、大文件 viewport query 优化。
+1. normalized import：把 KiCad / LTspice 项目导入为 NekoSpice project、验证配置和可追溯 artifact。
+2. waveform data layer：持久 LOD cache、mmap、大文件 viewport query 优化。
+3. richer verification DSL：backend、analysis、corner、Monte Carlo 和 worst-case search。

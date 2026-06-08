@@ -558,7 +558,7 @@ pub fn parse_ngspice_binary_raw(input: &[u8], source_name: &str) -> OslResult<Wa
     }
 
     let payload = &input[payload_offset..];
-    if payload.len() % 8 != 0 {
+    if !payload.len().is_multiple_of(8) {
         return Err(OslError::InvalidInput(format!(
             "{} binary payload length {} at byte offset {} is not aligned to f64 values",
             source_name,
@@ -568,7 +568,7 @@ pub fn parse_ngspice_binary_raw(input: &[u8], source_name: &str) -> OslResult<Wa
     }
 
     let value_count = payload.len() / 8;
-    if value_count % variable_count != 0 {
+    if !value_count.is_multiple_of(variable_count) {
         return Err(OslError::InvalidInput(format!(
             "{} binary payload contains {} f64 values, which is not divisible by {} variables",
             source_name, value_count, variable_count

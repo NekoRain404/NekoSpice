@@ -776,10 +776,8 @@ fn parse_ltspice_symbol(path: &Path) -> OslResult<SymbolSummary> {
         }
 
         match tokens[0] {
-            "SYMATTR" if tokens.len() >= 3 && tokens[1] == "Prefix" => {
-                if symbol.name.is_none() {
-                    symbol.name = Some(tokens[2].to_string());
-                }
+            "SYMATTR" if tokens.len() >= 3 && tokens[1] == "Prefix" && symbol.name.is_none() => {
+                symbol.name = Some(tokens[2].to_string());
             }
             "PIN" => {
                 let x = tokens.get(1).and_then(|value| value.parse::<i64>().ok());

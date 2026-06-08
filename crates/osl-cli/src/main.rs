@@ -8,6 +8,7 @@ use osl_sim::{NgspiceCliBackend, SimulatorBackend};
 use osl_waveform::{
     MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
 };
+use serde::Deserialize;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -465,178 +466,166 @@ struct VerifyCheck {
     max: Option<f64>,
 }
 
+#[derive(Debug, Deserialize)]
+struct VerifyConfigYaml {
+    project: Option<String>,
+    #[serde(default)]
+    runs: Vec<VerifyRunYaml>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VerifyRunYaml {
+    name: String,
+    netlist: PathBuf,
+    #[serde(default)]
+    sweep: std::collections::BTreeMap<String, Vec<YamlNumber>>,
+    #[serde(default)]
+    checks: Vec<VerifyCheckYaml>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VerifyCheckYaml {
+    name: String,
+    #[serde(default = "default_check_kind")]
+    kind: String,
+    signal: String,
+    from: Option<YamlNumber>,
+    to: Option<YamlNumber>,
+    min: Option<YamlNumber>,
+    max: Option<YamlNumber>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum YamlNumber {
+    Number(f64),
+    Text(String),
+}
+
+impl YamlNumber {
+    fn parse(&self, context: &str) -> OslResult<f64> {
+        match self {
+            Self::Number(value) => Ok(*value),
+            Self::Text(value) => parse_number(value, context),
+        }
+    }
+}
+
+fn default_check_kind() -> String {
+    "final_value".to_string()
+}
+
 impl VerifyConfig {
     fn parse(path: &Path) -> OslResult<Self> {
         let content = read_text(path)?;
-        let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
-        let mut project = path
-            .file_stem()
-            .and_then(|name| name.to_str())
-            .unwrap_or("verification")
-            .to_string();
-        let mut runs = Vec::new();
-        let mut current: Option<VerifyRun> = None;
-        let mut current_check: Option<VerifyCheck> = None;
-        let mut in_runs = false;
-        let mut in_sweep = false;
-        let mut in_checks = false;
+        Self::parse_from_str(
+            &content,
+            path.parent().unwrap_or_else(|| Path::new(".")),
+            &default_project_name(path),
+            &path.display().to_string(),
+        )
+    }
 
-        for raw_line in content.lines() {
-            let indent = raw_line
-                .chars()
-                .take_while(|character| *character == ' ')
-                .count();
-            let line = raw_line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            if let Some(value) = strip_key(line, "project:") {
-                project = unquote(value);
-                continue;
-            }
-
-            if line == "runs:" {
-                in_runs = true;
-                continue;
-            }
-
-            if !in_runs {
-                continue;
-            }
-
-            if indent <= 2
-                && let Some(value) = strip_key(line, "- name:")
-            {
-                if let Some(check) = current_check.take() {
-                    push_check(&mut current, check)?;
-                }
-                if let Some(run) = current.take() {
-                    runs.push(validate_run(run)?);
-                }
-                current = Some(VerifyRun {
-                    name: unquote(value),
-                    netlist: PathBuf::new(),
-                    sweep: Vec::new(),
-                    checks: Vec::new(),
-                });
-                in_sweep = false;
-                in_checks = false;
-                continue;
-            }
-
-            if let Some(value) = strip_key(line, "netlist:") {
-                let Some(run) = current.as_mut() else {
-                    return Err(OslError::InvalidInput(format!(
-                        "{} has netlist before run name",
-                        path.display()
-                    )));
-                };
-                let netlist = PathBuf::from(unquote(value));
-                run.netlist = if netlist.is_absolute() {
-                    netlist
-                } else {
-                    base_dir.join(netlist)
-                };
-                continue;
-            }
-
-            if line == "sweep:" {
-                if current.is_none() {
-                    return Err(OslError::InvalidInput(format!(
-                        "{} has sweep before run name",
-                        path.display()
-                    )));
-                }
-                in_sweep = true;
-                in_checks = false;
-                continue;
-            }
-
-            if line == "checks:" {
-                if current.is_none() {
-                    return Err(OslError::InvalidInput(format!(
-                        "{} has checks before run name",
-                        path.display()
-                    )));
-                }
-                in_sweep = false;
-                in_checks = true;
-                continue;
-            }
-
-            if in_sweep && let Some((name, values)) = parse_sweep_line(line, path)? {
-                let Some(run) = current.as_mut() else {
-                    return Err(OslError::InvalidInput(
-                        "sweep entry appears before a verify run".to_string(),
-                    ));
-                };
-                run.sweep.push(SweepDimension { name, values });
-                continue;
-            }
-
-            if in_checks
-                && indent >= 6
-                && let Some(value) = strip_key(line, "- name:")
-            {
-                if let Some(check) = current_check.take() {
-                    push_check(&mut current, check)?;
-                }
-                current_check = Some(VerifyCheck {
-                    name: unquote(value),
-                    kind: "final_value".to_string(),
-                    signal: String::new(),
-                    from: None,
-                    to: None,
-                    min: None,
-                    max: None,
-                });
-                continue;
-            }
-
-            if in_checks && let Some(check) = current_check.as_mut() {
-                if let Some(value) = strip_key(line, "kind:") {
-                    check.kind = unquote(value);
-                    continue;
-                }
-                if let Some(value) = strip_key(line, "signal:") {
-                    check.signal = unquote(value);
-                    continue;
-                }
-                if let Some(value) = strip_key(line, "from:") {
-                    check.from = Some(parse_number(value, "check from")?);
-                    continue;
-                }
-                if let Some(value) = strip_key(line, "to:") {
-                    check.to = Some(parse_number(value, "check to")?);
-                    continue;
-                }
-                if let Some(value) = strip_key(line, "min:") {
-                    check.min = Some(parse_number(value, "check min")?);
-                    continue;
-                }
-                if let Some(value) = strip_key(line, "max:") {
-                    check.max = Some(parse_number(value, "check max")?);
-                    continue;
-                }
-            }
-        }
-
-        if let Some(check) = current_check.take() {
-            push_check(&mut current, check)?;
-        }
-        if let Some(run) = current.take() {
-            runs.push(validate_run(run)?);
-        }
+    fn parse_from_str(
+        content: &str,
+        base_dir: &Path,
+        default_project: &str,
+        source_name: &str,
+    ) -> OslResult<Self> {
+        let parsed = serde_yaml::from_str::<VerifyConfigYaml>(content).map_err(|err| {
+            OslError::InvalidInput(format!("{source_name} has invalid YAML: {err}"))
+        })?;
+        let project = parsed
+            .project
+            .unwrap_or_else(|| default_project.to_string());
+        let runs = parsed
+            .runs
+            .into_iter()
+            .map(|run| run.into_verify_run(base_dir))
+            .collect::<OslResult<Vec<_>>>()?;
 
         if runs.is_empty() {
             return Err(OslError::InvalidInput(format!(
-                "{} must contain runs with name and netlist",
-                path.display()
+                "{source_name} must contain runs with name and netlist"
             )));
         }
 
         Ok(Self { project, runs })
+    }
+}
+
+fn default_project_name(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("verification")
+        .to_string()
+}
+
+impl VerifyRunYaml {
+    fn into_verify_run(self, base_dir: &Path) -> OslResult<VerifyRun> {
+        let netlist = if self.netlist.is_absolute() {
+            self.netlist
+        } else {
+            base_dir.join(self.netlist)
+        };
+        let sweep = self
+            .sweep
+            .into_iter()
+            .map(|(name, values)| {
+                if name.trim().is_empty() {
+                    return Err(OslError::InvalidInput(
+                        "verify sweep has an empty parameter name".to_string(),
+                    ));
+                }
+                let values = values
+                    .iter()
+                    .map(|value| value.parse(&format!("sweep '{}'", name)))
+                    .collect::<OslResult<Vec<_>>>()?;
+                Ok(SweepDimension { name, values })
+            })
+            .collect::<OslResult<Vec<_>>>()?;
+        let checks = self
+            .checks
+            .into_iter()
+            .map(VerifyCheckYaml::into_verify_check)
+            .collect::<OslResult<Vec<_>>>()?;
+
+        validate_run(VerifyRun {
+            name: self.name,
+            netlist,
+            sweep,
+            checks,
+        })
+    }
+}
+
+impl VerifyCheckYaml {
+    fn into_verify_check(self) -> OslResult<VerifyCheck> {
+        validate_check(VerifyCheck {
+            name: self.name,
+            kind: self.kind,
+            signal: self.signal,
+            from: self
+                .from
+                .as_ref()
+                .map(|value| value.parse("check from"))
+                .transpose()?,
+            to: self
+                .to
+                .as_ref()
+                .map(|value| value.parse("check to"))
+                .transpose()?,
+            min: self
+                .min
+                .as_ref()
+                .map(|value| value.parse("check min"))
+                .transpose()?,
+            max: self
+                .max
+                .as_ref()
+                .map(|value| value.parse("check max"))
+                .transpose()?,
+        })
     }
 }
 
@@ -653,51 +642,6 @@ fn validate_run(run: VerifyRun) -> OslResult<VerifyRun> {
         )));
     }
     Ok(run)
-}
-
-fn parse_sweep_line(line: &str, path: &Path) -> OslResult<Option<(String, Vec<f64>)>> {
-    let Some((name, raw_values)) = line.split_once(':') else {
-        return Ok(None);
-    };
-    let name = name.trim();
-    if name.is_empty() {
-        return Err(OslError::InvalidInput(format!(
-            "{} has sweep entry with empty parameter name",
-            path.display()
-        )));
-    }
-    Ok(Some((
-        name.to_string(),
-        parse_f64_list(raw_values, "sweep values")?,
-    )))
-}
-
-fn parse_f64_list(value: &str, context: &str) -> OslResult<Vec<f64>> {
-    let value = value.trim();
-    if !value.starts_with('[') || !value.ends_with(']') {
-        return Err(OslError::InvalidInput(format!(
-            "{context} must use [a, b, c] syntax"
-        )));
-    }
-    let inner = &value[1..value.len() - 1];
-    if inner.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    inner
-        .split(',')
-        .map(|part| parse_number(part.trim(), context))
-        .collect()
-}
-
-fn push_check(current: &mut Option<VerifyRun>, check: VerifyCheck) -> OslResult<()> {
-    let Some(run) = current.as_mut() else {
-        return Err(OslError::InvalidInput(
-            "check appears before a verify run".to_string(),
-        ));
-    };
-    run.checks.push(validate_check(check)?);
-    Ok(())
 }
 
 fn validate_check(check: VerifyCheck) -> OslResult<VerifyCheck> {
@@ -1427,10 +1371,6 @@ fn parse_positive_usize(value: &str, flag: &str) -> OslResult<usize> {
     Ok(jobs)
 }
 
-fn strip_key<'a>(line: &'a str, key: &str) -> Option<&'a str> {
-    line.strip_prefix(key).map(str::trim)
-}
-
 fn parse_number(value: &str, context: &str) -> OslResult<f64> {
     let value = unquote(value);
     let value = value.trim();
@@ -1647,7 +1587,7 @@ fn find_circuits_inner(path: &Path, circuits: &mut Vec<PathBuf>) -> OslResult<()
 
 #[cfg(test)]
 mod tests {
-    use super::{SweepDimension, VerifyRun, parse_number};
+    use super::{SweepDimension, VerifyConfig, VerifyRun, parse_number};
     use std::path::PathBuf;
 
     #[test]
@@ -1684,6 +1624,42 @@ mod tests {
         assert_close(parse_number("50us", "test").unwrap(), 0.00005);
         assert_close(parse_number("1k", "test").unwrap(), 1000.0);
         assert_close(parse_number("2Meg", "test").unwrap(), 2_000_000.0);
+    }
+
+    #[test]
+    fn parses_structured_yaml_with_units_and_flow_style() {
+        let yaml = r#"
+runs:
+  - name: quoted_units
+    netlist: "rc_filter/rc.cir"
+    sweep: { rload: ["500", "1k", 2000] }
+    checks:
+      - { name: average, kind: avg, signal: "v(out)", from: "8us", to: "10us", min: 0.48, max: 0.52 }
+      - name: default_kind
+        signal: i(v1)
+        min: -1m
+        max: 1m
+"#;
+
+        let config = VerifyConfig::parse_from_str(
+            yaml,
+            std::path::Path::new("examples"),
+            "default_project",
+            "inline",
+        )
+        .unwrap();
+
+        assert_eq!(config.project, "default_project");
+        assert_eq!(config.runs.len(), 1);
+        assert_eq!(
+            config.runs[0].netlist,
+            PathBuf::from("examples/rc_filter/rc.cir")
+        );
+        assert_eq!(config.runs[0].sweep[0].values, vec![500.0, 1000.0, 2000.0]);
+        assert_close(config.runs[0].checks[0].from.unwrap(), 8e-6);
+        assert_close(config.runs[0].checks[0].to.unwrap(), 10e-6);
+        assert_eq!(config.runs[0].checks[1].kind, "final_value");
+        assert_close(config.runs[0].checks[1].min.unwrap(), -1e-3);
     }
 
     fn assert_close(actual: f64, expected: f64) {

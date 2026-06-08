@@ -1,0 +1,13 @@
+project: structured_validation
+
+runs:
+  - name: rc_filter_structured
+    netlist: rc_sweep/rc_sweep.cir
+    sweep: { rload: ["500", "1k", 2000] }
+    checks:
+      - { name: steady_average_output, kind: avg, signal: "v(out)", from: "8us", to: "10us", min: 0.48, max: 0.52 }
+      - name: output_rms_bounded
+        kind: rms
+        signal: v(out)
+        min: "400m"
+        max: "600m"

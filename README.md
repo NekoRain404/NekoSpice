@@ -26,6 +26,7 @@ The current three-day build is a vertical slice:
 cargo run -p osl-cli -- --version
 cargo run -p osl-cli -- run examples/rc_filter/rc.cir --output runs/rc_001
 cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --output reports/basic_001
+cargo run -p osl-cli -- verify examples/structured_validation.osl.yaml --jobs 3 --output reports/structured_001
 cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
@@ -54,6 +55,8 @@ runs:
 ```
 
 Each sweep dimension expands into a Cartesian product of ngspice runs. `--jobs <n>` runs independent cases concurrently. Parameters are injected as `.param` overrides in the working netlist and recorded in `run.json` and `verify.json`; reports are sorted by the original expansion order. Checks can use optional `from` / `to` windows with SPICE-style suffixes such as `8us`, `3ms`, or `1k`. Verification reports include a compact summary for each evaluated signal window: sample count, first/last value, min/max, average, peak-to-peak, and RMS.
+
+Verification files are parsed with `serde_yaml`, so normal YAML forms such as quoted strings, flow-style maps/lists, and numeric values with SPICE suffix strings are accepted.
 
 The ngspice runner automatically injects a binary raw export into the working netlist:
 
@@ -90,6 +93,7 @@ cargo run -p osl-cli -- run examples/kicad_import/kicad_rc.cir --output /tmp/nek
 cargo fmt --check
 cargo test --workspace
 cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/basic
+cargo run -p osl-cli -- verify examples/structured_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/structured
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
 cargo run -p osl-cli -- waveform /tmp/nekospice_reports/basic/runs/rc_filter/waveform.raw --signal 'v(out)' --points 100 --output /tmp/nekospice_reports/basic/vout-envelope.json
 bash -lc 'cargo run -p osl-cli -- verify examples/failing_validation.osl.yaml --output /tmp/nekospice_reports/failing; test $? -eq 2'
