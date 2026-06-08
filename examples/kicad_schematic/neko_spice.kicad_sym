@@ -5,8 +5,8 @@
     (property "Reference" "V" (at 0 0 0))
     (property "Value" "PULSE(0 1 0 1u 1u 10u 20u)" (at 0 -2.54 0))
     (symbol "V_0_1"
-      (pin power_in line (at 0 2.54 270) (length 2.54) (name "+" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-      (pin power_in line (at 0 -2.54 90) (length 2.54) (name "-" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+      (pin power_in line (at 0 -2.54 90) (length 2.54) (name "+" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+      (pin power_in line (at 0 2.54 270) (length 2.54) (name "-" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
     )
   )
   (symbol "NekoSpice:R"
@@ -21,8 +21,8 @@
     (property "Reference" "C" (at 0 0 0))
     (property "Value" "100n" (at 0 -2.54 0))
     (symbol "C_0_1"
-      (pin passive line (at 0 2.54 270) (length 2.54) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-      (pin passive line (at 0 -2.54 90) (length 2.54) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 0 -2.54 90) (length 2.54) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 0 2.54 270) (length 2.54) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
     )
   )
 )

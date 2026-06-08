@@ -67,6 +67,7 @@ name = "osl-netlist"
 version = "0.1.0"
 dependencies = [
  "osl-core",
+ "osl-kicad",
 ]
 
 [[package]]

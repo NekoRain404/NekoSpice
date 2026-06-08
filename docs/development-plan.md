@@ -232,7 +232,7 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 
 目标：
 
-- Rust 原生解析 `.kicad_pro` / `.kicad_sch` / `.kicad_sym`，建立可绘制、可编辑、可验证的 schematic IR。
+- Rust 原生解析 `.kicad_pro` / `.kicad_sch` / `.kicad_sym`，建立可绘制、可编辑、可验证的 schematic IR，并从连接图生成 ngspice netlist。
 - 实现 symbol library index、library table 解析、symbol graphics / pin / property / unit 支持。
 - 实现 wire、junction、label、global label、hierarchical sheet 的连接图。
 - KiCad symbol field 到 SPICE instance / model / value / pin order 的映射诊断。
@@ -243,7 +243,7 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 
 验收标准：
 
-- 常见 KiCad 模拟电路可由 NekoSpice 直接打开 `.kicad_pro` / `.kicad_sch`、显示基础原理图、解析 symbol library，并导入运行。
+- 常见 KiCad 模拟电路可由 NekoSpice 直接打开 `.kicad_pro` / `.kicad_sch`、显示基础原理图、解析 symbol library、生成 SPICE netlist，并导入运行。
 - NekoSpice 生成的 KiCad-compatible schematic/library 修改能被 KiCad 打开，作为互操作回归测试。
 - 常见 LTspice 模拟电路可作为迁移来源导入并运行。
 - 不能运行时必须明确指出原因和修复建议。

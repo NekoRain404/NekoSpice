@@ -10,7 +10,7 @@ The current three-day build is a vertical slice:
 - `osl verify`: run a small YAML verification plan.
 - `osl bench`: run every `.cir` under a directory and collect timings.
 - `osl model-check`: scan imported SPICE models for `.subckt`, `.model`, LTspice symbol pin mapping, dialect risks, and unsupported directives.
-- `osl import`: inspect SPICE/KiCad-style netlists, generate an import compatibility report, and write a runnable NekoSpice project.
+- `osl import`: inspect SPICE/KiCad-style netlists, Rust-native KiCad schematics, and LTspice schematics, then generate an import compatibility report and runnable NekoSpice project.
 - `osl kicad-inspect`: parse KiCad `.kicad_sch` / `.kicad_sym` assets through the Rust-native KiCad IR and emit a JSON summary.
 - `osl waveform`: query raw waveforms into viewport-sized min/max envelope JSON.
 - HTML and JSON reports for runs and verification batches.
@@ -34,6 +34,7 @@ cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output reports/import_001
+cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output reports/import_kicad_schematic_001
 cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output reports/import_with_models_001
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output reports/kicad_schematic.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output reports/kicad_symbol_library.json
@@ -118,6 +119,8 @@ cargo run -p osl-cli -- import examples/kicad_project --output /tmp/nekospice_im
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_project_dir/project/project.osl.yaml --output /tmp/nekospice_import/kicad_project_dir_verify
 cargo run -p osl-cli -- import examples/kicad_project/kicad_project.kicad_pro --output /tmp/nekospice_import/kicad_project_file
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_project_file/project/project.osl.yaml --output /tmp/nekospice_import/kicad_project_file_verify
+cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_schematic
+cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_schematic/project/project.osl.yaml --output /tmp/nekospice_import/kicad_schematic_verify
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_schematic.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/kicad_symbol_library.json
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output /tmp/nekospice_import/ltspice_rc

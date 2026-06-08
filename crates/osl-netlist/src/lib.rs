@@ -1,4 +1,5 @@
 use osl_core::{OslError, OslResult, html_escape, json_escape, read_text};
+use osl_kicad::parse_kicad_schematic;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
@@ -26,6 +27,16 @@ pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
         report.diagnostics.extend(imported.diagnostics);
         Ok(ImportInput {
             source_netlist: imported.netlist,
+            source_path: path,
+            report,
+        })
+    } else if is_kicad_schematic(&path) {
+        let schematic = parse_kicad_schematic(&content, &source)?;
+        let netlist = schematic.to_spice_netlist()?;
+        let mut report = parse_netlist(&netlist, &source)?;
+        report.flavor = NetlistFlavor::KiCad;
+        Ok(ImportInput {
+            source_netlist: netlist,
             source_path: path,
             report,
         })
@@ -843,6 +854,12 @@ fn is_ltspice_schematic(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("asc"))
+}
+
+fn is_kicad_schematic(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("kicad_sch"))
 }
 
 #[derive(Debug)]
@@ -1860,12 +1877,15 @@ fn parse_component(line: usize, statement: &str, report: &mut ImportReport) {
                 .take(pin_count)
                 .map(|token| token.to_string())
                 .collect::<Vec<_>>();
-            let value = tokens.get(1 + pin_count).map(|value| value.to_string());
+            let value = component_value_tail(statement, pin_count);
             let model = match kind {
                 ComponentKind::Diode
                 | ComponentKind::Bjt
                 | ComponentKind::Mosfet
-                | ComponentKind::Jfet => value.clone(),
+                | ComponentKind::Jfet => value
+                    .as_deref()
+                    .and_then(|value| value.split_whitespace().next())
+                    .map(str::to_string),
                 _ => None,
             };
             (nodes, value, model, pin_count)
@@ -1896,6 +1916,18 @@ fn parse_component(line: usize, statement: &str, report: &mut ImportReport) {
         value,
         model,
     });
+}
+
+fn component_value_tail(statement: &str, pin_count: usize) -> Option<String> {
+    let mut parts = statement.splitn(pin_count + 2, char::is_whitespace);
+    for _ in 0..=pin_count {
+        parts.next()?;
+    }
+    parts
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn push_diagnostic(
@@ -2227,6 +2259,20 @@ XU1 in out vcc vee GOODAMP
     }
 
     #[test]
+    fn preserves_source_value_expressions_in_component_summary() {
+        let report = parse_netlist(
+            "V1 in 0 PULSE(0 1 0 1u 1u 10u 20u)\n.tran 1u 1m\n.end\n",
+            "pulse.cir",
+        )
+        .unwrap();
+
+        assert_eq!(
+            report.components[0].value.as_deref(),
+            Some("PULSE(0 1 0 1u 1u 10u 20u)")
+        );
+    }
+
+    #[test]
     fn builds_normalized_import_project() {
         let source = "* KiCad netlist\nV1 in 0 DC 5\nR1 in out 1k\n.tran 1u 1m\n.end\n";
         let report = parse_netlist(source, "examples/kicad_import/kicad_rc.cir").unwrap();
@@ -2332,6 +2378,28 @@ XU1 in out vcc vee GOODAMP
                 .source_netlist
                 .contains(".include \"models/ideal_diode.lib\"")
         );
+    }
+
+    #[test]
+    fn imports_kicad_schematic_to_runnable_netlist() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let input =
+            read_import_input(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        assert_eq!(input.report.flavor, NetlistFlavor::KiCad);
+        assert_eq!(input.report.error_count(), 0);
+        assert!(input.source_netlist.contains("V1 in 0 PULSE"));
+        assert!(input.source_netlist.contains("R1 in out 1k"));
+        assert!(input.source_netlist.contains("C1 out 0 100n"));
+        assert!(input.source_netlist.contains(".tran 1u 1m"));
+
+        let project = input.report.normalized_project(&input.source_netlist);
+        assert!(project.validation_yaml.contains("signal: \"v(out)\""));
+        assert!(project.manifest_json.contains("\"flavor\": \"kicad\""));
     }
 
     #[test]

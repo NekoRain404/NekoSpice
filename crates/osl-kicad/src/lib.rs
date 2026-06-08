@@ -1,4 +1,6 @@
 use osl_core::{OslError, OslResult, json_escape, read_text};
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -99,10 +101,131 @@ pub struct KicadSchematic {
 }
 
 impl KicadSchematic {
+    pub fn connectivity_graph(&self) -> KicadNetGraph {
+        KicadNetGraph::build(self)
+    }
+
+    pub fn to_spice_netlist(&self) -> OslResult<String> {
+        let graph = self.connectivity_graph();
+        let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
+
+        for symbol in &self.symbols {
+            match self.symbol_to_spice_line(symbol, &graph) {
+                Some(line) => lines.push(line),
+                None => lines.push(format!(
+                    "* Unsupported KiCad symbol {} {}",
+                    symbol.reference().unwrap_or("<no-reference>"),
+                    symbol.lib_id
+                )),
+            }
+        }
+
+        let mut has_end = false;
+        for directive in self.spice_directives() {
+            let directive = directive.text.trim();
+            if directive.eq_ignore_ascii_case(".end") {
+                has_end = true;
+            }
+            lines.push(directive.to_string());
+        }
+        if !has_end {
+            lines.push(".end".to_string());
+        }
+        Ok(format!("{}\n", lines.join("\n")))
+    }
+
     pub fn spice_directives(&self) -> Vec<&KicadTextItem> {
         self.text_items
             .iter()
             .filter(|item| item.text.trim_start().starts_with('.'))
+            .collect()
+    }
+
+    fn symbol_to_spice_line(
+        &self,
+        symbol: &KicadSymbolInstance,
+        graph: &KicadNetGraph,
+    ) -> Option<String> {
+        let reference = symbol.reference()?.trim();
+        if reference.is_empty() || reference.starts_with('#') {
+            return None;
+        }
+
+        let value = symbol.value().unwrap_or_default().trim();
+        let nodes = self.symbol_pin_nets(symbol, graph)?;
+        let designator = reference
+            .chars()
+            .next()
+            .map(|character| character.to_ascii_uppercase())?;
+
+        match designator {
+            'R' | 'C' | 'L' | 'V' | 'I' if nodes.len() >= 2 && !value.is_empty() => {
+                Some(format!("{reference} {} {} {value}", nodes[0], nodes[1]))
+            }
+            'D' if nodes.len() >= 2 && !value.is_empty() => {
+                Some(format!("{reference} {} {} {value}", nodes[0], nodes[1]))
+            }
+            'Q' | 'J' if nodes.len() >= 3 && !value.is_empty() => Some(format!(
+                "{reference} {} {} {} {value}",
+                nodes[0], nodes[1], nodes[2]
+            )),
+            'M' if nodes.len() >= 4 && !value.is_empty() => Some(format!(
+                "{reference} {} {} {} {} {value}",
+                nodes[0], nodes[1], nodes[2], nodes[3]
+            )),
+            'X' if !nodes.is_empty() && !value.is_empty() => {
+                Some(format!("{reference} {} {value}", nodes.join(" ")))
+            }
+            _ => None,
+        }
+    }
+
+    fn symbol_pin_nets(
+        &self,
+        symbol: &KicadSymbolInstance,
+        graph: &KicadNetGraph,
+    ) -> Option<Vec<String>> {
+        let symbol_at = symbol.at?;
+        let definition = self.symbol_definition(&symbol.lib_id)?;
+        let mut pins = definition.pins.iter().collect::<Vec<_>>();
+        pins.sort_by(compare_pin_numbers);
+
+        Some(
+            pins.into_iter()
+                .map(|pin| {
+                    pin.at
+                        .map(|pin_at| transform_symbol_point(pin_at, symbol_at))
+                        .and_then(|point| graph.net_at(point).map(str::to_string))
+                        .unwrap_or_else(|| "unconnected".to_string())
+                })
+                .collect(),
+        )
+    }
+
+    fn symbol_definition(&self, lib_id: &str) -> Option<&KicadSymbolDef> {
+        self.library_symbols
+            .iter()
+            .find(|symbol| symbol.name == lib_id)
+    }
+
+    fn symbol_pin_points(&self) -> Vec<KicadPoint> {
+        self.symbols
+            .iter()
+            .flat_map(|symbol| {
+                let Some(symbol_at) = symbol.at else {
+                    return Vec::new();
+                };
+                self.symbol_definition(&symbol.lib_id)
+                    .map(|definition| {
+                        definition
+                            .pins
+                            .iter()
+                            .filter_map(|pin| pin.at)
+                            .map(|pin_at| transform_symbol_point(pin_at, symbol_at))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
             .collect()
     }
 
@@ -132,6 +255,142 @@ impl KicadSchematic {
             self.spice_directives().len()
         )
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadNetGraph {
+    pub nets: Vec<KicadNet>,
+    nets_by_point: BTreeMap<PointKey, String>,
+}
+
+impl KicadNetGraph {
+    fn build(schematic: &KicadSchematic) -> Self {
+        let mut points = BTreeMap::<PointKey, KicadPoint>::new();
+        for wire in &schematic.wires {
+            for point in &wire.points {
+                insert_point(&mut points, *point);
+            }
+        }
+        for label in &schematic.labels {
+            if let Some(at) = label.at {
+                insert_point(&mut points, at.point());
+            }
+        }
+        for junction in &schematic.junctions {
+            insert_point(&mut points, junction.at);
+        }
+        for point in schematic.symbol_pin_points() {
+            insert_point(&mut points, point);
+        }
+
+        let ordered_keys = points.keys().copied().collect::<Vec<_>>();
+        let indexes = ordered_keys
+            .iter()
+            .enumerate()
+            .map(|(index, key)| (*key, index))
+            .collect::<BTreeMap<_, _>>();
+        let mut graph = DisjointSet::new(ordered_keys.len());
+
+        for wire in &schematic.wires {
+            for segment in wire.points.windows(2) {
+                let mut segment_indexes = ordered_keys
+                    .iter()
+                    .filter(|key| {
+                        points.get(key).is_some_and(|point| {
+                            segment_contains_point(segment[0], segment[1], *point)
+                        })
+                    })
+                    .filter_map(|key| indexes.get(key).copied())
+                    .collect::<Vec<_>>();
+                segment_indexes.sort_unstable();
+                if let Some(first) = segment_indexes.first().copied() {
+                    for index in segment_indexes.into_iter().skip(1) {
+                        graph.union(first, index);
+                    }
+                }
+            }
+        }
+
+        let mut labels_by_name = BTreeMap::<String, Vec<usize>>::new();
+        for label in &schematic.labels {
+            if let Some(at) = label.at
+                && let Some(index) = indexes.get(&PointKey::from(at.point())).copied()
+            {
+                labels_by_name
+                    .entry(normalize_net_name(&label.text))
+                    .or_default()
+                    .push(index);
+            }
+        }
+        for label_indexes in labels_by_name.values() {
+            if let Some(first) = label_indexes.first().copied() {
+                for index in label_indexes.iter().copied().skip(1) {
+                    graph.union(first, index);
+                }
+            }
+        }
+
+        let mut labels_by_root = BTreeMap::<usize, BTreeSet<String>>::new();
+        for label in &schematic.labels {
+            if let Some(at) = label.at
+                && let Some(index) = indexes.get(&PointKey::from(at.point())).copied()
+            {
+                labels_by_root
+                    .entry(graph.find(index))
+                    .or_default()
+                    .insert(normalize_net_name(&label.text));
+            }
+        }
+
+        let mut names_by_root = BTreeMap::<usize, String>::new();
+        let mut generated_index = 1;
+        for index in 0..ordered_keys.len() {
+            let root = graph.find(index);
+            names_by_root.entry(root).or_insert_with(|| {
+                preferred_net_label(labels_by_root.get(&root)).unwrap_or_else(|| {
+                    let name = format!("n{generated_index:03}");
+                    generated_index += 1;
+                    name
+                })
+            });
+        }
+
+        let mut nets_by_point = BTreeMap::new();
+        let mut points_by_net = BTreeMap::<String, Vec<KicadPoint>>::new();
+        for (index, key) in ordered_keys.iter().enumerate() {
+            let root = graph.find(index);
+            let name = names_by_root
+                .get(&root)
+                .cloned()
+                .unwrap_or_else(|| "n000".to_string());
+            nets_by_point.insert(*key, name.clone());
+            if let Some(point) = points.get(key).copied() {
+                points_by_net.entry(name).or_default().push(point);
+            }
+        }
+
+        let nets = points_by_net
+            .into_iter()
+            .map(|(name, points)| KicadNet { name, points })
+            .collect();
+
+        Self {
+            nets,
+            nets_by_point,
+        }
+    }
+
+    pub fn net_at(&self, point: KicadPoint) -> Option<&str> {
+        self.nets_by_point
+            .get(&PointKey::from(point))
+            .map(String::as_str)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadNet {
+    pub name: String,
+    pub points: Vec<KicadPoint>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -266,6 +525,62 @@ pub struct KicadAt {
     pub x: f64,
     pub y: f64,
     pub rotation: f64,
+}
+
+impl KicadAt {
+    fn point(self) -> KicadPoint {
+        KicadPoint {
+            x: self.x,
+            y: self.y,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct PointKey {
+    x: i64,
+    y: i64,
+}
+
+impl From<KicadPoint> for PointKey {
+    fn from(point: KicadPoint) -> Self {
+        Self {
+            x: coordinate_key(point.x),
+            y: coordinate_key(point.y),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct DisjointSet {
+    parents: Vec<usize>,
+}
+
+impl DisjointSet {
+    fn new(len: usize) -> Self {
+        Self {
+            parents: (0..len).collect(),
+        }
+    }
+
+    fn find(&mut self, item: usize) -> usize {
+        let parent = self.parents[item];
+        if parent == item {
+            item
+        } else {
+            let root = self.find(parent);
+            self.parents[item] = root;
+            root
+        }
+    }
+
+    fn union(&mut self, left: usize, right: usize) {
+        let left_root = self.find(left);
+        let right_root = self.find(right);
+        if left_root != right_root {
+            self.parents[right_root] = left_root;
+        }
+    }
 }
 
 struct SexpParser<'a> {
@@ -576,6 +891,90 @@ fn json_option(value: Option<&str>) -> String {
     }
 }
 
+fn transform_symbol_point(pin_at: KicadAt, symbol_at: KicadAt) -> KicadPoint {
+    let local = KicadPoint {
+        x: pin_at.x,
+        y: pin_at.y,
+    };
+    let rotated = rotate_point(local, symbol_at.rotation);
+    KicadPoint {
+        x: symbol_at.x + rotated.x,
+        y: symbol_at.y + rotated.y,
+    }
+}
+
+fn rotate_point(point: KicadPoint, rotation: f64) -> KicadPoint {
+    let normalized = ((rotation.round() as i32 % 360) + 360) % 360;
+    match normalized {
+        0 => point,
+        90 => KicadPoint {
+            x: -point.y,
+            y: point.x,
+        },
+        180 => KicadPoint {
+            x: -point.x,
+            y: -point.y,
+        },
+        270 => KicadPoint {
+            x: point.y,
+            y: -point.x,
+        },
+        _ => {
+            let radians = rotation.to_radians();
+            KicadPoint {
+                x: point.x * radians.cos() - point.y * radians.sin(),
+                y: point.x * radians.sin() + point.y * radians.cos(),
+            }
+        }
+    }
+}
+
+fn compare_pin_numbers(left: &&KicadPinDef, right: &&KicadPinDef) -> Ordering {
+    match (left.number.parse::<u32>(), right.number.parse::<u32>()) {
+        (Ok(left), Ok(right)) => left.cmp(&right),
+        _ => left.number.cmp(&right.number),
+    }
+}
+
+fn insert_point(points: &mut BTreeMap<PointKey, KicadPoint>, point: KicadPoint) {
+    points.entry(PointKey::from(point)).or_insert(point);
+}
+
+fn segment_contains_point(start: KicadPoint, end: KicadPoint, point: KicadPoint) -> bool {
+    let cross = (point.y - start.y) * (end.x - start.x) - (point.x - start.x) * (end.y - start.y);
+    if cross.abs() > 1e-6 {
+        return false;
+    }
+
+    between_inclusive(point.x, start.x, end.x) && between_inclusive(point.y, start.y, end.y)
+}
+
+fn between_inclusive(value: f64, left: f64, right: f64) -> bool {
+    let min = left.min(right) - 1e-6;
+    let max = left.max(right) + 1e-6;
+    value >= min && value <= max
+}
+
+fn coordinate_key(value: f64) -> i64 {
+    (value * 1_000_000.0).round() as i64
+}
+
+fn normalize_net_name(name: &str) -> String {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "gnd" | "agnd" | "dgnd" | "earth" => "0".to_string(),
+        _ => name.trim().to_string(),
+    }
+}
+
+fn preferred_net_label(labels: Option<&BTreeSet<String>>) -> Option<String> {
+    let labels = labels?;
+    labels
+        .iter()
+        .find(|label| label.as_str() == "0")
+        .cloned()
+        .or_else(|| labels.iter().find(|label| !label.is_empty()).cloned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -598,7 +997,7 @@ mod tests {
         assert_eq!(schematic.symbols.len(), 3);
         assert_eq!(schematic.library_symbols.len(), 3);
         assert_eq!(schematic.wires.len(), 3);
-        assert_eq!(schematic.labels.len(), 2);
+        assert_eq!(schematic.labels.len(), 3);
         assert_eq!(schematic.spice_directives()[0].text, ".tran 1u 1m");
         assert_eq!(schematic.symbols[0].reference(), Some("V1"));
         assert_eq!(schematic.symbols[1].value(), Some("1k"));
@@ -609,6 +1008,34 @@ mod tests {
                 .any(|label| label.text == "out" && label.kind == KicadLabelKind::Local)
         );
         assert!(schematic.to_summary_json().contains("\"symbol_count\": 3"));
+    }
+
+    #[test]
+    fn builds_connectivity_and_exports_spice() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        let graph = schematic.connectivity_graph();
+        assert_eq!(
+            graph
+                .nets
+                .iter()
+                .map(|net| net.name.as_str())
+                .collect::<Vec<_>>(),
+            ["0", "in", "out"]
+        );
+
+        let netlist = schematic.to_spice_netlist().unwrap();
+        assert!(netlist.contains("V1 in 0 PULSE(0 1 0 1u 1u 10u 20u)"));
+        assert!(netlist.contains("R1 in out 1k"));
+        assert!(netlist.contains("C1 out 0 100n"));
+        assert!(netlist.contains(".tran 1u 1m"));
+        assert!(netlist.ends_with(".end\n"));
     }
 
     #[test]
