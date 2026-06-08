@@ -170,6 +170,7 @@ pub fn parse_kicad_symbol_library(input: &str, source: &str) -> OslResult<KicadS
         source: source.to_string(),
         version: child_value(root_list, "version"),
         generator: child_value(root_list, "generator"),
+        generator_version: child_value(root_list, "generator_version"),
         symbols: direct_children(root_list, "symbol")
             .filter_map(parse_symbol_def)
             .collect(),
@@ -3765,6 +3766,7 @@ pub struct KicadSymbolLibrary {
     pub source: String,
     pub version: Option<String>,
     pub generator: Option<String>,
+    pub generator_version: Option<String>,
     pub symbols: Vec<KicadSymbolDef>,
 }
 
@@ -3781,6 +3783,12 @@ impl KicadSymbolLibrary {
         }
         if let Some(generator) = &self.generator {
             output.push_str(&format!("  (generator {})\n", sexpr_string(generator)));
+        }
+        if let Some(generator_version) = &self.generator_version {
+            output.push_str(&format!(
+                "  (generator_version {})\n",
+                sexpr_string(generator_version)
+            ));
         }
         for symbol in &self.symbols {
             symbol.write_symbol_sexpr(&mut output, 2);
@@ -3857,6 +3865,11 @@ impl KicadSymbolLibrary {
             .iter()
             .map(|symbol| symbol.jumper_pin_groups.len())
             .sum::<usize>();
+        let embedded_font_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.embedded_fonts.is_some())
+            .count();
 
         format!(
             concat!(
@@ -3864,6 +3877,7 @@ impl KicadSymbolLibrary {
                 "  \"source\": \"{}\",\n",
                 "  \"version\": {},\n",
                 "  \"generator\": {},\n",
+                "  \"generator_version\": {},\n",
                 "  \"symbol_count\": {},\n",
                 "  \"graphic_count\": {},\n",
                 "  \"pin_count\": {},\n",
@@ -3877,12 +3891,14 @@ impl KicadSymbolLibrary {
                 "  \"duplicate_pin_numbers_are_jumpers_count\": {},\n",
                 "  \"extended_symbol_count\": {},\n",
                 "  \"body_style_symbol_count\": {},\n",
-                "  \"jumper_pin_group_count\": {}\n",
+                "  \"jumper_pin_group_count\": {},\n",
+                "  \"embedded_font_symbol_count\": {}\n",
                 "}}"
             ),
             json_escape(&self.source),
             json_option(self.version.as_deref()),
             json_option(self.generator.as_deref()),
+            json_option(self.generator_version.as_deref()),
             self.symbols.len(),
             self.symbols
                 .iter()
@@ -3899,7 +3915,8 @@ impl KicadSymbolLibrary {
             duplicate_pin_numbers_are_jumpers_count,
             extended_symbol_count,
             body_style_symbol_count,
-            jumper_pin_group_count
+            jumper_pin_group_count,
+            embedded_font_symbol_count
         )
     }
 }
@@ -4306,6 +4323,7 @@ pub struct KicadSymbolDef {
     pub in_pos_files: Option<bool>,
     pub duplicate_pin_numbers_are_jumpers: Option<bool>,
     pub jumper_pin_groups: Vec<Vec<String>>,
+    pub embedded_fonts: Option<bool>,
     pub pin_names: Option<KicadPinDisplay>,
     pub pin_numbers: Option<KicadPinDisplay>,
     pub properties: Vec<KicadProperty>,
@@ -4391,6 +4409,7 @@ impl KicadSymbolDef {
             }
             output.push_str(&format!("\n{}  )\n", pad));
         }
+        write_optional_bool_sexpr(output, indent + 2, "embedded_fonts", self.embedded_fonts);
         if let Some(pin_numbers) = &self.pin_numbers {
             pin_numbers.write_pin_numbers_sexpr(output, indent + 2);
         }
@@ -6794,6 +6813,7 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
         jumper_pin_groups: child(items, "jumper_pin_groups")
             .map(parse_jumper_pin_groups)
             .unwrap_or_default(),
+        embedded_fonts: child_value(items, "embedded_fonts").and_then(parse_kicad_bool_value),
         pin_names: child(items, "pin_names").map(parse_pin_display),
         pin_numbers: child(items, "pin_numbers").map(parse_pin_display),
         properties: direct_children(items, "property")
@@ -11292,6 +11312,55 @@ mod tests {
         let bounds = resistor.bounding_box().unwrap();
         assert_close(bounds.min.x, -2.54);
         assert_close(bounds.max.x, 2.54);
+    }
+
+    #[test]
+    fn preserves_kicad_symbol_library_file_metadata() {
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "kicad_symbol_editor")
+  (generator_version "9.0")
+  (symbol "NekoSpice:Fonted"
+    (embedded_fonts no)
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Fonted" (at 0 -2.54 0))
+  )
+  (symbol "NekoSpice:Embedded"
+    (embedded_fonts yes)
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Embedded" (at 0 -2.54 0))
+  )
+)"#,
+            "metadata.kicad_sym",
+        )
+        .unwrap();
+
+        assert_eq!(library.generator_version.as_deref(), Some("9.0"));
+        assert_eq!(
+            library.symbol("NekoSpice:Fonted").unwrap().embedded_fonts,
+            Some(false)
+        );
+        assert_eq!(
+            library.symbol("NekoSpice:Embedded").unwrap().embedded_fonts,
+            Some(true)
+        );
+        let summary = library.to_summary_json();
+        assert!(summary.contains("\"generator_version\": \"9.0\""));
+        assert!(summary.contains("\"embedded_font_symbol_count\": 2"));
+
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(generator_version \"9.0\")"));
+        assert!(exported.contains("(embedded_fonts no)"));
+        assert!(exported.contains("(embedded_fonts yes)"));
+
+        let reparsed =
+            parse_kicad_symbol_library(&exported, "metadata_roundtrip.kicad_sym").unwrap();
+        assert_eq!(reparsed.generator_version.as_deref(), Some("9.0"));
+        assert_eq!(
+            reparsed.symbol("NekoSpice:Fonted").unwrap().embedded_fonts,
+            Some(false)
+        );
     }
 
     #[test]
