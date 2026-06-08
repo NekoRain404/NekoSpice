@@ -50,6 +50,7 @@ cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --outpu
 cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output reports/rc_with_no_connect.kicad_sch place-symbol:NekoSpice:R:R2:10k:101.6,50.8 'add-wire:88.9,50.8;99.06,50.8' 'add-no-connect:104.14,50.8'
 cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --output reports/rc_with_sheet.kicad_sch 'add-sheet:gain_stage:gain_stage.kicad_sch:101.6,43.18:25.4,12.7:in@101.6,48.26,180,input;out@127,48.26,0,output'
 cargo run -p osl-cli -- kicad-render examples/kicad_schematic/rc.kicad_sch --output reports/kicad_canvas_scene.svg
+cargo run -p osl-cli -- kicad-render examples/kicad_schematic/neko_spice.kicad_sym --symbol R --output reports/kicad_symbol_preview.svg
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output reports/kicad_symbol_library.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --output reports/kicad_symbol_index.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --query R --output reports/kicad_symbol_search.json
@@ -144,6 +145,8 @@ KiCad symbol unit display names from nested `(unit_name ...)` records are preser
 The symbol library index now carries browser-oriented metadata for each symbol, including KiCad `Description` / legacy `ki_description`, `ki_keywords`, decoded `ki_fp_filters`, unit count, unit display names, inheritance parent, inherited browser metadata for derived symbols, resolved bounding boxes, and power-symbol kind, so later placement UI can search, filter by footprint, and choose the correct unit without reparsing the library file.
 
 `osl kicad-inspect <sym-lib-table> --index` emits the full Rust-native symbol index JSON, including loaded libraries, searchable symbols, unit records, footprint filters, resolved bounding boxes, and diagnostics, while retaining top-level count fields for quick CI checks. Add `--query <text>`, `--library <nickname>`, and `--footprint <footprint>` to get the same index shape filtered for library-browser search and footprint-compatible placement.
+
+`osl kicad-render <file.kicad_sym> --symbol <name>` renders a single library symbol through the same Rust canvas scene and SVG renderer used by schematics. Optional `--unit <n>` and `--body-style <n>` select the preview scope for multi-unit/body-style symbols, giving the future library browser a deterministic headless preview path.
 
 KiCad symbol inheritance via `.kicad_sym` `(extends ...)` is resolved in the Rust IR at use time. Canvas scene generation, schematic-to-SPICE pin selection, simulation-field lookup, and symbol placement use inherited parent graphics, pins, pin display settings, and default simulation properties while writers keep the KiCad-derived symbol shape instead of flattening parent items back into the child symbol.
 

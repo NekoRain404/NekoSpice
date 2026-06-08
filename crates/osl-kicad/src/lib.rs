@@ -2994,6 +2994,75 @@ pub struct KicadCanvasScene {
 }
 
 impl KicadCanvasScene {
+    pub fn from_symbol_definition(
+        source: impl Into<String>,
+        symbol: &KicadSymbolDef,
+        library_symbols: &[KicadSymbolDef],
+        unit: Option<u32>,
+        body_style: Option<u32>,
+    ) -> Self {
+        let definition = resolve_symbol_definition(symbol, library_symbols)
+            .unwrap_or_else(|| KicadResolvedSymbolDef::from_symbol(symbol));
+        let at = KicadAt {
+            x: 0.0,
+            y: 0.0,
+            rotation: 0.0,
+        };
+        let graphics = definition
+            .scoped_graphics(unit, body_style)
+            .map(|graphic| graphic.transformed(at))
+            .collect::<Vec<_>>();
+        let pins = definition
+            .scoped_pins(unit, body_style)
+            .filter_map(|pin| KicadCanvasPin::from_pin_def(pin, at))
+            .collect::<Vec<_>>();
+        let symbol_bounds = canvas_symbol_bounds(&graphics, &pins);
+        let mut bounds = KicadBoundingBoxBuilder::default();
+        if let Some(symbol_bounds) = symbol_bounds {
+            bounds.include_box(symbol_bounds);
+        }
+
+        let selected_unit = unit.unwrap_or(1);
+        Self {
+            source: source.into(),
+            symbols: vec![KicadCanvasSymbol {
+                lib_id: symbol.name.clone(),
+                reference: symbol
+                    .property("Reference")
+                    .filter(|reference| !reference.is_empty())
+                    .unwrap_or("U")
+                    .to_string(),
+                value: symbol
+                    .property("Value")
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| symbol.local_name())
+                    .to_string(),
+                at,
+                graphics,
+                pins,
+                pin_names: definition.pin_names.clone(),
+                pin_numbers: definition.pin_numbers.clone(),
+                unit_name: definition.unit_names.get(&selected_unit).cloned(),
+                bounds: symbol_bounds,
+            }],
+            sheets: Vec::new(),
+            graphics: Vec::new(),
+            images: Vec::new(),
+            tables: Vec::new(),
+            rule_areas: Vec::new(),
+            wires: Vec::new(),
+            buses: Vec::new(),
+            bus_entries: Vec::new(),
+            directive_labels: Vec::new(),
+            labels: Vec::new(),
+            text_items: Vec::new(),
+            text_boxes: Vec::new(),
+            junctions: Vec::new(),
+            no_connects: Vec::new(),
+            bounds: bounds.finish(),
+        }
+    }
+
     pub fn from_schematic(schematic: &KicadSchematic) -> Self {
         let mut bounds = KicadBoundingBoxBuilder::default();
 
@@ -3845,6 +3914,12 @@ pub struct KicadSymbolLibrary {
 impl KicadSymbolLibrary {
     pub fn symbol(&self, name: &str) -> Option<&KicadSymbolDef> {
         self.symbols.iter().find(|symbol| symbol.name == name)
+    }
+
+    pub fn symbol_by_name_or_local_name(&self, name: &str) -> Option<&KicadSymbolDef> {
+        self.symbols
+            .iter()
+            .find(|symbol| symbol.name == name || symbol.local_name() == name)
     }
 
     pub fn to_kicad_symbol_library_sexpr(&self) -> String {
@@ -9438,13 +9513,13 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        KicadAt, KicadColor, KicadDiagnosticSeverity, KicadGraphic, KicadIndexedSymbolUnit,
-        KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSize,
-        KicadSymbolBodyStyles, KicadSymbolLibraryIndexQuery, KicadSymbolPower, parse_kicad_project,
-        parse_kicad_schematic, parse_kicad_symbol_library, parse_kicad_symbol_library_table,
-        parse_sexpr, read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
-        read_kicad_symbol_library, read_kicad_symbol_library_index,
-        read_kicad_symbol_library_table,
+        KicadAt, KicadCanvasScene, KicadColor, KicadDiagnosticSeverity, KicadGraphic,
+        KicadIndexedSymbolUnit, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
+        KicadSize, KicadSymbolBodyStyles, KicadSymbolLibraryIndexQuery, KicadSymbolPower,
+        parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
+        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
+        read_kicad_schematic_with_libraries, read_kicad_symbol_library,
+        read_kicad_symbol_library_index, read_kicad_symbol_library_table,
     };
     use std::fs;
     use std::path::Path;
@@ -13727,6 +13802,52 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(project_dir);
+    }
+
+    #[test]
+    fn builds_symbol_library_preview_canvas_scene() {
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "Parent"
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Parent" (at 0 -2.54 0))
+    (symbol "Parent_0_1"
+      (rectangle (start -1 -1) (end 1 1) (stroke (width 0.127) (type default)) (fill (type none)))
+    )
+  )
+  (symbol "Derived"
+    (extends "Parent")
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Derived" (at 0 -2.54 0))
+    (symbol "Derived_1_1"
+      (unit_name "Logic")
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "A") (number "1"))
+    )
+  )
+)"#,
+            "preview.kicad_sym",
+        )
+        .unwrap();
+        let symbol = library.symbol_by_name_or_local_name("Derived").unwrap();
+        let scene = KicadCanvasScene::from_symbol_definition(
+            "preview.kicad_sym:Derived",
+            symbol,
+            &library.symbols,
+            Some(1),
+            None,
+        );
+
+        assert_eq!(scene.source, "preview.kicad_sym:Derived");
+        assert_eq!(scene.symbols.len(), 1);
+        assert_eq!(scene.symbols[0].lib_id, "Derived");
+        assert_eq!(scene.symbols[0].value, "Derived");
+        assert_eq!(scene.symbols[0].unit_name.as_deref(), Some("Logic"));
+        assert_eq!(scene.symbols[0].graphics.len(), 1);
+        assert_eq!(scene.symbols[0].pins.len(), 1);
+        assert!(scene.bounds.is_some());
+        assert!(scene.to_summary_json().contains("\"symbol_count\": 1"));
     }
 
     #[test]

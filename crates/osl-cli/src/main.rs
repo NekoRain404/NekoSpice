@@ -3,8 +3,8 @@ use osl_core::{
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_kicad::{
-    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSize,
-    KicadSymbolDef, KicadSymbolLibraryIndexQuery, read_kicad_project,
+    KicadAt, KicadCanvasScene, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
+    KicadSize, KicadSymbolDef, KicadSymbolLibraryIndexQuery, read_kicad_project,
     read_kicad_schematic_with_libraries, read_kicad_symbol_library,
     read_kicad_symbol_library_index, read_kicad_symbol_library_table, write_kicad_schematic,
     write_kicad_symbol_library,
@@ -86,7 +86,7 @@ Usage:
   osl kicad-check <file.kicad_sch> [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
-  osl kicad-render <file.kicad_sch> --output <file.svg>
+  osl kicad-render <file.kicad_sch-or-file.kicad_sym> [--symbol <name>] [--unit <n>] [--body-style <n>] --output <file.svg>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
@@ -528,15 +528,46 @@ fn kicad_render_command(args: &[String]) -> OslResult<i32> {
         .and_then(|extension| extension.to_str())
         .map(str::to_ascii_lowercase)
         .unwrap_or_default();
-    if extension != "kicad_sch" {
-        return Err(OslError::InvalidInput(format!(
-            "{} is not a supported KiCad render input (.kicad_sch)",
-            input_path.display()
-        )));
-    }
-
-    let schematic = read_kicad_schematic_with_libraries(input_path)?;
-    let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+    let scene = match extension.as_str() {
+        "kicad_sch" => read_kicad_schematic_with_libraries(input_path)?.canvas_scene(),
+        "kicad_sym" => {
+            let symbol_name = flag_value(args, "--symbol").ok_or_else(|| {
+                OslError::InvalidInput(
+                    "missing --symbol <name> for rendering a KiCad symbol library".to_string(),
+                )
+            })?;
+            let unit = flag_value(args, "--unit")
+                .map(|value| parse_positive_u32(&value, "--unit"))
+                .transpose()?;
+            let body_style = flag_value(args, "--body-style")
+                .map(|value| parse_positive_u32(&value, "--body-style"))
+                .transpose()?;
+            let library = read_kicad_symbol_library(input_path)?;
+            let symbol = library
+                .symbol_by_name_or_local_name(&symbol_name)
+                .ok_or_else(|| {
+                    OslError::InvalidInput(format!(
+                        "symbol '{}' was not found in {}",
+                        symbol_name,
+                        input_path.display()
+                    ))
+                })?;
+            KicadCanvasScene::from_symbol_definition(
+                format!("{}:{}", input_path.display(), symbol.local_name()),
+                symbol,
+                &library.symbols,
+                unit,
+                body_style,
+            )
+        }
+        _ => {
+            return Err(OslError::InvalidInput(format!(
+                "{} is not a supported KiCad render input (.kicad_sch, .kicad_sym)",
+                input_path.display()
+            )));
+        }
+    };
+    let svg = render_kicad_scene_svg(&scene);
     write_text(Path::new(&output), &svg)?;
     println!("kicad-render -> {output}");
     Ok(0)
@@ -1664,7 +1695,8 @@ fn positionals(args: &[String]) -> Vec<&str> {
 fn flag_takes_value(flag: &str) -> bool {
     matches!(
         flag,
-        "--from"
+        "--body-style"
+            | "--from"
             | "--jobs"
             | "--ngspice"
             | "--output"
@@ -1675,6 +1707,7 @@ fn flag_takes_value(flag: &str) -> bool {
             | "--signal"
             | "--symbol"
             | "--to"
+            | "--unit"
     )
 }
 
@@ -1699,6 +1732,21 @@ fn parse_positive_usize(value: &str, flag: &str) -> OslResult<usize> {
         )));
     }
     Ok(jobs)
+}
+
+fn parse_positive_u32(value: &str, flag: &str) -> OslResult<u32> {
+    let parsed = value.parse::<u32>().map_err(|_| {
+        OslError::InvalidInput(format!(
+            "{flag} expects a positive integer, got '{}'",
+            value
+        ))
+    })?;
+    if parsed == 0 {
+        return Err(OslError::InvalidInput(format!(
+            "{flag} expects a positive integer, got 0"
+        )));
+    }
+    Ok(parsed)
 }
 
 fn parse_kicad_edit_ops(
@@ -2269,7 +2317,7 @@ fn find_circuits_inner(path: &Path, circuits: &mut Vec<PathBuf>) -> OslResult<()
 mod tests {
     use super::{
         SweepDimension, VerifyConfig, VerifyRun, flag_value, has_flag, parse_kicad_edit_ops,
-        parse_number, positionals,
+        parse_number, parse_positive_u32, positionals,
     };
     use osl_kicad::{KicadLabelKind, KicadSchematicEdit, parse_kicad_symbol_library};
     use std::path::PathBuf;
@@ -2417,6 +2465,42 @@ mod tests {
         assert_eq!(
             flag_value(&args, "--output"),
             Some("symbol_index.json".to_string())
+        );
+    }
+
+    #[test]
+    fn parses_kicad_render_symbol_preview_flags_without_extra_positionals() {
+        let args = [
+            "library.kicad_sym".to_string(),
+            "--symbol".to_string(),
+            "Device:R".to_string(),
+            "--unit".to_string(),
+            "2".to_string(),
+            "--body-style".to_string(),
+            "1".to_string(),
+            "--output".to_string(),
+            "preview.svg".to_string(),
+        ];
+
+        assert_eq!(positionals(&args), vec!["library.kicad_sym"]);
+        assert_eq!(flag_value(&args, "--symbol"), Some("Device:R".to_string()));
+        assert_eq!(
+            flag_value(&args, "--unit")
+                .map(|value| parse_positive_u32(&value, "--unit"))
+                .transpose()
+                .unwrap(),
+            Some(2)
+        );
+        assert_eq!(
+            flag_value(&args, "--body-style")
+                .map(|value| parse_positive_u32(&value, "--body-style"))
+                .transpose()
+                .unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            flag_value(&args, "--output"),
+            Some("preview.svg".to_string())
         );
     }
 
