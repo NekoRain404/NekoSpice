@@ -1,7 +1,7 @@
 use osl_core::html_escape;
 use osl_kicad::{
-    KicadAt, KicadBoundingBox, KicadCanvasGraphic, KicadCanvasScene, KicadCanvasSheet,
-    KicadCanvasSymbol, KicadCanvasTextBox, KicadLabelKind, KicadPoint,
+    KicadAt, KicadBoundingBox, KicadCanvasGraphic, KicadCanvasImage, KicadCanvasScene,
+    KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTextBox, KicadLabelKind, KicadPoint,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -55,6 +55,9 @@ pub fn render_kicad_scene_svg_with_options(
     output.push_str("  <g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n");
     for graphic in &scene.graphics {
         render_graphic(&mut output, &viewport, graphic, "#64748b", "#e2e8f0");
+    }
+    for image in &scene.images {
+        render_image(&mut output, &viewport, image);
     }
     for bus in &scene.buses {
         render_polyline(&mut output, &viewport, &bus.points, "#2563eb", 3.2);
@@ -311,6 +314,31 @@ fn render_text_box(output: &mut String, viewport: &SvgViewport, text_box: &Kicad
     }
     output.push_str("</text>\n");
     output.push_str("    </g>\n");
+}
+
+fn render_image(output: &mut String, viewport: &SvgViewport, image: &KicadCanvasImage) {
+    let Some(center) = image.at else {
+        return;
+    };
+    let Some(size) = image.image_size else {
+        return;
+    };
+    if image.data_base64.is_empty() {
+        return;
+    }
+
+    let center = viewport.project(center);
+    let width = size.width * viewport.scale;
+    let height = size.height * viewport.scale;
+    output.push_str(&format!(
+        "    <image data-kicad-image=\"true\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" href=\"data:{};base64,{}\"/>\n",
+        fmt(center.x - width / 2.0),
+        fmt(center.y - height / 2.0),
+        fmt(width),
+        fmt(height),
+        html_escape(&image.mime_type),
+        html_escape(&image.data_base64)
+    ));
 }
 
 fn render_graphic(
@@ -638,5 +666,34 @@ mod tests {
         assert!(svg.contains("Bigger"));
         assert!(svg.contains("Multiline"));
         assert!(svg.contains("Text"));
+    }
+
+    #[test]
+    fn renders_schematic_images_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (image
+    (at 36.83 39.37)
+    (scale 1.5)
+    (uuid "56565656-5656-4656-8656-565656565656")
+    (data
+      "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"
+    )
+  )
+)"#,
+            "image.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-kicad-image=\"true\""));
+        assert!(svg.contains("<image"));
+        assert!(svg.contains("href=\"data:image/png;base64,"));
+        assert!(svg.contains("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"));
     }
 }

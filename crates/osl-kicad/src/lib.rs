@@ -106,6 +106,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
             .iter()
             .filter_map(parse_schematic_graphic)
             .collect(),
+        images: direct_children(root_list, "image")
+            .filter_map(parse_image)
+            .collect(),
         labels: direct_children(root_list, "label")
             .filter_map(|node| parse_label(node, KicadLabelKind::Local))
             .chain(
@@ -209,6 +212,7 @@ pub struct KicadSchematic {
     pub buses: Vec<KicadBus>,
     pub bus_entries: Vec<KicadBusEntry>,
     pub graphics: Vec<KicadSchematicGraphic>,
+    pub images: Vec<KicadImage>,
     pub labels: Vec<KicadLabel>,
     pub sheets: Vec<KicadSheet>,
     pub no_connects: Vec<KicadNoConnect>,
@@ -1136,6 +1140,9 @@ impl KicadSchematic {
         for graphic in &self.graphics {
             graphic.write_schematic_graphic_sexpr(&mut output, 2);
         }
+        for image in &self.images {
+            image.write_image_sexpr(&mut output, 2);
+        }
         for junction in &self.junctions {
             junction.write_junction_sexpr(&mut output, 2);
         }
@@ -1875,6 +1882,11 @@ impl KicadSchematic {
                 uuids.insert(uuid.clone());
             }
         }
+        for image in &self.images {
+            if let Some(uuid) = &image.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
         for label in &self.labels {
             if let Some(uuid) = &label.uuid {
                 uuids.insert(uuid.clone());
@@ -1976,6 +1988,7 @@ impl KicadSchematic {
                 "  \"bus_count\": {},\n",
                 "  \"bus_entry_count\": {},\n",
                 "  \"schematic_graphic_count\": {},\n",
+                "  \"image_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
@@ -1997,6 +2010,7 @@ impl KicadSchematic {
             self.buses.len(),
             self.bus_entries.len(),
             self.graphics.len(),
+            self.images.len(),
             self.labels.len(),
             self.junctions.len(),
             self.no_connects.len(),
@@ -2342,6 +2356,7 @@ pub struct KicadCanvasScene {
     pub symbols: Vec<KicadCanvasSymbol>,
     pub sheets: Vec<KicadCanvasSheet>,
     pub graphics: Vec<KicadCanvasGraphic>,
+    pub images: Vec<KicadCanvasImage>,
     pub wires: Vec<KicadCanvasWire>,
     pub buses: Vec<KicadCanvasBus>,
     pub bus_entries: Vec<KicadCanvasBusEntry>,
@@ -2452,6 +2467,26 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let images = schematic
+            .images
+            .iter()
+            .map(|image| {
+                let image_size = image.image_size_mm();
+                if let Some(image_bounds) = image.bounding_box() {
+                    bounds.include_box(image_bounds);
+                } else if let Some(at) = image.at {
+                    bounds.include(at);
+                }
+                KicadCanvasImage {
+                    at: image.at,
+                    scale: image.scale,
+                    data_base64: image.data_base64.clone(),
+                    mime_type: image.mime_type().to_string(),
+                    image_size,
+                }
+            })
+            .collect::<Vec<_>>();
+
         let buses = schematic
             .buses
             .iter()
@@ -2549,6 +2584,7 @@ impl KicadCanvasScene {
             symbols,
             sheets,
             graphics,
+            images,
             wires,
             buses,
             bus_entries,
@@ -2586,6 +2622,7 @@ impl KicadCanvasScene {
                 "  \"sheet_count\": {},\n",
                 "  \"graphic_count\": {},\n",
                 "  \"schematic_graphic_count\": {},\n",
+                "  \"image_count\": {},\n",
                 "  \"pin_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"wire_count\": {},\n",
@@ -2605,6 +2642,7 @@ impl KicadCanvasScene {
             self.sheets.len(),
             graphic_count,
             self.graphics.len(),
+            self.images.len(),
             pin_count,
             self.sheets
                 .iter()
@@ -2715,6 +2753,15 @@ impl KicadCanvasGraphic {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasImage {
+    pub at: Option<KicadPoint>,
+    pub scale: f64,
+    pub data_base64: String,
+    pub mime_type: String,
+    pub image_size: Option<KicadSize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3685,6 +3732,80 @@ impl KicadSchematicGraphic {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadImage {
+    pub at: Option<KicadPoint>,
+    pub scale: f64,
+    pub data_base64: String,
+    pub uuid: Option<String>,
+    pub locked: Option<bool>,
+}
+
+impl KicadImage {
+    pub fn image_size_mm(&self) -> Option<KicadSize> {
+        png_size_from_base64(&self.data_base64).map(|(width_px, height_px)| {
+            let scale = if self.scale.is_finite() && self.scale > 0.0 {
+                self.scale
+            } else {
+                1.0
+            };
+            KicadSize {
+                width: f64::from(width_px) / 300.0 * 25.4 * scale,
+                height: f64::from(height_px) / 300.0 * 25.4 * scale,
+            }
+        })
+    }
+
+    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
+        let at = self.at?;
+        let size = self.image_size_mm()?;
+        Some(KicadBoundingBox {
+            min: KicadPoint {
+                x: at.x - size.width / 2.0,
+                y: at.y - size.height / 2.0,
+            },
+            max: KicadPoint {
+                x: at.x + size.width / 2.0,
+                y: at.y + size.height / 2.0,
+            },
+        })
+    }
+
+    pub fn mime_type(&self) -> &'static str {
+        if base64_starts_with(&self.data_base64, b"\x89PNG\r\n\x1a\n") {
+            "image/png"
+        } else if base64_starts_with(&self.data_base64, b"\xff\xd8\xff") {
+            "image/jpeg"
+        } else {
+            "application/octet-stream"
+        }
+    }
+
+    fn write_image_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(image", pad));
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                " (at {} {})",
+                format_number(at.x),
+                format_number(at.y)
+            ));
+        }
+        if self.scale != 1.0 {
+            output.push_str(&format!(" (scale {})", format_number(self.scale)));
+        }
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        if self.locked == Some(true) {
+            output.push_str(" (locked yes)");
+        }
+        output.push('\n');
+        write_base64_data_sexpr(output, &self.data_base64, indent + 2);
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KicadBoundingBox {
     pub min: KicadPoint,
@@ -4552,6 +4673,20 @@ fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
     }
 }
 
+fn parse_image(node: &Sexp) -> Option<KicadImage> {
+    let items = list_items(node);
+    Some(KicadImage {
+        at: child(items, "at").and_then(parse_image_at),
+        scale: child_value(items, "scale")
+            .and_then(|value| value.parse().ok())
+            .filter(|scale: &f64| scale.is_finite() && *scale > 0.0)
+            .unwrap_or(1.0),
+        data_base64: child(items, "data").map(parse_data_chunks)?,
+        uuid: child_value(items, "uuid"),
+        locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
+    })
+}
+
 fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
     let items = list_items(node);
     Some(KicadLabel {
@@ -4634,6 +4769,14 @@ fn parse_points(node: &Sexp) -> Vec<KicadPoint> {
 }
 
 fn parse_xy(node: &Sexp) -> Option<KicadPoint> {
+    let items = list_items(node);
+    Some(KicadPoint {
+        x: atom_text(items.get(1)?)?.parse().ok()?,
+        y: atom_text(items.get(2)?)?.parse().ok()?,
+    })
+}
+
+fn parse_image_at(node: &Sexp) -> Option<KicadPoint> {
     let items = list_items(node);
     Some(KicadPoint {
         x: atom_text(items.get(1)?)?.parse().ok()?,
@@ -4756,6 +4899,14 @@ fn child<'a>(items: &'a [Sexp], name: &str) -> Option<&'a Sexp> {
 
 fn child_value(items: &[Sexp], name: &str) -> Option<String> {
     child(items, name).and_then(|node| list_value(node, 1))
+}
+
+fn parse_data_chunks(node: &Sexp) -> String {
+    list_items(node)
+        .iter()
+        .skip(1)
+        .filter_map(atom_text)
+        .collect::<String>()
 }
 
 fn list_value(node: &Sexp, index: usize) -> Option<String> {
@@ -4886,6 +5037,25 @@ fn write_points_sexpr(output: &mut String, points: &[KicadPoint]) {
     output.push_str(&format!(" (pts {})", points));
 }
 
+fn write_base64_data_sexpr(output: &mut String, data: &str, indent: usize) {
+    let pad = " ".repeat(indent);
+    output.push_str(&format!("{}(data", pad));
+    let mut wrote_chunk = false;
+    for chunk in data.as_bytes().chunks(76) {
+        wrote_chunk = true;
+        output.push_str(&format!(
+            "\n{}  {}",
+            pad,
+            sexpr_string(std::str::from_utf8(chunk).unwrap_or_default())
+        ));
+    }
+    if wrote_chunk {
+        output.push('\n');
+        output.push_str(&pad);
+    }
+    output.push_str(")\n");
+}
+
 fn is_plain_sexpr_atom(value: &str) -> bool {
     !value.is_empty()
         && value
@@ -4903,6 +5073,62 @@ fn format_number(value: f64) -> String {
         formatted.pop();
     }
     formatted
+}
+
+fn png_size_from_base64(data: &str) -> Option<(u32, u32)> {
+    let header = decode_base64_prefix(data, 24)?;
+    if header.len() < 24 || &header[0..8] != b"\x89PNG\r\n\x1a\n" || &header[12..16] != b"IHDR" {
+        return None;
+    }
+    let width = u32::from_be_bytes([header[16], header[17], header[18], header[19]]);
+    let height = u32::from_be_bytes([header[20], header[21], header[22], header[23]]);
+    (width > 0 && height > 0).then_some((width, height))
+}
+
+fn base64_starts_with(data: &str, prefix: &[u8]) -> bool {
+    decode_base64_prefix(data, prefix.len())
+        .map(|decoded| decoded.starts_with(prefix))
+        .unwrap_or(false)
+}
+
+fn decode_base64_prefix(data: &str, wanted_len: usize) -> Option<Vec<u8>> {
+    let mut decoded = Vec::with_capacity(wanted_len);
+    let mut buffer = [0_u8; 4];
+    let mut buffer_len = 0;
+
+    for byte in data.bytes().filter(|byte| !byte.is_ascii_whitespace()) {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => 64,
+            _ => return None,
+        };
+        buffer[buffer_len] = value;
+        buffer_len += 1;
+
+        if buffer_len == 4 {
+            decoded.push((buffer[0] << 2) | (buffer[1] >> 4));
+            if buffer[2] != 64 {
+                decoded.push((buffer[1] << 4) | (buffer[2] >> 2));
+            }
+            if buffer[3] != 64 {
+                decoded.push((buffer[2] << 6) | buffer[3]);
+            }
+            if decoded.len() >= wanted_len {
+                decoded.truncate(wanted_len);
+                return Some(decoded);
+            }
+            if buffer[2] == 64 || buffer[3] == 64 {
+                break;
+            }
+            buffer_len = 0;
+        }
+    }
+
+    (decoded.len() >= wanted_len).then_some(decoded)
 }
 
 fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
@@ -5990,6 +6216,57 @@ mod tests {
         assert_eq!(reparsed.text_boxes.len(), 1);
         assert_eq!(reparsed.text_boxes[0].text, "Bigger\nMultiline\nText");
         assert_eq!(reparsed.canvas_scene().text_boxes.len(), 1);
+    }
+
+    #[test]
+    fn parses_schematic_images_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (image
+    (at 36.83 39.37)
+    (scale 1.5)
+    (uuid "56565656-5656-4656-8656-565656565656")
+    (data
+      "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"
+    )
+  )
+)"#,
+            "image.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.images.len(), 1);
+        assert_eq!(
+            schematic.images[0].uuid.as_deref(),
+            Some("56565656-5656-4656-8656-565656565656")
+        );
+        assert_close(schematic.images[0].scale, 1.5);
+        assert_eq!(schematic.images[0].mime_type(), "image/png");
+        assert_close(schematic.images[0].image_size_mm().unwrap().width, 6.096);
+        assert!(schematic.to_summary_json().contains("\"image_count\": 1"));
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.images.len(), 1);
+        assert_eq!(scene.images[0].mime_type, "image/png");
+        assert_close(scene.images[0].image_size.unwrap().height, 6.096);
+        let bounds = scene.bounds.unwrap();
+        assert_close(bounds.width(), 6.096);
+        assert_close(bounds.height(), 6.096);
+        assert!(scene.to_summary_json().contains("\"image_count\": 1"));
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(image (at 36.83 39.37) (scale 1.5)"));
+        assert!(roundtrip.contains("(data"));
+        assert!(roundtrip.contains("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"));
+        assert!(roundtrip.contains("(uuid \"56565656-5656-4656-8656-565656565656\")"));
+        let reparsed = parse_kicad_schematic(&roundtrip, "image_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.images.len(), 1);
+        assert_eq!(reparsed.images[0].mime_type(), "image/png");
+        assert_eq!(reparsed.canvas_scene().images.len(), 1);
     }
 
     #[test]
