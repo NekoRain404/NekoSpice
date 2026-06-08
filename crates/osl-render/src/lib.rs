@@ -64,20 +64,40 @@ pub fn render_kicad_scene_svg_with_options(
         render_table(&mut output, &viewport, table);
     }
     for bus in &scene.buses {
-        render_polyline(&mut output, &viewport, &bus.points, "#2563eb", 3.2);
+        render_stroked_polyline(
+            &mut output,
+            &viewport,
+            &bus.points,
+            bus.stroke.as_ref(),
+            "#2563eb",
+            3.2,
+        );
     }
     for wire in &scene.wires {
-        render_polyline(&mut output, &viewport, &wire.points, "#0f172a", 2.0);
+        render_stroked_polyline(
+            &mut output,
+            &viewport,
+            &wire.points,
+            wire.stroke.as_ref(),
+            "#0f172a",
+            2.0,
+        );
     }
     for entry in &scene.bus_entries {
         let start = viewport.project(entry.at);
         let end = viewport.project(entry.end());
+        let stroke = svg_stroke_color(entry.stroke.as_ref(), "#2563eb");
+        let stroke_width = svg_stroke_width(entry.stroke.as_ref(), &viewport, 2.0);
+        let dash_array = svg_stroke_dasharray(entry.stroke.as_ref());
         output.push_str(&format!(
-            "    <line data-bus-entry=\"true\" x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#2563eb\" stroke-width=\"2\"/>\n",
+            "    <line data-bus-entry=\"true\" x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{}\" stroke-width=\"{}\"{}/>\n",
             fmt(start.x),
             fmt(start.y),
             fmt(end.x),
-            fmt(end.y)
+            fmt(end.y),
+            stroke,
+            fmt(stroke_width),
+            dash_array
         ));
     }
     for sheet in &scene.sheets {
@@ -551,6 +571,31 @@ fn render_polyline(
     color: &str,
     stroke_width: f64,
 ) {
+    render_polyline_with_dash(output, viewport, points, color, stroke_width, "");
+}
+
+fn render_stroked_polyline(
+    output: &mut String,
+    viewport: &SvgViewport,
+    points: &[KicadPoint],
+    stroke: Option<&KicadStroke>,
+    default_color: &str,
+    default_width: f64,
+) {
+    let color = svg_stroke_color(stroke, default_color);
+    let stroke_width = svg_stroke_width(stroke, viewport, default_width);
+    let dash_array = svg_stroke_dasharray(stroke);
+    render_polyline_with_dash(output, viewport, points, &color, stroke_width, &dash_array);
+}
+
+fn render_polyline_with_dash(
+    output: &mut String,
+    viewport: &SvgViewport,
+    points: &[KicadPoint],
+    color: &str,
+    stroke_width: f64,
+    dash_array: &str,
+) {
     if points.len() < 2 {
         return;
     }
@@ -563,10 +608,11 @@ fn render_polyline(
         .collect::<Vec<_>>()
         .join(" ");
     output.push_str(&format!(
-        "      <polyline points=\"{}\" stroke=\"{}\" stroke-width=\"{}\"/>\n",
+        "      <polyline points=\"{}\" stroke=\"{}\" stroke-width=\"{}\"{}/>\n",
         points,
         color,
-        fmt(stroke_width)
+        fmt(stroke_width),
+        dash_array
     ));
 }
 
@@ -717,8 +763,22 @@ mod tests {
   (generator "NekoSpice")
   (paper "A4")
   (lib_symbols)
-  (bus (pts (xy 10 10) (xy 30 10)) (uuid "11111111-1111-4111-8111-111111111111"))
-  (bus_entry (at 30 10) (size 2.54 -2.54) (uuid "22222222-2222-4222-8222-222222222222"))
+  (bus
+    (pts (xy 10 10) (xy 30 10))
+    (stroke (width 0.254) (type dash) (color 58 104 255 1))
+    (uuid "11111111-1111-4111-8111-111111111111")
+  )
+  (bus_entry
+    (at 30 10)
+    (size 2.54 -2.54)
+    (stroke (width 0.127) (type dot) (color 255 89 101 1))
+    (uuid "22222222-2222-4222-8222-222222222222")
+  )
+  (wire
+    (pts (xy 10 15) (xy 30 15))
+    (stroke (width 0.1778) (type dash_dot) (color 255 176 0 1))
+    (uuid "33333333-3333-4333-8333-333333333333")
+  )
 )"#,
             "bus.kicad_sch",
         )
@@ -727,7 +787,11 @@ mod tests {
         let svg = render_kicad_scene_svg(&schematic.canvas_scene());
 
         assert!(svg.contains("<polyline"));
-        assert!(svg.contains("stroke=\"#2563eb\""));
+        assert!(svg.contains("stroke=\"rgba(58,104,255,1)\""));
+        assert!(svg.contains("stroke=\"rgba(255,176,0,1)\""));
+        assert!(svg.contains("stroke-dasharray=\"8 5\""));
+        assert!(svg.contains("stroke-dasharray=\"8 4 2 4\""));
+        assert!(svg.contains("stroke=\"rgba(255,89,101,1)\""));
         assert!(svg.contains("data-bus-entry=\"true\""));
     }
 

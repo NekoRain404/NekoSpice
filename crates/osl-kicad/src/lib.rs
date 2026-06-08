@@ -709,7 +709,11 @@ impl KicadSchematic {
 
         let payload = points_payload(&points);
         let uuid = Some(self.edit_uuid(uuid, "wire", &payload)?);
-        self.wires.push(KicadWire { points, uuid });
+        self.wires.push(KicadWire {
+            points,
+            stroke: None,
+            uuid,
+        });
 
         Ok(KicadEditSummary {
             operation: "add-wire".to_string(),
@@ -733,7 +737,11 @@ impl KicadSchematic {
 
         let payload = points_payload(&points);
         let uuid = Some(self.edit_uuid(uuid, "bus", &payload)?);
-        self.buses.push(KicadBus { points, uuid });
+        self.buses.push(KicadBus {
+            points,
+            stroke: None,
+            uuid,
+        });
 
         Ok(KicadEditSummary {
             operation: "add-bus".to_string(),
@@ -768,7 +776,12 @@ impl KicadSchematic {
             format_number(size.height)
         );
         let uuid = Some(self.edit_uuid(uuid, "bus-entry", &payload)?);
-        self.bus_entries.push(KicadBusEntry { at, size, uuid });
+        self.bus_entries.push(KicadBusEntry {
+            at,
+            size,
+            stroke: None,
+            uuid,
+        });
 
         Ok(KicadEditSummary {
             operation: "add-bus-entry".to_string(),
@@ -2079,8 +2092,11 @@ impl KicadSchematic {
                 "  \"library_symbol_count\": {},\n",
                 "  \"bus_alias_count\": {},\n",
                 "  \"wire_count\": {},\n",
+                "  \"styled_wire_count\": {},\n",
                 "  \"bus_count\": {},\n",
+                "  \"styled_bus_count\": {},\n",
                 "  \"bus_entry_count\": {},\n",
+                "  \"styled_bus_entry_count\": {},\n",
                 "  \"schematic_graphic_count\": {},\n",
                 "  \"styled_schematic_graphic_count\": {},\n",
                 "  \"locked_schematic_graphic_count\": {},\n",
@@ -2134,8 +2150,11 @@ impl KicadSchematic {
             self.library_symbols.len(),
             self.bus_aliases.len(),
             self.wires.len(),
+            self.styled_wire_count(),
             self.buses.len(),
+            self.styled_bus_count(),
             self.bus_entries.len(),
+            self.styled_bus_entry_count(),
             self.graphics.len(),
             self.styled_schematic_graphic_count(),
             self.locked_schematic_graphic_count(),
@@ -2242,6 +2261,24 @@ impl KicadSchematic {
         self.graphics
             .iter()
             .filter(|graphic| graphic.stroke.is_some() || graphic.fill.is_some())
+            .count()
+    }
+
+    fn styled_wire_count(&self) -> usize {
+        self.wires
+            .iter()
+            .filter(|wire| wire.stroke.is_some())
+            .count()
+    }
+
+    fn styled_bus_count(&self) -> usize {
+        self.buses.iter().filter(|bus| bus.stroke.is_some()).count()
+    }
+
+    fn styled_bus_entry_count(&self) -> usize {
+        self.bus_entries
+            .iter()
+            .filter(|entry| entry.stroke.is_some())
             .count()
     }
 
@@ -2841,6 +2878,7 @@ impl KicadCanvasScene {
                 }
                 KicadCanvasWire {
                     points: wire.points.clone(),
+                    stroke: wire.stroke.clone(),
                 }
             })
             .collect::<Vec<_>>();
@@ -2918,6 +2956,7 @@ impl KicadCanvasScene {
                 }
                 KicadCanvasBus {
                     points: bus.points.clone(),
+                    stroke: bus.stroke.clone(),
                 }
             })
             .collect::<Vec<_>>();
@@ -2931,6 +2970,7 @@ impl KicadCanvasScene {
                 KicadCanvasBusEntry {
                     at: entry.at,
                     size: entry.size,
+                    stroke: entry.stroke.clone(),
                 }
             })
             .collect::<Vec<_>>();
@@ -3252,17 +3292,20 @@ impl KicadCanvasPin {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasWire {
     pub points: Vec<KicadPoint>,
+    pub stroke: Option<KicadStroke>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasBus {
     pub points: Vec<KicadPoint>,
+    pub stroke: Option<KicadStroke>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasBusEntry {
     pub at: KicadPoint,
     pub size: KicadSize,
+    pub stroke: Option<KicadStroke>,
 }
 
 impl KicadCanvasBusEntry {
@@ -4830,6 +4873,7 @@ pub struct KicadVariantInstance {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadWire {
     pub points: Vec<KicadPoint>,
+    pub stroke: Option<KicadStroke>,
     pub uuid: Option<String>,
 }
 
@@ -4838,7 +4882,7 @@ impl KicadWire {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(wire", pad));
         write_points_sexpr(output, &self.points);
-        output.push_str(" (stroke (width 0) (type default))");
+        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
         }
@@ -4873,6 +4917,7 @@ impl KicadBusAlias {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadBus {
     pub points: Vec<KicadPoint>,
+    pub stroke: Option<KicadStroke>,
     pub uuid: Option<String>,
 }
 
@@ -4881,7 +4926,7 @@ impl KicadBus {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(bus", pad));
         write_points_sexpr(output, &self.points);
-        output.push_str(" (stroke (width 0) (type default))");
+        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
         }
@@ -4893,6 +4938,7 @@ impl KicadBus {
 pub struct KicadBusEntry {
     pub at: KicadPoint,
     pub size: KicadSize,
+    pub stroke: Option<KicadStroke>,
     pub uuid: Option<String>,
 }
 
@@ -4907,16 +4953,18 @@ impl KicadBusEntry {
     fn write_bus_entry_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
-            "{}(bus_entry\n{}  (at {} {})\n{}  (size {} {})\n{}  (stroke (width 0) (type default))\n",
+            "{}(bus_entry\n{}  (at {} {})\n{}  (size {} {})\n",
             pad,
             pad,
             format_number(self.at.x),
             format_number(self.at.y),
             pad,
             format_number(self.size.width),
-            format_number(self.size.height),
-            pad
+            format_number(self.size.height)
         ));
+        output.push_str(&format!("{}  ", pad));
+        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+        output.push('\n');
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
         }
@@ -5973,6 +6021,7 @@ fn parse_wire(node: &Sexp) -> KicadWire {
     let items = list_items(node);
     KicadWire {
         points: child(items, "pts").map(parse_points).unwrap_or_default(),
+        stroke: child(items, "stroke").map(parse_stroke),
         uuid: child_value(items, "uuid"),
     }
 }
@@ -5998,6 +6047,7 @@ fn parse_bus(node: &Sexp) -> KicadBus {
     let items = list_items(node);
     KicadBus {
         points: child(items, "pts").map(parse_points).unwrap_or_default(),
+        stroke: child(items, "stroke").map(parse_stroke),
         uuid: child_value(items, "uuid"),
     }
 }
@@ -6008,6 +6058,7 @@ fn parse_bus_entry(node: &Sexp) -> Option<KicadBusEntry> {
     Some(KicadBusEntry {
         at: KicadPoint { x: at.x, y: at.y },
         size: child(items, "size").and_then(parse_size)?,
+        stroke: child(items, "stroke").map(parse_stroke),
         uuid: child_value(items, "uuid"),
     })
 }
@@ -7618,13 +7669,18 @@ mod tests {
   (bus_entry
     (at 30 10)
     (size 2.54 -2.54)
-    (stroke (width 0) (type default))
+    (stroke (width 0.127) (type dot) (color 255 89 101 1))
     (uuid "31313131-3131-4131-8131-313131313131")
   )
   (bus
     (pts (xy 30 10) (xy 30 30) (xy 60 30))
-    (stroke (width 0) (type default))
+    (stroke (width 0.254) (type dash) (color 58 104 255 1))
     (uuid "32323232-3232-4232-8232-323232323232")
+  )
+  (wire
+    (pts (xy 60 30) (xy 70 30))
+    (stroke (width 0.1778) (type dash_dot) (color 255 176 0 1))
+    (uuid "33333333-3333-4333-8333-333333333333")
   )
 )"#,
             "bus.kicad_sch",
@@ -7644,6 +7700,29 @@ mod tests {
         );
         assert_eq!(schematic.buses.len(), 1);
         assert_eq!(schematic.bus_entries.len(), 1);
+        assert_eq!(schematic.wires.len(), 1);
+        assert_eq!(
+            schematic.bus_entries[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dot")
+        );
+        assert_close(
+            schematic.buses[0].stroke.as_ref().unwrap().width.unwrap(),
+            0.254,
+        );
+        assert_eq!(
+            schematic.wires[0].stroke.as_ref().unwrap().color,
+            Some(KicadColor {
+                red: 255.0,
+                green: 176.0,
+                blue: 0.0,
+                alpha: 1.0,
+            })
+        );
         assert_close(schematic.bus_entries[0].end().x, 32.54);
         assert_close(schematic.bus_entries[0].end().y, 7.46);
         assert!(
@@ -7657,10 +7736,35 @@ mod tests {
                 .to_summary_json()
                 .contains("\"bus_entry_count\": 1")
         );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_wire_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_bus_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_bus_entry_count\": 1")
+        );
 
         let scene = schematic.canvas_scene();
+        assert_eq!(scene.wires.len(), 1);
         assert_eq!(scene.buses.len(), 1);
         assert_eq!(scene.bus_entries.len(), 1);
+        assert_eq!(
+            scene.wires[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash_dot")
+        );
         assert!(scene.to_summary_json().contains("\"bus_count\": 1"));
         assert!(scene.to_summary_json().contains("\"bus_entry_count\": 1"));
 
@@ -7668,12 +7772,25 @@ mod tests {
         assert!(roundtrip.contains("(bus_alias \"DATA\" (members \"D0\" \"D1\" \"D2\" \"D3\"))"));
         assert!(roundtrip.contains("(bus"));
         assert!(roundtrip.contains("(bus_entry"));
+        assert!(roundtrip.contains("(stroke (width 0.127) (type dot) (color 255 89 101 1))"));
+        assert!(roundtrip.contains("(stroke (width 0.254) (type dash) (color 58 104 255 1))"));
+        assert!(roundtrip.contains("(stroke (width 0.1778) (type dash_dot) (color 255 176 0 1))"));
         assert!(roundtrip.contains("(uuid \"31313131-3131-4131-8131-313131313131\")"));
         assert!(roundtrip.contains("(uuid \"32323232-3232-4232-8232-323232323232\")"));
         let reparsed = parse_kicad_schematic(&roundtrip, "bus_roundtrip.kicad_sch").unwrap();
         assert_eq!(reparsed.bus_aliases.len(), 1);
         assert_eq!(reparsed.buses.len(), 1);
         assert_eq!(reparsed.bus_entries.len(), 1);
+        assert_eq!(reparsed.wires.len(), 1);
+        assert_eq!(
+            reparsed.buses[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash")
+        );
         assert_eq!(
             reparsed.bus_entries[0].uuid.as_deref(),
             Some("31313131-3131-4131-8131-313131313131")
