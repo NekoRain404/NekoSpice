@@ -86,6 +86,7 @@ Usage:
   osl kicad-check <file.kicad_sch> [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
+      place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]
   osl kicad-render <file.kicad_sch-or-file.kicad_sym> [--symbol <name>] [--unit <n>] [--body-style <n>] --output <file.svg>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
@@ -1842,21 +1843,22 @@ fn parse_kicad_place_symbol_edit(
     symbol_definitions: &[KicadSymbolDef],
 ) -> OslResult<KicadSchematicEdit> {
     let (payload, uuid) = split_payload_uuid(payload);
+    let (payload, unit, body_style) = split_kicad_place_symbol_options(payload)?;
     let (rest, at) = payload.rsplit_once(':').ok_or_else(|| {
         OslError::InvalidInput(
-            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>"
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]"
                 .to_string(),
         )
     })?;
     let (rest, value) = rest.rsplit_once(':').ok_or_else(|| {
         OslError::InvalidInput(
-            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>"
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]"
                 .to_string(),
         )
     })?;
     let (lib_id, reference) = rest.rsplit_once(':').ok_or_else(|| {
         OslError::InvalidInput(
-            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>"
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]"
                 .to_string(),
         )
     })?;
@@ -1875,7 +1877,8 @@ fn parse_kicad_place_symbol_edit(
         reference: reference.to_string(),
         value: value.to_string(),
         at: parse_kicad_at(at, "symbol placement")?,
-        unit: Some(1),
+        unit: Some(unit.unwrap_or(1)),
+        body_style,
         uuid,
     })
 }
@@ -2034,6 +2037,37 @@ fn split_payload_uuid(payload: &str) -> (&str, Option<String>) {
         Some((payload, uuid)) => (payload, Some(uuid.to_string())),
         None => (payload, None),
     }
+}
+
+fn split_kicad_place_symbol_options(
+    mut payload: &str,
+) -> OslResult<(&str, Option<u32>, Option<u32>)> {
+    let mut unit = None;
+    let mut body_style = None;
+
+    while let Some((rest, suffix)) = payload.rsplit_once(':') {
+        if let Some(value) = suffix.strip_prefix("unit=") {
+            if unit.is_some() {
+                return Err(OslError::InvalidInput(
+                    "place-symbol unit option was provided more than once".to_string(),
+                ));
+            }
+            unit = Some(parse_positive_u32(value, "symbol unit")?);
+            payload = rest;
+        } else if let Some(value) = suffix.strip_prefix("body-style=") {
+            if body_style.is_some() {
+                return Err(OslError::InvalidInput(
+                    "place-symbol body-style option was provided more than once".to_string(),
+                ));
+            }
+            body_style = Some(parse_positive_u32(value, "symbol body style")?);
+            payload = rest;
+        } else {
+            break;
+        }
+    }
+
+    Ok((payload, unit, body_style))
 }
 
 fn parse_kicad_point(value: &str, context: &str) -> OslResult<KicadPoint> {
@@ -2527,7 +2561,7 @@ mod tests {
             "placed.kicad_sch",
             "--library",
             "neko_spice.kicad_sym",
-            "place-symbol:NekoSpice:C:C2:47n:101.6,53.34",
+            "place-symbol:NekoSpice:C:C2:47n:101.6,53.34:unit=2:body-style=1",
         ]
         .iter()
         .map(|value| value.to_string())
@@ -2537,7 +2571,7 @@ mod tests {
             positionals(&args),
             vec![
                 "input.kicad_sch",
-                "place-symbol:NekoSpice:C:C2:47n:101.6,53.34",
+                "place-symbol:NekoSpice:C:C2:47n:101.6,53.34:unit=2:body-style=1",
             ]
         );
 
@@ -2549,6 +2583,8 @@ mod tests {
                 reference,
                 value,
                 at,
+                unit,
+                body_style,
                 ..
             } => {
                 assert_eq!(definition.name, "NekoSpice:C");
@@ -2556,6 +2592,8 @@ mod tests {
                 assert_eq!(value, "47n");
                 assert_close(at.x, 101.6);
                 assert_close(at.y, 53.34);
+                assert_eq!(*unit, Some(2));
+                assert_eq!(*body_style, Some(1));
             }
             edit => panic!("expected place-symbol edit, got {edit:?}"),
         }

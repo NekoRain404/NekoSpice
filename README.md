@@ -123,7 +123,7 @@ cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas
 cargo run -p osl-cli -- kicad-inspect examples/kicad_project_schematic/kicad_project_schematic.kicad_pro
 cargo run -p osl-cli -- kicad-check examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_check.json
-cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/rc_edited.kicad_sch place-symbol:NekoSpice:C:C2:47n:101.6,53.34 'add-wire:101.6,50.8;88.9,50.8' 'add-wire:101.6,55.88;88.9,55.88' 'add-junction:88.9,50.8' 'add-global-label:sense:101.6,50.8' 'add-text:.save v(out):45.72,35.56'
+cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/rc_edited.kicad_sch place-symbol:NekoSpice:C:C2:47n:101.6,53.34:unit=1 'add-wire:101.6,50.8;88.9,50.8' 'add-wire:101.6,55.88;88.9,55.88' 'add-junction:88.9,50.8' 'add-global-label:sense:101.6,50.8' 'add-text:.save v(out):45.72,35.56'
 cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/rc_with_bus.kicad_sch 'add-bus:88.9,38.1;101.6,38.1' 'add-bus-entry:101.6,38.1:2.54,-2.54'
 cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/rc_with_no_connect.kicad_sch place-symbol:NekoSpice:R:R2:10k:101.6,50.8 'add-wire:88.9,50.8;99.06,50.8' 'add-no-connect:104.14,50.8'
 cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/rc_with_sheet.kicad_sch 'add-sheet:gain_stage:gain_stage.kicad_sch:101.6,43.18:25.4,12.7:in@101.6,48.26,180,input;out@127,48.26,0,output'
@@ -140,7 +140,7 @@ cargo run -p osl-cli -- kicad-export examples/kicad_schematic/neko_spice.kicad_s
 
 Symbol graphic text items now preserve KiCad text effects through Rust IR, `.kicad_sym` / `.kicad_sch` roundtrips, canvas scene generation, and the SVG baseline renderer, including font size, thickness, bold/italic, color, justification, hide flags, and href metadata.
 
-Multi-unit and body-style symbol data is tracked from KiCad nested symbol names and instance `(unit ...)` / `(body_style ...)` metadata. Canvas scenes, schematic-to-SPICE pin selection, placement pin UUID generation, and KiCad writers use that scope so a placed unit does not render or connect pins from other units.
+Multi-unit and body-style symbol data is tracked from KiCad nested symbol names and instance `(unit ...)` / `(body_style ...)` metadata. Canvas scenes, schematic-to-SPICE pin selection, placement pin UUID generation, and KiCad writers use that scope so a placed unit does not render or connect pins from other units. `osl kicad-edit ... place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]` preserves the same scope selected by the symbol-library index and preview path.
 
 KiCad symbol unit display names from nested `(unit_name ...)` records are preserved in the Rust IR, schematic and symbol-library summaries, canvas symbol metadata, and `.kicad_sch` / `.kicad_sym` writers so multi-unit parts keep their user-facing unit labels for later library browser and placement UI work.
 

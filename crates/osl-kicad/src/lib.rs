@@ -342,6 +342,7 @@ pub enum KicadSchematicEdit {
         value: String,
         at: KicadAt,
         unit: Option<u32>,
+        body_style: Option<u32>,
         uuid: Option<String>,
     },
     AddWire {
@@ -390,6 +391,17 @@ pub enum KicadSchematicEdit {
 pub struct KicadEditSummary {
     pub operation: String,
     pub target: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSymbolPlacement {
+    pub definition: KicadSymbolDef,
+    pub reference: String,
+    pub value: String,
+    pub at: KicadAt,
+    pub unit: Option<u32>,
+    pub body_style: Option<u32>,
+    pub uuid: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -512,8 +524,17 @@ impl KicadSchematic {
                 value,
                 at,
                 unit,
+                body_style,
                 uuid,
-            } => self.place_symbol(*definition, &reference, &value, at, unit, uuid),
+            } => self.place_symbol(KicadSymbolPlacement {
+                definition: *definition,
+                reference,
+                value,
+                at,
+                unit,
+                body_style,
+                uuid,
+            }),
             KicadSchematicEdit::AddWire { points, uuid } => self.add_wire(points, uuid),
             KicadSchematicEdit::AddBus { points, uuid } => self.add_bus(points, uuid),
             KicadSchematicEdit::AddBusEntry { at, size, uuid } => {
@@ -620,16 +641,27 @@ impl KicadSchematic {
         })
     }
 
-    pub fn place_symbol(
-        &mut self,
-        definition: KicadSymbolDef,
-        reference: &str,
-        value: &str,
-        at: KicadAt,
-        unit: Option<u32>,
-        uuid: Option<String>,
-    ) -> OslResult<KicadEditSummary> {
+    pub fn place_symbol(&mut self, placement: KicadSymbolPlacement) -> OslResult<KicadEditSummary> {
+        let KicadSymbolPlacement {
+            definition,
+            reference,
+            value,
+            at,
+            unit,
+            body_style,
+            uuid,
+        } = placement;
         validate_at(at, "symbol placement")?;
+        if unit == Some(0) {
+            return Err(OslError::InvalidInput(
+                "KiCad symbol placement unit must be positive".to_string(),
+            ));
+        }
+        if body_style == Some(0) {
+            return Err(OslError::InvalidInput(
+                "KiCad symbol placement body style must be positive".to_string(),
+            ));
+        }
         if reference.trim().is_empty() {
             return Err(OslError::InvalidInput(
                 "KiCad placed symbol reference must not be empty".to_string(),
@@ -638,7 +670,7 @@ impl KicadSchematic {
         if self
             .symbols
             .iter()
-            .any(|symbol| symbol.reference() == Some(reference))
+            .any(|symbol| symbol.reference() == Some(reference.as_str()))
         {
             return Err(OslError::InvalidInput(format!(
                 "KiCad symbol reference '{reference}' already exists"
@@ -667,9 +699,8 @@ impl KicadSchematic {
             lib_id, reference, value, at.x, at.y, at.rotation
         );
         let instance_uuid = self.edit_uuid(uuid, "symbol", &instance_payload)?;
-        let properties = symbol_instance_properties(&definition, reference, value, at);
+        let properties = symbol_instance_properties(&definition, &reference, &value, at);
         let unit = unit.unwrap_or(1);
-        let body_style = None;
         let mut sorted_pins = resolved_definition
             .scoped_pins(Some(unit), body_style)
             .collect::<Vec<_>>();
@@ -9962,8 +9993,8 @@ mod tests {
     use super::{
         KicadAt, KicadCanvasScene, KicadColor, KicadDiagnosticSeverity, KicadGraphic,
         KicadIndexedSymbolUnit, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
-        KicadSize, KicadSymbolBodyStyles, KicadSymbolLibraryIndexQuery, KicadSymbolPower,
-        parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
+        KicadSize, KicadSymbolBodyStyles, KicadSymbolLibraryIndexQuery, KicadSymbolPlacement,
+        KicadSymbolPower, parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
         parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
         read_kicad_schematic_with_libraries, read_kicad_symbol_library,
         read_kicad_symbol_library_index, read_kicad_symbol_library_table,
@@ -13063,6 +13094,7 @@ mod tests {
                     rotation: 0.0,
                 },
                 unit: Some(1),
+                body_style: None,
                 uuid: Some("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee".to_string()),
             })
             .unwrap();
@@ -13094,6 +13126,94 @@ mod tests {
                 .iter()
                 .any(|symbol| symbol.reference == "C2" && symbol.pins.len() == 2)
         );
+    }
+
+    #[test]
+    fn places_selected_kicad_symbol_unit_and_body_style() {
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+)"#,
+            "empty.kicad_sch",
+        )
+        .unwrap();
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (symbol "NekoSpice:Scoped"
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Scoped" (at 0 -2.54 0))
+    (symbol "Scoped_1_1"
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "A1") (number "1"))
+      (pin passive line (at 2.54 0 180) (length 2.54) (name "B1") (number "2"))
+    )
+    (symbol "Scoped_2_2"
+      (unit_name "Analog")
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "A2") (number "3"))
+      (pin passive line (at 2.54 0 180) (length 2.54) (name "B2") (number "4"))
+    )
+  )
+)"#,
+            "scoped.kicad_sym",
+        )
+        .unwrap();
+        let definition = library.symbol("NekoSpice:Scoped").unwrap().clone();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::PlaceSymbol {
+                definition: Box::new(definition),
+                reference: "U2".to_string(),
+                value: "Scoped".to_string(),
+                at: KicadAt {
+                    x: 20.0,
+                    y: 10.0,
+                    rotation: 0.0,
+                },
+                unit: Some(2),
+                body_style: Some(2),
+                uuid: Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".to_string()),
+            })
+            .unwrap();
+
+        let placed = schematic
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference() == Some("U2"))
+            .unwrap();
+        assert_eq!(placed.unit, Some(2));
+        assert_eq!(placed.body_style, Some(2));
+        assert_eq!(
+            placed
+                .pins
+                .iter()
+                .filter_map(|pin| pin.number.as_deref())
+                .collect::<Vec<_>>(),
+            vec!["3", "4"]
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.symbols[0].unit_name.as_deref(), Some("Analog"));
+        assert_eq!(
+            scene.symbols[0]
+                .pins
+                .iter()
+                .map(|pin| pin.number.as_str())
+                .collect::<Vec<_>>(),
+            vec!["3", "4"]
+        );
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(unit 2)"));
+        assert!(exported.contains("(body_style 2)"));
+        assert!(exported.contains("(pin \"3\""));
+        assert!(!exported.contains("(pin \"1\""));
+        let reparsed = parse_kicad_schematic(&exported, "placed_scoped.kicad_sch").unwrap();
+        assert_eq!(reparsed.symbols[0].unit, Some(2));
+        assert_eq!(reparsed.symbols[0].body_style, Some(2));
+        assert_eq!(reparsed.canvas_scene().symbols[0].pins.len(), 2);
     }
 
     #[test]
@@ -13792,18 +13912,19 @@ mod tests {
             .unwrap()
             .clone();
         schematic
-            .place_symbol(
-                derived,
-                "R2",
-                "3.3k",
-                KicadAt {
+            .place_symbol(KicadSymbolPlacement {
+                definition: derived,
+                reference: "R2".to_string(),
+                value: "3.3k".to_string(),
+                at: KicadAt {
                     x: 40.0,
                     y: 10.0,
                     rotation: 0.0,
                 },
-                Some(1),
-                None,
-            )
+                unit: Some(1),
+                body_style: None,
+                uuid: None,
+            })
             .unwrap();
         let placed = schematic
             .symbols
