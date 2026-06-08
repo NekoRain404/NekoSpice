@@ -1,5 +1,6 @@
 use osl_core::{OslResult, html_escape, json_escape, read_text};
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
@@ -805,7 +806,7 @@ enum LtspiceSymbolSpecSource {
 
 #[derive(Debug)]
 struct LtspiceSymbolLibrary {
-    base_dir: PathBuf,
+    search_dirs: Vec<PathBuf>,
     cache: BTreeMap<String, Option<LtspiceSymbolSpec>>,
     diagnostics: Vec<ImportDiagnostic>,
 }
@@ -850,8 +851,9 @@ impl DisjointSet {
 
 impl LtspiceSymbolLibrary {
     fn new(base_dir: &Path) -> Self {
+        let search_dirs = ltspice_symbol_search_dirs(base_dir);
         Self {
-            base_dir: base_dir.to_path_buf(),
+            search_dirs,
             cache: BTreeMap::new(),
             diagnostics: Vec::new(),
         }
@@ -903,19 +905,62 @@ impl LtspiceSymbolLibrary {
     fn symbol_path(&self, symbol_name: &str) -> Option<PathBuf> {
         let normalized = symbol_name.replace('\\', "/");
         let raw_path = Path::new(&normalized);
-        let mut candidates = Vec::new();
-        if raw_path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            == Some("asy")
-        {
-            candidates.push(self.base_dir.join(raw_path));
-        } else {
-            candidates.push(self.base_dir.join(format!("{normalized}.asy")));
-            candidates.push(self.base_dir.join(raw_path).with_extension("asy"));
-        }
+        self.search_dirs
+            .iter()
+            .flat_map(|search_dir| symbol_path_candidates(search_dir, raw_path, &normalized))
+            .find(|candidate| candidate.is_file())
+    }
+}
 
-        candidates.into_iter().find(|candidate| candidate.is_file())
+fn ltspice_symbol_search_dirs(base_dir: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    push_unique_path(&mut dirs, base_dir.to_path_buf());
+    push_unique_path(&mut dirs, base_dir.join("sym"));
+
+    if let Some(paths) = env::var_os("NEKOSPICE_LTSPICE_SYM_PATH") {
+        for path in env::split_paths(&paths) {
+            push_unique_path(&mut dirs, path);
+        }
+    }
+    if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+        push_unique_path(&mut dirs, home.join(".local/share/LTspice/lib/sym"));
+        push_unique_path(
+            &mut dirs,
+            home.join(".local/share/wineprefixes/ltspice/drive_c/users")
+                .join(env::var("USER").unwrap_or_else(|_| "user".to_string()))
+                .join("AppData/Local/LTspice/lib/sym"),
+        );
+        push_unique_path(&mut dirs, home.join("Documents/LTspiceXVII/lib/sym"));
+    }
+    push_unique_path(
+        &mut dirs,
+        PathBuf::from("/Applications/LTspice.app/Contents/lib/sym"),
+    );
+    push_unique_path(
+        &mut dirs,
+        PathBuf::from("C:/Users/Public/Documents/LTspiceXVII/lib/sym"),
+    );
+    dirs
+}
+
+fn symbol_path_candidates(search_dir: &Path, raw_path: &Path, normalized: &str) -> Vec<PathBuf> {
+    if raw_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("asy"))
+    {
+        vec![search_dir.join(raw_path)]
+    } else {
+        vec![
+            search_dir.join(format!("{normalized}.asy")),
+            search_dir.join(raw_path).with_extension("asy"),
+        ]
+    }
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
     }
 }
 
@@ -2099,6 +2144,26 @@ XU1 in out vcc vee GOODAMP
         let project = input.report.normalized_project(&input.source_netlist);
         assert!(project.validation_yaml.contains("signal: \"v(out)\""));
         assert!(project.validation_yaml.contains("signal: \"i(v1)\""));
+    }
+
+    #[test]
+    fn imports_ltspice_asc_with_symbol_search_dir() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let input = read_import_input(
+            &workspace_root.join("examples/ltspice_import/ltspice_sym_search.asc"),
+        )
+        .unwrap();
+
+        assert_eq!(input.report.flavor, NetlistFlavor::Ltspice);
+        assert_eq!(input.report.error_count(), 0);
+        assert!(input.source_netlist.contains("XU1 n001 out 0 gain_block"));
+        assert!(!input.report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "ltspice_unsupported_symbol"
+                || diagnostic.code == "ltspice_symbol_no_pins"
+        }));
     }
 
     #[test]
