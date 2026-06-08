@@ -372,7 +372,7 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
     ) {
         ("kicad_sch", _) if should_emit_canvas => read_kicad_schematic_with_libraries(path)?
             .canvas_scene()
-            .to_summary_json(),
+            .to_json(),
         ("kicad_sch", _) => read_kicad_schematic_with_libraries(path)?.to_summary_json(),
         ("kicad_pro", _) => read_kicad_project(path)?.to_summary_json(),
         ("kicad_sym", _) => read_kicad_symbol_library(path)?.to_summary_json(),

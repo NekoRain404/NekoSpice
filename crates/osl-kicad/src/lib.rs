@@ -3459,6 +3459,51 @@ impl KicadCanvasScene {
             bounds
         )
     }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(&self.to_json_value())
+            .expect("KiCad canvas scene JSON should serialize")
+    }
+
+    fn to_json_value(&self) -> serde_json::Value {
+        let symbol_graphic_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.graphics.len())
+            .sum::<usize>();
+        let pin_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.pins.len())
+            .sum::<usize>();
+
+        serde_json::json!({
+            "source": self.source,
+            "symbol_count": self.symbols.len(),
+            "sheet_count": self.sheets.len(),
+            "graphic_count": symbol_graphic_count + self.graphics.len(),
+            "schematic_graphic_count": self.graphics.len(),
+            "pin_count": pin_count,
+            "wire_count": self.wires.len(),
+            "bus_count": self.buses.len(),
+            "bus_entry_count": self.bus_entries.len(),
+            "label_count": self.labels.len(),
+            "text_count": self.text_items.len(),
+            "spice_directive_count": self.text_items.iter().filter(|item| item.is_spice_directive).count(),
+            "junction_count": self.junctions.len(),
+            "no_connect_count": self.no_connects.len(),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
+            "symbols": self.symbols.iter().map(KicadCanvasSymbol::to_json_value).collect::<Vec<_>>(),
+            "graphics": self.graphics.iter().map(KicadCanvasGraphic::to_json_value).collect::<Vec<_>>(),
+            "wires": self.wires.iter().map(KicadCanvasWire::to_json_value).collect::<Vec<_>>(),
+            "buses": self.buses.iter().map(KicadCanvasBus::to_json_value).collect::<Vec<_>>(),
+            "bus_entries": self.bus_entries.iter().map(KicadCanvasBusEntry::to_json_value).collect::<Vec<_>>(),
+            "labels": self.labels.iter().map(KicadCanvasLabel::to_json_value).collect::<Vec<_>>(),
+            "text_items": self.text_items.iter().map(KicadCanvasText::to_json_value).collect::<Vec<_>>(),
+            "junctions": self.junctions.iter().map(KicadCanvasJunction::to_json_value).collect::<Vec<_>>(),
+            "no_connects": self.no_connects.iter().map(KicadCanvasNoConnect::to_json_value).collect::<Vec<_>>(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3473,6 +3518,23 @@ pub struct KicadCanvasSymbol {
     pub pin_numbers: Option<KicadPinDisplay>,
     pub unit_name: Option<String>,
     pub bounds: Option<KicadBoundingBox>,
+}
+
+impl KicadCanvasSymbol {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "lib_id": self.lib_id,
+            "reference": self.reference,
+            "value": self.value,
+            "at": kicad_at_value(self.at),
+            "unit_name": self.unit_name,
+            "pin_names": self.pin_names.as_ref().map(kicad_pin_display_value),
+            "pin_numbers": self.pin_numbers.as_ref().map(kicad_pin_display_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
+            "graphics": self.graphics.iter().map(KicadCanvasGraphic::to_json_value).collect::<Vec<_>>(),
+            "pins": self.pins.iter().map(KicadCanvasPin::to_json_value).collect::<Vec<_>>(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3553,6 +3615,82 @@ pub enum KicadCanvasGraphic {
 }
 
 impl KicadCanvasGraphic {
+    fn to_json_value(&self) -> serde_json::Value {
+        match self {
+            Self::Polyline {
+                points,
+                stroke,
+                fill,
+            } => serde_json::json!({
+                "kind": "polyline",
+                "points": kicad_points_value(points),
+                "stroke": stroke.as_ref().map(kicad_stroke_value),
+                "fill": fill.as_ref().map(kicad_fill_value),
+            }),
+            Self::Bezier {
+                points,
+                stroke,
+                fill,
+            } => serde_json::json!({
+                "kind": "bezier",
+                "points": kicad_points_value(points),
+                "stroke": stroke.as_ref().map(kicad_stroke_value),
+                "fill": fill.as_ref().map(kicad_fill_value),
+            }),
+            Self::Rectangle {
+                start,
+                end,
+                stroke,
+                fill,
+            } => serde_json::json!({
+                "kind": "rectangle",
+                "start": kicad_point_value(*start),
+                "end": kicad_point_value(*end),
+                "stroke": stroke.as_ref().map(kicad_stroke_value),
+                "fill": fill.as_ref().map(kicad_fill_value),
+            }),
+            Self::Circle {
+                center,
+                radius,
+                stroke,
+                fill,
+            } => serde_json::json!({
+                "kind": "circle",
+                "center": kicad_point_value(*center),
+                "radius": radius,
+                "stroke": stroke.as_ref().map(kicad_stroke_value),
+                "fill": fill.as_ref().map(kicad_fill_value),
+            }),
+            Self::Arc {
+                start,
+                mid,
+                end,
+                stroke,
+                fill,
+            } => serde_json::json!({
+                "kind": "arc",
+                "start": kicad_point_value(*start),
+                "mid": mid.map(kicad_point_value),
+                "end": kicad_point_value(*end),
+                "stroke": stroke.as_ref().map(kicad_stroke_value),
+                "fill": fill.as_ref().map(kicad_fill_value),
+            }),
+            Self::Text {
+                text,
+                at,
+                stroke,
+                fill,
+                ..
+            } => serde_json::json!({
+                "kind": "text",
+                "text": text,
+                "at": at.map(kicad_at_value),
+                "stroke": stroke.as_ref().map(kicad_stroke_value),
+                "fill": fill.as_ref().map(kicad_fill_value),
+            }),
+        }
+    }
+
     fn with_style(mut self, stroke: Option<KicadStroke>, fill: Option<KicadFill>) -> Self {
         match &mut self {
             Self::Polyline {
@@ -3678,6 +3816,24 @@ pub struct KicadCanvasPin {
 }
 
 impl KicadCanvasPin {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "number": self.number,
+            "name": self.name,
+            "electrical_type": self.electrical_type,
+            "start": kicad_point_value(self.start),
+            "end": kicad_point_value(self.end),
+            "alternate_count": self.alternates.len(),
+            "alternates": self.alternates.iter().map(|alternate| {
+                serde_json::json!({
+                    "name": alternate.name,
+                    "electrical_type": alternate.electrical_type,
+                    "shape": alternate.shape,
+                })
+            }).collect::<Vec<_>>(),
+        })
+    }
+
     fn from_pin_def(pin: &KicadPinDef, symbol_at: KicadAt) -> Option<Self> {
         let pin_at = pin.at?;
         let local_start = pin_at.point();
@@ -3702,10 +3858,28 @@ pub struct KicadCanvasWire {
     pub stroke: Option<KicadStroke>,
 }
 
+impl KicadCanvasWire {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "points": kicad_points_value(&self.points),
+            "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasBus {
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
+}
+
+impl KicadCanvasBus {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "points": kicad_points_value(&self.points),
+            "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3722,6 +3896,15 @@ impl KicadCanvasBusEntry {
             y: self.at.y + self.size.height,
         }
     }
+
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "at": kicad_point_value(self.at),
+            "size": kicad_size_value(self.size),
+            "end": kicad_point_value(self.end()),
+            "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3732,12 +3915,32 @@ pub struct KicadCanvasLabel {
     pub effects: Option<KicadTextEffects>,
 }
 
+impl KicadCanvasLabel {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "text": self.text,
+            "kind": self.kind.as_str(),
+            "at": self.at.map(kicad_at_value),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasText {
     pub text: String,
     pub at: Option<KicadAt>,
     pub is_spice_directive: bool,
     pub effects: Option<KicadTextEffects>,
+}
+
+impl KicadCanvasText {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "text": self.text,
+            "at": self.at.map(kicad_at_value),
+            "is_spice_directive": self.is_spice_directive,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3758,9 +3961,27 @@ pub struct KicadCanvasJunction {
     pub color: Option<KicadColor>,
 }
 
+impl KicadCanvasJunction {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "at": kicad_point_value(self.at),
+            "diameter": self.diameter,
+            "color": self.color.map(kicad_color_value),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasNoConnect {
     pub at: KicadPoint,
+}
+
+impl KicadCanvasNoConnect {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "at": kicad_point_value(self.at),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6709,6 +6930,14 @@ pub enum KicadLabelKind {
 }
 
 impl KicadLabelKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Global => "global",
+            Self::Hierarchical => "hierarchical",
+        }
+    }
+
     fn sexpr_name(self) -> &'static str {
         match self {
             Self::Local => "label",
@@ -8800,6 +9029,68 @@ fn kicad_bounding_box_value(bounds: KicadBoundingBox) -> serde_json::Value {
         },
         "width": bounds.width(),
         "height": bounds.height(),
+    })
+}
+
+fn kicad_point_value(point: KicadPoint) -> serde_json::Value {
+    serde_json::json!({
+        "x": point.x,
+        "y": point.y,
+    })
+}
+
+fn kicad_points_value(points: &[KicadPoint]) -> serde_json::Value {
+    serde_json::Value::Array(
+        points
+            .iter()
+            .map(|point| kicad_point_value(*point))
+            .collect(),
+    )
+}
+
+fn kicad_size_value(size: KicadSize) -> serde_json::Value {
+    serde_json::json!({
+        "width": size.width,
+        "height": size.height,
+    })
+}
+
+fn kicad_at_value(at: KicadAt) -> serde_json::Value {
+    serde_json::json!({
+        "x": at.x,
+        "y": at.y,
+        "rotation": at.rotation,
+    })
+}
+
+fn kicad_color_value(color: KicadColor) -> serde_json::Value {
+    serde_json::json!({
+        "red": color.red,
+        "green": color.green,
+        "blue": color.blue,
+        "alpha": color.alpha,
+    })
+}
+
+fn kicad_stroke_value(stroke: &KicadStroke) -> serde_json::Value {
+    serde_json::json!({
+        "width": stroke.width,
+        "type": stroke.stroke_type,
+        "color": stroke.color.map(kicad_color_value),
+    })
+}
+
+fn kicad_fill_value(fill: &KicadFill) -> serde_json::Value {
+    serde_json::json!({
+        "type": fill.fill_type,
+        "color": fill.color.map(kicad_color_value),
+    })
+}
+
+fn kicad_pin_display_value(display: &KicadPinDisplay) -> serde_json::Value {
+    serde_json::json!({
+        "offset": display.offset,
+        "hide": display.hide,
     })
 }
 
@@ -13848,6 +14139,12 @@ mod tests {
         assert_eq!(scene.symbols[0].pins.len(), 1);
         assert!(scene.bounds.is_some());
         assert!(scene.to_summary_json().contains("\"symbol_count\": 1"));
+        let json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(json["symbol_count"], 1);
+        assert_eq!(json["symbols"][0]["lib_id"], "Derived");
+        assert_eq!(json["symbols"][0]["unit_name"], "Logic");
+        assert_eq!(json["symbols"][0]["pins"][0]["number"], "1");
+        assert_eq!(json["symbols"][0]["graphics"][0]["kind"], "rectangle");
     }
 
     #[test]
