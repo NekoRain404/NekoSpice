@@ -126,6 +126,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         text_items: direct_children(root_list, "text")
             .filter_map(parse_text_item)
             .collect(),
+        text_boxes: direct_children(root_list, "text_box")
+            .filter_map(parse_text_box)
+            .collect(),
         junctions: direct_children(root_list, "junction")
             .filter_map(parse_junction)
             .collect(),
@@ -210,6 +213,7 @@ pub struct KicadSchematic {
     pub sheets: Vec<KicadSheet>,
     pub no_connects: Vec<KicadNoConnect>,
     pub text_items: Vec<KicadTextItem>,
+    pub text_boxes: Vec<KicadTextBox>,
     pub junctions: Vec<KicadJunction>,
 }
 
@@ -1147,6 +1151,9 @@ impl KicadSchematic {
         for text in &self.text_items {
             text.write_text_sexpr(&mut output, 2);
         }
+        for text_box in &self.text_boxes {
+            text_box.write_text_box_sexpr(&mut output, 2);
+        }
         for symbol in &self.symbols {
             symbol.write_instance_sexpr(&mut output, 2);
         }
@@ -1898,6 +1905,11 @@ impl KicadSchematic {
                 uuids.insert(uuid.clone());
             }
         }
+        for text_box in &self.text_boxes {
+            if let Some(uuid) = &text_box.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
         for symbol in &self.symbols {
             if let Some(uuid) = &symbol.uuid {
                 uuids.insert(uuid.clone());
@@ -1970,6 +1982,7 @@ impl KicadSchematic {
                 "  \"sheet_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"text_count\": {},\n",
+                "  \"text_box_count\": {},\n",
                 "  \"spice_directive_count\": {},\n",
                 "  \"library_graphic_count\": {}\n",
                 "}}"
@@ -1993,6 +2006,7 @@ impl KicadSchematic {
                 .map(|sheet| sheet.pins.len())
                 .sum::<usize>(),
             self.text_items.len(),
+            self.text_boxes.len(),
             self.spice_directives().len(),
             self.library_symbols
                 .iter()
@@ -2333,6 +2347,7 @@ pub struct KicadCanvasScene {
     pub bus_entries: Vec<KicadCanvasBusEntry>,
     pub labels: Vec<KicadCanvasLabel>,
     pub text_items: Vec<KicadCanvasText>,
+    pub text_boxes: Vec<KicadCanvasTextBox>,
     pub junctions: Vec<KicadCanvasJunction>,
     pub no_connects: Vec<KicadCanvasNoConnect>,
     pub bounds: Option<KicadBoundingBox>,
@@ -2493,6 +2508,24 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let text_boxes = schematic
+            .text_boxes
+            .iter()
+            .map(|text_box| {
+                if let Some(text_box_bounds) = text_box.bounding_box() {
+                    bounds.include_box(text_box_bounds);
+                } else if let Some(at) = text_box.at {
+                    bounds.include(at.point());
+                }
+                KicadCanvasTextBox {
+                    text: text_box.text.clone(),
+                    at: text_box.at,
+                    size: text_box.size,
+                    margins: text_box.margins,
+                }
+            })
+            .collect::<Vec<_>>();
+
         let junctions = schematic
             .junctions
             .iter()
@@ -2521,6 +2554,7 @@ impl KicadCanvasScene {
             bus_entries,
             labels,
             text_items,
+            text_boxes,
             junctions,
             no_connects,
             bounds: bounds.finish(),
@@ -2559,6 +2593,7 @@ impl KicadCanvasScene {
                 "  \"bus_entry_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"text_count\": {},\n",
+                "  \"text_box_count\": {},\n",
                 "  \"spice_directive_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
@@ -2580,6 +2615,7 @@ impl KicadCanvasScene {
             self.bus_entries.len(),
             self.labels.len(),
             self.text_items.len(),
+            self.text_boxes.len(),
             self.text_items
                 .iter()
                 .filter(|item| item.is_spice_directive)
@@ -2743,6 +2779,14 @@ pub struct KicadCanvasText {
     pub text: String,
     pub at: Option<KicadAt>,
     pub is_spice_directive: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasTextBox {
+    pub text: String,
+    pub at: Option<KicadAt>,
+    pub size: Option<KicadSize>,
+    pub margins: Option<KicadMargins>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4048,6 +4092,84 @@ impl KicadTextItem {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct KicadTextBox {
+    pub text: String,
+    pub at: Option<KicadAt>,
+    pub size: Option<KicadSize>,
+    pub margins: Option<KicadMargins>,
+    pub exclude_from_sim: Option<bool>,
+    pub uuid: Option<String>,
+}
+
+impl KicadTextBox {
+    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
+        let at = self.at?;
+        let size = self.size?;
+        Some(KicadBoundingBox {
+            min: at.point(),
+            max: KicadPoint {
+                x: at.x + size.width,
+                y: at.y + size.height,
+            },
+        })
+    }
+
+    fn write_text_box_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(text_box {}\n", pad, sexpr_string(&self.text)));
+        if let Some(exclude_from_sim) = self.exclude_from_sim {
+            output.push_str(&format!(
+                "{}  (exclude_from_sim {})\n",
+                pad,
+                if exclude_from_sim { "yes" } else { "no" }
+            ));
+        }
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                "{}  (at {} {} {})\n",
+                pad,
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        if let Some(size) = self.size {
+            output.push_str(&format!(
+                "{}  (size {} {})\n",
+                pad,
+                format_number(size.width),
+                format_number(size.height)
+            ));
+        }
+        if let Some(margins) = self.margins {
+            output.push_str(&format!(
+                "{}  (margins {} {} {} {})\n",
+                pad,
+                format_number(margins.left),
+                format_number(margins.top),
+                format_number(margins.right),
+                format_number(margins.bottom)
+            ));
+        }
+        output.push_str(&format!("{}  (stroke (width 0) (type default))\n", pad));
+        output.push_str(&format!("{}  (fill (type none))\n", pad));
+        output.push_str(&format!("{}  (effects (font (size 1.27 1.27)))\n", pad));
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KicadMargins {
+    pub left: f64,
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct KicadJunction {
     pub at: KicadPoint,
     pub uuid: Option<String>,
@@ -4475,6 +4597,18 @@ fn parse_text_item(node: &Sexp) -> Option<KicadTextItem> {
     })
 }
 
+fn parse_text_box(node: &Sexp) -> Option<KicadTextBox> {
+    let items = list_items(node);
+    Some(KicadTextBox {
+        text: list_value(node, 1)?,
+        at: child(items, "at").and_then(parse_at),
+        size: child(items, "size").and_then(parse_size),
+        margins: child(items, "margins").and_then(parse_margins),
+        exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
+        uuid: child_value(items, "uuid"),
+    })
+}
+
 fn parse_junction(node: &Sexp) -> Option<KicadJunction> {
     let items = list_items(node);
     let at = child(items, "at").and_then(parse_at)?;
@@ -4512,6 +4646,16 @@ fn parse_size(node: &Sexp) -> Option<KicadSize> {
     Some(KicadSize {
         width: atom_text(items.get(1)?)?.parse().ok()?,
         height: atom_text(items.get(2)?)?.parse().ok()?,
+    })
+}
+
+fn parse_margins(node: &Sexp) -> Option<KicadMargins> {
+    let items = list_items(node);
+    Some(KicadMargins {
+        left: atom_text(items.get(1)?)?.parse().ok()?,
+        top: atom_text(items.get(2)?)?.parse().ok()?,
+        right: atom_text(items.get(3)?)?.parse().ok()?,
+        bottom: atom_text(items.get(4)?)?.parse().ok()?,
     })
 }
 
@@ -5792,6 +5936,60 @@ mod tests {
             Some("44444444-4444-4444-8444-444444444444")
         );
         assert_eq!(reparsed.canvas_scene().graphics.len(), 4);
+    }
+
+    #[test]
+    fn parses_schematic_text_boxes_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (text_box "Bigger\nMultiline\nText"
+    (exclude_from_sim no)
+    (at 10 20 0)
+    (size 17.78 12.7)
+    (margins 0.9525 0.9525 0.9525 0.9525)
+    (stroke (width 0.0508) (type dash_dot) (color 255 50 55 1))
+    (fill (type color) (color 255 228 206 0.7490196078))
+    (effects (font (size 1.27 1.27) (color 10 9 37 1)))
+    (uuid "45454545-4545-4545-8545-454545454545")
+  )
+)"#,
+            "text_box.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.text_boxes.len(), 1);
+        assert_eq!(schematic.text_boxes[0].text, "Bigger\nMultiline\nText");
+        assert_eq!(schematic.text_boxes[0].exclude_from_sim, Some(false));
+        assert_close(schematic.text_boxes[0].size.unwrap().width, 17.78);
+        assert_close(schematic.text_boxes[0].margins.unwrap().left, 0.9525);
+        assert_eq!(
+            schematic.text_boxes[0].uuid.as_deref(),
+            Some("45454545-4545-4545-8545-454545454545")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"text_box_count\": 1")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.text_boxes.len(), 1);
+        assert!(scene.bounds.unwrap().width() >= 17.78);
+        assert!(scene.to_summary_json().contains("\"text_box_count\": 1"));
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(text_box \"Bigger\\nMultiline\\nText\""));
+        assert!(roundtrip.contains("(size 17.78 12.7)"));
+        assert!(roundtrip.contains("(margins 0.9525 0.9525 0.9525 0.9525)"));
+        assert!(roundtrip.contains("(uuid \"45454545-4545-4545-8545-454545454545\")"));
+        let reparsed = parse_kicad_schematic(&roundtrip, "text_box_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.text_boxes.len(), 1);
+        assert_eq!(reparsed.text_boxes[0].text, "Bigger\nMultiline\nText");
+        assert_eq!(reparsed.canvas_scene().text_boxes.len(), 1);
     }
 
     #[test]

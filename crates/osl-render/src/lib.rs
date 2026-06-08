@@ -1,7 +1,7 @@
 use osl_core::html_escape;
 use osl_kicad::{
     KicadAt, KicadBoundingBox, KicadCanvasGraphic, KicadCanvasScene, KicadCanvasSheet,
-    KicadCanvasSymbol, KicadLabelKind, KicadPoint,
+    KicadCanvasSymbol, KicadCanvasTextBox, KicadLabelKind, KicadPoint,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -151,6 +151,9 @@ pub fn render_kicad_scene_svg_with_options(
             output.push_str("</text>\n");
         }
     }
+    for text_box in &scene.text_boxes {
+        render_text_box(&mut output, &viewport, text_box);
+    }
     for symbol in &scene.symbols {
         if !symbol.reference.is_empty() {
             let point = viewport.project(at_point(symbol.at));
@@ -254,6 +257,59 @@ fn render_symbol(output: &mut String, viewport: &SvgViewport, symbol: &KicadCanv
             fmt(end.y)
         ));
     }
+    output.push_str("    </g>\n");
+}
+
+fn render_text_box(output: &mut String, viewport: &SvgViewport, text_box: &KicadCanvasTextBox) {
+    let Some(at) = text_box.at else {
+        return;
+    };
+    let origin = viewport.project(at_point(at));
+    let margin = text_box
+        .margins
+        .map(|margins| margins.left.max(0.0) * viewport.scale)
+        .unwrap_or(6.0);
+
+    output.push_str("    <g data-text-box=\"true\">\n");
+    if let Some(size) = text_box.size {
+        output.push_str(&format!(
+            "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"2\" stroke=\"#64748b\" stroke-width=\"1.4\" fill=\"#fef3c7\" fill-opacity=\"0.22\"/>\n",
+            fmt(origin.x),
+            fmt(origin.y),
+            fmt(size.width.abs() * viewport.scale),
+            fmt(size.height.abs() * viewport.scale)
+        ));
+    }
+
+    let text_x = origin.x + margin;
+    let mut text_y = origin.y + margin + 11.0;
+    output.push_str(&format!(
+        "      <text x=\"{}\" y=\"{}\" fill=\"#334155\" stroke=\"none\">",
+        fmt(text_x),
+        fmt(text_y)
+    ));
+    for (index, line) in text_box.text.lines().enumerate() {
+        if index == 0 {
+            output.push_str(&html_escape(line));
+        } else {
+            text_y += 13.0;
+            output.push_str(&format!(
+                "<tspan x=\"{}\" y=\"{}\">{}</tspan>",
+                fmt(text_x),
+                fmt(text_y),
+                html_escape(line)
+            ));
+        }
+    }
+    if text_box.text.ends_with('\n') {
+        text_y += 13.0;
+        output.push_str(&format!(
+            "<tspan x=\"{}\" y=\"{}\"></tspan>",
+            fmt(text_x),
+            fmt(text_y)
+        ));
+    }
+    output.push_str("</text>\n");
     output.push_str("    </g>\n");
 }
 
@@ -554,5 +610,33 @@ mod tests {
         assert!(svg.contains("Output note"));
         assert!(svg.contains("fill=\"#b91c1c\""));
         assert!(svg.contains("fill=\"#475569\""));
+    }
+
+    #[test]
+    fn renders_schematic_text_boxes_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (text_box "Bigger\nMultiline\nText"
+    (at 10 10 0)
+    (size 20 10)
+    (margins 1 1 1 1)
+    (uuid "33333333-3333-4333-8333-333333333333")
+  )
+)"#,
+            "text_box.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-text-box=\"true\""));
+        assert!(svg.contains("<rect"));
+        assert!(svg.contains("Bigger"));
+        assert!(svg.contains("Multiline"));
+        assert!(svg.contains("Text"));
     }
 }
