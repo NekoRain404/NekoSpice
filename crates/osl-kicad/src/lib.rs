@@ -3932,6 +3932,21 @@ impl KicadSymbolLibrary {
             .iter()
             .filter(|symbol| symbol.extends.is_some())
             .count();
+        let described_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.description().is_some())
+            .count();
+        let keyword_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.keywords().is_some())
+            .count();
+        let footprint_filter_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.footprint_filters().len())
+            .sum::<usize>();
         let body_style_symbol_count = self
             .symbols
             .iter()
@@ -4009,6 +4024,9 @@ impl KicadSymbolLibrary {
                 "  \"symbol_in_pos_files_setting_count\": {},\n",
                 "  \"duplicate_pin_numbers_are_jumpers_count\": {},\n",
                 "  \"extended_symbol_count\": {},\n",
+                "  \"described_symbol_count\": {},\n",
+                "  \"keyword_symbol_count\": {},\n",
+                "  \"footprint_filter_count\": {},\n",
                 "  \"body_style_symbol_count\": {},\n",
                 "  \"jumper_pin_group_count\": {},\n",
                 "  \"embedded_font_symbol_count\": {}\n",
@@ -4037,6 +4055,9 @@ impl KicadSymbolLibrary {
             symbol_in_pos_files_setting_count,
             duplicate_pin_numbers_are_jumpers_count,
             extended_symbol_count,
+            described_symbol_count,
+            keyword_symbol_count,
+            footprint_filter_count,
             body_style_symbol_count,
             jumper_pin_group_count,
             embedded_font_symbol_count
@@ -4128,18 +4149,23 @@ impl KicadSymbolLibraryIndex {
                 Ok(library) => {
                     let symbol_count = library.symbols.len();
                     for symbol in &library.symbols {
+                        let resolved_symbol = resolve_symbol_definition(symbol, &library.symbols)
+                            .unwrap_or_else(|| KicadResolvedSymbolDef::from_symbol(symbol));
                         symbols.push(KicadIndexedSymbol {
                             id: format!("{}:{}", row.name, symbol.local_name()),
                             library: row.name.clone(),
                             name: symbol.local_name().to_string(),
                             source: resolved_path.display().to_string(),
-                            pin_count: symbol.pins.len(),
-                            graphic_count: symbol.graphics.len(),
-                            unit_count: symbol_unit_count(symbol),
-                            units: indexed_symbol_units(symbol),
+                            description: resolved_symbol.description().map(str::to_string),
+                            keywords: resolved_symbol.keywords().map(str::to_string),
+                            footprint_filters: resolved_symbol.footprint_filters(),
+                            pin_count: resolved_symbol.pins.len(),
+                            graphic_count: resolved_symbol.graphics.len(),
+                            unit_count: resolved_symbol.unit_count(),
+                            units: resolved_symbol.indexed_units(),
                             extends: symbol.extends.clone(),
                             power: symbol.power.map(|power| power.as_str().to_string()),
-                            bounding_box: symbol.bounding_box(),
+                            bounding_box: resolved_symbol.bounding_box(),
                         });
                     }
                     libraries.push(KicadIndexedLibrary {
@@ -4186,6 +4212,21 @@ impl KicadSymbolLibraryIndex {
             .iter()
             .filter(|symbol| symbol.power.is_some())
             .count();
+        let described_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.description.is_some())
+            .count();
+        let keyword_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.keywords.is_some())
+            .count();
+        let footprint_filter_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.footprint_filters.len())
+            .sum::<usize>();
         let diagnostics = self
             .diagnostics
             .iter()
@@ -4209,6 +4250,9 @@ impl KicadSymbolLibraryIndex {
                 "  \"unit_count\": {},\n",
                 "  \"extended_symbol_count\": {},\n",
                 "  \"power_symbol_count\": {},\n",
+                "  \"described_symbol_count\": {},\n",
+                "  \"keyword_symbol_count\": {},\n",
+                "  \"footprint_filter_count\": {},\n",
                 "  \"diagnostic_count\": {},\n",
                 "  \"diagnostics\": [\n",
                 "{}\n",
@@ -4221,6 +4265,9 @@ impl KicadSymbolLibraryIndex {
             unit_count,
             extended_symbol_count,
             power_symbol_count,
+            described_symbol_count,
+            keyword_symbol_count,
+            footprint_filter_count,
             self.diagnostics.len(),
             diagnostics
         )
@@ -4240,6 +4287,9 @@ pub struct KicadIndexedSymbol {
     pub library: String,
     pub name: String,
     pub source: String,
+    pub description: Option<String>,
+    pub keywords: Option<String>,
+    pub footprint_filters: Vec<String>,
     pub pin_count: usize,
     pub graphic_count: usize,
     pub unit_count: usize,
@@ -4514,6 +4564,26 @@ impl KicadSymbolDef {
             .map(|property| property.value.as_str())
     }
 
+    pub fn description(&self) -> Option<&str> {
+        self.property("Description")
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                self.property("ki_description")
+                    .filter(|value| !value.is_empty())
+            })
+    }
+
+    pub fn keywords(&self) -> Option<&str> {
+        self.property("ki_keywords")
+            .filter(|value| !value.is_empty())
+    }
+
+    pub fn footprint_filters(&self) -> Vec<String> {
+        self.property("ki_fp_filters")
+            .map(parse_kicad_footprint_filters)
+            .unwrap_or_default()
+    }
+
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
         let mut bounds = KicadBoundingBoxBuilder::default();
         for graphic in scoped_definition_graphics(self, Some(1), None) {
@@ -4704,6 +4774,67 @@ impl KicadResolvedSymbolDef {
             .map(|property| property.value.as_str())
     }
 
+    fn description(&self) -> Option<&str> {
+        self.property("Description")
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                self.property("ki_description")
+                    .filter(|value| !value.is_empty())
+            })
+    }
+
+    fn keywords(&self) -> Option<&str> {
+        self.property("ki_keywords")
+            .filter(|value| !value.is_empty())
+    }
+
+    fn footprint_filters(&self) -> Vec<String> {
+        self.property("ki_fp_filters")
+            .map(parse_kicad_footprint_filters)
+            .unwrap_or_default()
+    }
+
+    fn bounding_box(&self) -> Option<KicadBoundingBox> {
+        let mut bounds = KicadBoundingBoxBuilder::default();
+        for graphic in self.scoped_graphics(Some(1), None) {
+            graphic.include_in_bounds(&mut bounds);
+        }
+        for pin in self.scoped_pins(Some(1), None) {
+            if let Some(at) = pin.at {
+                bounds.include(at.point());
+                if let Some(length) = pin.length {
+                    bounds.include(pin_body_end(at, length));
+                }
+            }
+        }
+        bounds.finish()
+    }
+
+    fn indexed_units(&self) -> Vec<KicadIndexedSymbolUnit> {
+        let mut units = self
+            .pins
+            .iter()
+            .map(|pin| pin.unit)
+            .chain(self.graphics.iter().map(|graphic| graphic.unit))
+            .chain(self.unit_names.keys().copied())
+            .filter(|unit| *unit != 0)
+            .collect::<BTreeSet<_>>();
+        if units.is_empty() {
+            units.insert(1);
+        }
+        units
+            .into_iter()
+            .map(|unit| KicadIndexedSymbolUnit {
+                unit,
+                name: self.unit_names.get(&unit).cloned(),
+            })
+            .collect()
+    }
+
+    fn unit_count(&self) -> usize {
+        self.indexed_units().len()
+    }
+
     fn scoped_graphics(
         &self,
         unit: Option<u32>,
@@ -4811,6 +4942,12 @@ fn apply_symbol_inheritance_overrides(
         resolved.unit_names.insert(*unit, name.clone());
     }
     for property in &derived.properties {
+        if is_inherited_symbol_browser_property(&property.name)
+            && property.value.trim().is_empty()
+            && resolved.property(&property.name).is_some()
+        {
+            continue;
+        }
         if is_effective_symbol_property_override(property) {
             upsert_symbol_property(&mut resolved.properties, property.clone());
         }
@@ -4836,6 +4973,13 @@ fn upsert_symbol_property(properties: &mut Vec<KicadProperty>, property: KicadPr
     } else {
         properties.push(property);
     }
+}
+
+fn is_inherited_symbol_browser_property(name: &str) -> bool {
+    matches!(
+        name,
+        "Description" | "ki_description" | "ki_keywords" | "ki_fp_filters"
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7999,6 +8143,63 @@ fn child_value(items: &[Sexp], name: &str) -> Option<String> {
     child(items, name).and_then(|node| list_value(node, 1))
 }
 
+fn parse_kicad_footprint_filters(value: &str) -> Vec<String> {
+    value
+        .split_whitespace()
+        .map(unescape_kicad_brace_string)
+        .filter(|filter| !filter.is_empty())
+        .collect()
+}
+
+fn unescape_kicad_brace_string(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let mut characters = value.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character != '{' {
+            output.push(character);
+            continue;
+        }
+
+        let mut token = String::new();
+        let mut terminated = false;
+        for token_character in characters.by_ref() {
+            if token_character == '}' {
+                terminated = true;
+                break;
+            }
+            token.push(token_character);
+        }
+
+        if terminated {
+            match token.as_str() {
+                "dblquote" => output.push('"'),
+                "quote" => output.push('\''),
+                "lt" => output.push('<'),
+                "gt" => output.push('>'),
+                "backslash" => output.push('\\'),
+                "slash" => output.push('/'),
+                "bar" => output.push('|'),
+                "comma" => output.push(','),
+                "colon" => output.push(':'),
+                "space" => output.push(' '),
+                "dollar" => output.push('$'),
+                "tab" => output.push('\t'),
+                "return" => output.push('\n'),
+                "brace" => output.push('{'),
+                _ => {
+                    output.push('{');
+                    output.push_str(&unescape_kicad_brace_string(&token));
+                    output.push('}');
+                }
+            }
+        } else {
+            output.push('{');
+            output.push_str(&unescape_kicad_brace_string(&token));
+        }
+    }
+    output
+}
+
 fn parse_data_chunks(node: &Sexp) -> String {
     list_items(node)
         .iter()
@@ -8519,31 +8720,6 @@ fn qualify_library_symbol_name(symbol: &mut KicadSymbolDef, library_name: &str) 
     if !symbol.name.contains(':') {
         symbol.name = format!("{library_name}:{}", symbol.name);
     }
-}
-
-fn indexed_symbol_units(symbol: &KicadSymbolDef) -> Vec<KicadIndexedSymbolUnit> {
-    let mut units = symbol
-        .pins
-        .iter()
-        .map(|pin| pin.unit)
-        .chain(symbol.graphics.iter().map(|graphic| graphic.unit))
-        .chain(symbol.unit_names.keys().copied())
-        .filter(|unit| *unit != 0)
-        .collect::<BTreeSet<_>>();
-    if units.is_empty() {
-        units.insert(1);
-    }
-    units
-        .into_iter()
-        .map(|unit| KicadIndexedSymbolUnit {
-            unit,
-            name: symbol.unit_names.get(&unit).cloned(),
-        })
-        .collect()
-}
-
-fn symbol_unit_count(symbol: &KicadSymbolDef) -> usize {
-    indexed_symbol_units(symbol).len()
 }
 
 fn spice_primitive_for_device(device: &str) -> Option<String> {
@@ -13144,6 +13320,9 @@ mod tests {
   (symbol "Parent"
     (property "Reference" "U" (at 0 0 0))
     (property "Value" "Parent" (at 0 -2.54 0))
+    (property "Description" "Parent analog switch" (at 0 -5.08 0))
+    (property "ki_keywords" "switch analog mux" (at 0 -7.62 0) (hide yes))
+    (property "ki_fp_filters" "Package_SO:SOIC-* Connector{space}Foo:*" (at 0 -10.16 0) (hide yes))
     (symbol "Parent_0_1"
       (rectangle (start -1 -1) (end 1 1) (stroke (width 0.127) (type default)) (fill (type none)))
     )
@@ -13152,6 +13331,7 @@ mod tests {
     (extends "Parent")
     (property "Reference" "U" (at 0 0 0))
     (property "Value" "Derived" (at 0 -2.54 0))
+    (property "ki_keywords" "" (at 0 -5.08 0) (hide yes))
     (symbol "Derived_1_1"
       (unit_name "Logic")
       (pin passive line (at -2.54 0 0) (length 2.54) (name "A") (number "1"))
@@ -13181,6 +13361,17 @@ mod tests {
         let derived = index.symbol("Browser:Derived").unwrap();
         let power = index.symbol("Browser:PWR").unwrap();
 
+        assert_eq!(derived.description.as_deref(), Some("Parent analog switch"));
+        assert_eq!(derived.keywords.as_deref(), Some("switch analog mux"));
+        assert_eq!(
+            derived.footprint_filters,
+            vec![
+                "Package_SO:SOIC-*".to_string(),
+                "Connector Foo:*".to_string()
+            ]
+        );
+        assert_eq!(derived.pin_count, 2);
+        assert_eq!(derived.graphic_count, 1);
         assert_eq!(derived.unit_count, 2);
         assert_eq!(
             derived.units,
@@ -13201,12 +13392,56 @@ mod tests {
         assert!(
             index
                 .to_summary_json()
+                .contains("\"described_symbol_count\": 2")
+        );
+        assert!(
+            index
+                .to_summary_json()
+                .contains("\"keyword_symbol_count\": 2")
+        );
+        assert!(
+            index
+                .to_summary_json()
+                .contains("\"footprint_filter_count\": 4")
+        );
+        assert!(
+            index
+                .to_summary_json()
                 .contains("\"extended_symbol_count\": 1")
         );
         assert!(
             index
                 .to_summary_json()
                 .contains("\"power_symbol_count\": 1")
+        );
+
+        let library = read_kicad_symbol_library(&project_dir.join("browser.kicad_sym")).unwrap();
+        let parent = library.symbol("Parent").unwrap();
+        assert_eq!(parent.description(), Some("Parent analog switch"));
+        assert_eq!(parent.keywords(), Some("switch analog mux"));
+        assert_eq!(
+            parent.footprint_filters(),
+            vec![
+                "Package_SO:SOIC-*".to_string(),
+                "Connector Foo:*".to_string()
+            ]
+        );
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(property \"Description\" \"Parent analog switch\""));
+        assert!(exported.contains("(property \"ki_keywords\" \"switch analog mux\""));
+        assert!(
+            exported.contains(
+                "(property \"ki_fp_filters\" \"Package_SO:SOIC-* Connector{space}Foo:*\""
+            )
+        );
+        let reparsed =
+            parse_kicad_symbol_library(&exported, "browser_roundtrip.kicad_sym").unwrap();
+        assert_eq!(
+            reparsed.symbol("Parent").unwrap().footprint_filters(),
+            vec![
+                "Package_SO:SOIC-*".to_string(),
+                "Connector Foo:*".to_string()
+            ]
         );
 
         let _ = fs::remove_dir_all(project_dir);

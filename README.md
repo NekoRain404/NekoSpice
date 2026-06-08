@@ -140,7 +140,7 @@ Multi-unit and body-style symbol data is tracked from KiCad nested symbol names 
 
 KiCad symbol unit display names from nested `(unit_name ...)` records are preserved in the Rust IR, schematic and symbol-library summaries, canvas symbol metadata, and `.kicad_sch` / `.kicad_sym` writers so multi-unit parts keep their user-facing unit labels for later library browser and placement UI work.
 
-The symbol library index now carries browser-oriented metadata for each symbol, including unit count, unit display names, inheritance parent, and power-symbol kind, so later placement UI can choose the correct unit without reparsing the library file.
+The symbol library index now carries browser-oriented metadata for each symbol, including KiCad `Description` / legacy `ki_description`, `ki_keywords`, decoded `ki_fp_filters`, unit count, unit display names, inheritance parent, inherited browser metadata for derived symbols, resolved bounding boxes, and power-symbol kind, so later placement UI can search, filter by footprint, and choose the correct unit without reparsing the library file.
 
 KiCad symbol inheritance via `.kicad_sym` `(extends ...)` is resolved in the Rust IR at use time. Canvas scene generation, schematic-to-SPICE pin selection, simulation-field lookup, and symbol placement use inherited parent graphics, pins, pin display settings, and default simulation properties while writers keep the KiCad-derived symbol shape instead of flattening parent items back into the child symbol.
 
