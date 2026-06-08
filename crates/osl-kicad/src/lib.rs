@@ -592,6 +592,7 @@ impl KicadSchematic {
             symbol.properties.push(KicadProperty {
                 name: name.to_string(),
                 value: value.to_string(),
+                id: None,
                 at,
                 hide: None,
                 show_name: None,
@@ -849,7 +850,10 @@ impl KicadSchematic {
             kind,
             at: Some(at),
             uuid,
+            shape: None,
+            fields_autoplaced: None,
             effects: None,
+            properties: Vec::new(),
         });
 
         Ok(KicadEditSummary {
@@ -2096,6 +2100,8 @@ impl KicadSchematic {
                 "  \"board_excluded_count\": {},\n",
                 "  \"mirrored_symbol_count\": {},\n",
                 "  \"fields_autoplaced_count\": {},\n",
+                "  \"shaped_label_count\": {},\n",
+                "  \"label_property_count\": {},\n",
                 "  \"hidden_property_count\": {},\n",
                 "  \"property_effect_count\": {},\n",
                 "  \"embedded_fonts\": {},\n",
@@ -2150,6 +2156,8 @@ impl KicadSchematic {
             self.board_excluded_count(),
             self.mirrored_symbol_count(),
             self.fields_autoplaced_count(),
+            self.shaped_label_count(),
+            self.label_property_count(),
             self.hidden_property_count(),
             self.property_effect_count(),
             json_bool_option(self.embedded_fonts),
@@ -2262,19 +2270,41 @@ impl KicadSchematic {
                 .iter()
                 .filter(|sheet| sheet.fields_autoplaced == Some(true))
                 .count()
+            + self
+                .labels
+                .iter()
+                .filter(|label| label.fields_autoplaced == Some(true))
+                .count()
+    }
+
+    fn shaped_label_count(&self) -> usize {
+        self.labels
+            .iter()
+            .filter(|label| label.shape.is_some())
+            .count()
+    }
+
+    fn label_property_count(&self) -> usize {
+        self.labels.iter().map(|label| label.properties.len()).sum()
     }
 
     fn hidden_property_count(&self) -> usize {
         self.symbols
             .iter()
             .flat_map(|symbol| &symbol.properties)
-            .filter(|property| property.hide == Some(true))
+            .filter(|property| property_is_hidden(property))
             .count()
             + self
                 .sheets
                 .iter()
                 .flat_map(|sheet| &sheet.properties)
-                .filter(|property| property.hide == Some(true))
+                .filter(|property| property_is_hidden(property))
+                .count()
+            + self
+                .labels
+                .iter()
+                .flat_map(|label| &label.properties)
+                .filter(|property| property_is_hidden(property))
                 .count()
     }
 
@@ -2288,6 +2318,12 @@ impl KicadSchematic {
                 .sheets
                 .iter()
                 .flat_map(|sheet| &sheet.properties)
+                .filter(|property| property.effects.is_some())
+                .count()
+            + self
+                .labels
+                .iter()
+                .flat_map(|label| &label.properties)
                 .filter(|property| property.effects.is_some())
                 .count()
     }
@@ -2525,6 +2561,14 @@ fn count_spice_directive_lines(netlist: &str) -> usize {
             line.starts_with('.') && !line.eq_ignore_ascii_case(".end")
         })
         .count()
+}
+
+fn property_is_hidden(property: &KicadProperty) -> bool {
+    property.hide == Some(true)
+        || property
+            .effects
+            .as_ref()
+            .is_some_and(|effects| effects.hide)
 }
 
 fn scoped_net_name(scope: &str, net: &str, aliases: &BTreeMap<String, String>) -> String {
@@ -4428,6 +4472,7 @@ impl KicadPinDef {
 pub struct KicadProperty {
     pub name: String,
     pub value: String,
+    pub id: Option<u32>,
     pub at: Option<KicadAt>,
     pub hide: Option<bool>,
     pub show_name: Option<bool>,
@@ -4444,6 +4489,9 @@ impl KicadProperty {
             sexpr_string(&self.name),
             sexpr_string(&self.value)
         ));
+        if let Some(id) = self.id {
+            output.push_str(&format!(" (id {})", id));
+        }
         if let Some(at) = self.at {
             output.push_str(&format!(
                 " (at {} {} {})",
@@ -4741,7 +4789,10 @@ pub struct KicadLabel {
     pub kind: KicadLabelKind,
     pub at: Option<KicadAt>,
     pub uuid: Option<String>,
+    pub shape: Option<String>,
+    pub fields_autoplaced: Option<bool>,
     pub effects: Option<KicadTextEffects>,
+    pub properties: Vec<KicadProperty>,
 }
 
 impl KicadLabel {
@@ -4753,6 +4804,9 @@ impl KicadLabel {
             self.kind.sexpr_name(),
             sexpr_string(&self.text)
         ));
+        if let Some(shape) = &self.shape {
+            output.push_str(&format!(" (shape {})", sexpr_atom_or_string(shape)));
+        }
         if let Some(at) = self.at {
             output.push_str(&format!(
                 " (at {} {} {})",
@@ -4761,11 +4815,25 @@ impl KicadLabel {
                 format_number(at.rotation)
             ));
         }
+        if let Some(fields_autoplaced) = self.fields_autoplaced {
+            output.push_str(&format!(
+                " (fields_autoplaced {})",
+                if fields_autoplaced { "yes" } else { "no" }
+            ));
+        }
         write_inline_text_effects(output, self.effects.as_ref());
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
         }
-        output.push_str(")\n");
+        if self.properties.is_empty() {
+            output.push_str(")\n");
+        } else {
+            output.push('\n');
+            for property in &self.properties {
+                property.write_property_sexpr(output, indent + 2);
+            }
+            output.push_str(&format!("{})\n", pad));
+        }
     }
 }
 
@@ -5286,7 +5354,7 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
         in_bom: child_value(items, "in_bom").and_then(parse_kicad_bool_value),
         on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
         dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
-        fields_autoplaced: child_value(items, "fields_autoplaced").and_then(parse_kicad_bool_value),
+        fields_autoplaced: parse_optional_bool_child(items, "fields_autoplaced"),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -5610,6 +5678,7 @@ fn parse_property(node: &Sexp) -> Option<KicadProperty> {
     Some(KicadProperty {
         name: list_value(node, 1)?,
         value: list_value(node, 2)?,
+        id: child_value(items, "id").and_then(|value| value.parse().ok()),
         at: child(items, "at").and_then(parse_at),
         hide: child_value(items, "hide").and_then(parse_kicad_bool_value),
         show_name: child_value(items, "show_name").and_then(parse_kicad_bool_value),
@@ -5792,7 +5861,12 @@ fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
         kind,
         at: child(items, "at").and_then(parse_at),
         uuid: child_value(items, "uuid"),
+        shape: child_value(items, "shape"),
+        fields_autoplaced: parse_optional_bool_child(items, "fields_autoplaced"),
         effects: child(items, "effects").map(parse_text_effects),
+        properties: direct_children(items, "property")
+            .filter_map(parse_property)
+            .collect(),
     })
 }
 
@@ -5806,7 +5880,7 @@ fn parse_sheet(node: &Sexp) -> Option<KicadSheet> {
         in_bom: child_value(items, "in_bom").and_then(parse_kicad_bool_value),
         on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
         dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
-        fields_autoplaced: child_value(items, "fields_autoplaced").and_then(parse_kicad_bool_value),
+        fields_autoplaced: parse_optional_bool_child(items, "fields_autoplaced"),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -6618,6 +6692,14 @@ fn parse_kicad_bool_value(value: String) -> Option<bool> {
     }
 }
 
+fn parse_optional_bool_child(items: &[Sexp], name: &str) -> Option<bool> {
+    child(items, name).map(|node| {
+        list_value(node, 1)
+            .and_then(parse_kicad_bool_value)
+            .unwrap_or(true)
+    })
+}
+
 fn parse_kicad_enable_value(value: &str) -> Option<bool> {
     match value.trim().to_ascii_lowercase().as_str() {
         "y" | "yes" | "true" | "1" | "on" => Some(true),
@@ -6763,6 +6845,7 @@ fn symbol_instance_properties(
                 "Value" => value.to_string(),
                 _ => property.value.clone(),
             },
+            id: property.id,
             at: property
                 .at
                 .map(|property_at| transform_local_at(property_at, symbol_at)),
@@ -6780,6 +6863,7 @@ fn symbol_instance_properties(
         properties.push(KicadProperty {
             name: "Reference".to_string(),
             value: reference.to_string(),
+            id: None,
             at: Some(KicadAt {
                 x: symbol_at.x,
                 y: symbol_at.y - 2.54,
@@ -6795,6 +6879,7 @@ fn symbol_instance_properties(
         properties.push(KicadProperty {
             name: "Value".to_string(),
             value: value.to_string(),
+            id: None,
             at: Some(KicadAt {
                 x: symbol_at.x,
                 y: symbol_at.y + 2.54,
@@ -6815,6 +6900,7 @@ fn sheet_properties(name: &str, file: &str, at: KicadAt, size: KicadSize) -> Vec
         KicadProperty {
             name: "Sheetname".to_string(),
             value: name.to_string(),
+            id: None,
             at: Some(KicadAt {
                 x: at.x,
                 y: at.y - 1.27,
@@ -6828,6 +6914,7 @@ fn sheet_properties(name: &str, file: &str, at: KicadAt, size: KicadSize) -> Vec
         KicadProperty {
             name: "Sheetfile".to_string(),
             value: file.to_string(),
+            id: None,
             at: Some(KicadAt {
                 x: at.x,
                 y: at.y + size.height + 1.27,
@@ -7888,6 +7975,7 @@ mod tests {
     (unit 1)
     (uuid "11111111-1111-4111-8111-111111111111")
     (property "Reference" "R1"
+      (id 0)
       (at 10 17.46 0)
       (hide yes)
       (show_name no)
@@ -7920,6 +8008,7 @@ mod tests {
         .unwrap();
 
         let property = &schematic.symbols[0].properties[0];
+        assert_eq!(property.id, Some(0));
         assert_eq!(property.hide, Some(true));
         assert_eq!(property.show_name, Some(false));
         assert_eq!(property.do_not_autoplace, Some(false));
@@ -7956,6 +8045,7 @@ mod tests {
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(hide yes)"));
+        assert!(roundtrip.contains("(id 0)"));
         assert!(roundtrip.contains("(show_name no)"));
         assert!(roundtrip.contains("(do_not_autoplace no)"));
         assert!(roundtrip.contains("(font (size 1.524 1.016)"));
@@ -7968,6 +8058,7 @@ mod tests {
         let reparsed =
             parse_kicad_schematic(&roundtrip, "property_effects_roundtrip.kicad_sch").unwrap();
         let property = &reparsed.symbols[0].properties[0];
+        assert_eq!(property.id, Some(0));
         assert_eq!(property.hide, Some(true));
         assert_eq!(property.show_name, Some(false));
         assert_eq!(property.do_not_autoplace, Some(false));
@@ -8108,6 +8199,85 @@ mod tests {
             reparsed.sheets[0].pins[0].effects.as_ref().unwrap().justify,
             vec!["right".to_string()]
         );
+    }
+
+    #[test]
+    fn preserves_label_shape_autoplace_and_properties() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20251028)
+  (generator "eeschema")
+  (paper "A4")
+  (lib_symbols)
+  (global_label "NET_OK" (shape input) (at 31.75 30.48 0) (fields_autoplaced)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid "11111111-1111-4111-8111-111111111111")
+    (property "Intersheet References" "${INTERSHEET_REFS}" (id 0) (at 41.2993 30.4006 0)
+      (effects (font (size 1.27 1.27)) (justify left) hide)
+    )
+  )
+  (hierarchical_label "CHILD_IN"
+    (shape output)
+    (at 50.8 30.48 180)
+    (fields_autoplaced no)
+    (effects (font (size 1.27 1.27)) (justify right))
+    (uuid "22222222-2222-4222-8222-222222222222")
+  )
+)"#,
+            "label_metadata.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.labels.len(), 2);
+        let global = &schematic.labels[0];
+        assert_eq!(global.kind, KicadLabelKind::Global);
+        assert_eq!(global.shape.as_deref(), Some("input"));
+        assert_eq!(global.fields_autoplaced, Some(true));
+        assert_eq!(global.properties.len(), 1);
+        assert_eq!(global.properties[0].id, Some(0));
+        assert!(global.properties[0].effects.as_ref().unwrap().hide);
+
+        let hierarchical = &schematic.labels[1];
+        assert_eq!(hierarchical.kind, KicadLabelKind::Hierarchical);
+        assert_eq!(hierarchical.shape.as_deref(), Some("output"));
+        assert_eq!(hierarchical.fields_autoplaced, Some(false));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"fields_autoplaced_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"shaped_label_count\": 2")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"label_property_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"hidden_property_count\": 1")
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(global_label \"NET_OK\" (shape input)"));
+        assert!(roundtrip.contains("(fields_autoplaced yes)"));
+        assert!(
+            roundtrip.contains("(property \"Intersheet References\" \"${INTERSHEET_REFS}\" (id 0)")
+        );
+        assert!(roundtrip.contains("(justify left) hide"));
+        assert!(roundtrip.contains("(hierarchical_label \"CHILD_IN\" (shape output)"));
+        assert!(roundtrip.contains("(fields_autoplaced no)"));
+
+        let reparsed =
+            parse_kicad_schematic(&roundtrip, "label_metadata_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.labels[0].shape.as_deref(), Some("input"));
+        assert_eq!(reparsed.labels[0].fields_autoplaced, Some(true));
+        assert_eq!(reparsed.labels[0].properties[0].id, Some(0));
+        assert_eq!(reparsed.labels[1].fields_autoplaced, Some(false));
     }
 
     #[test]
