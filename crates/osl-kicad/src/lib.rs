@@ -182,6 +182,97 @@ pub struct KicadEditSummary {
     pub target: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSchematicCheckReport {
+    pub source: String,
+    pub symbol_count: usize,
+    pub net_count: usize,
+    pub spice_directive_count: usize,
+    pub diagnostics: Vec<KicadSchematicDiagnostic>,
+}
+
+impl KicadSchematicCheckReport {
+    pub fn error_count(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == KicadDiagnosticSeverity::Error)
+            .count()
+    }
+
+    pub fn warning_count(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == KicadDiagnosticSeverity::Warning)
+            .count()
+    }
+
+    pub fn info_count(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == KicadDiagnosticSeverity::Info)
+            .count()
+    }
+
+    pub fn to_json(&self) -> String {
+        let diagnostics = self
+            .diagnostics
+            .iter()
+            .map(|diagnostic| {
+                format!(
+                    concat!(
+                        "    {{ \"severity\": \"{}\", \"code\": \"{}\", ",
+                        "\"message\": \"{}\", \"item\": {}, \"net\": {}, \"pin\": {} }}"
+                    ),
+                    diagnostic.severity.as_str(),
+                    json_escape(&diagnostic.code),
+                    json_escape(&diagnostic.message),
+                    json_option(diagnostic.item.as_deref()),
+                    json_option(diagnostic.net.as_deref()),
+                    json_option(diagnostic.pin.as_deref())
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n");
+
+        format!(
+            concat!(
+                "{{\n",
+                "  \"source\": \"{}\",\n",
+                "  \"symbol_count\": {},\n",
+                "  \"net_count\": {},\n",
+                "  \"spice_directive_count\": {},\n",
+                "  \"diagnostic_count\": {},\n",
+                "  \"error_count\": {},\n",
+                "  \"warning_count\": {},\n",
+                "  \"info_count\": {},\n",
+                "  \"diagnostics\": [\n",
+                "{}\n",
+                "  ]\n",
+                "}}"
+            ),
+            json_escape(&self.source),
+            self.symbol_count,
+            self.net_count,
+            self.spice_directive_count,
+            self.diagnostics.len(),
+            self.error_count(),
+            self.warning_count(),
+            self.info_count(),
+            diagnostics
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSchematicDiagnostic {
+    pub severity: KicadDiagnosticSeverity,
+    pub code: String,
+    pub message: String,
+    pub item: Option<String>,
+    pub net: Option<String>,
+    pub pin: Option<String>,
+}
+
 impl KicadSchematic {
     pub fn apply_edit(&mut self, edit: KicadSchematicEdit) -> OslResult<KicadEditSummary> {
         match edit {
@@ -460,6 +551,35 @@ impl KicadSchematic {
         KicadCanvasScene::from_schematic(self)
     }
 
+    pub fn check_report(&self) -> KicadSchematicCheckReport {
+        let graph = self.connectivity_graph();
+        let mut diagnostics = Vec::new();
+
+        self.check_duplicate_references(&mut diagnostics);
+        self.check_symbols(&graph, &mut diagnostics);
+        self.check_wires(&mut diagnostics);
+        self.check_labels(&graph, &mut diagnostics);
+        self.check_spice_directives(&mut diagnostics);
+        if !graph.nets.iter().any(|net| net.name == "0") {
+            diagnostics.push(kicad_schematic_diagnostic(
+                KicadDiagnosticSeverity::Error,
+                "missing-ground",
+                "schematic has no net labelled 0 or ground",
+                None,
+                None,
+                None,
+            ));
+        }
+
+        KicadSchematicCheckReport {
+            source: self.source.clone(),
+            symbol_count: self.symbols.len(),
+            net_count: graph.nets.len(),
+            spice_directive_count: self.spice_directives().len(),
+            diagnostics,
+        }
+    }
+
     pub fn to_spice_netlist(&self) -> OslResult<String> {
         let graph = self.connectivity_graph();
         let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
@@ -598,6 +718,211 @@ impl KicadSchematic {
         self.library_symbols
             .iter()
             .find(|symbol| symbol.name == lib_id)
+    }
+
+    fn check_duplicate_references(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
+        let mut counts = BTreeMap::<String, usize>::new();
+        for symbol in &self.symbols {
+            if let Some(reference) = symbol.reference()
+                && !reference.trim().is_empty()
+                && !reference.starts_with('#')
+            {
+                *counts.entry(reference.to_string()).or_default() += 1;
+            }
+        }
+        for (reference, count) in counts {
+            if count > 1 {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "duplicate-reference",
+                    &format!("symbol reference '{reference}' appears {count} times"),
+                    Some(reference),
+                    None,
+                    None,
+                ));
+            }
+        }
+    }
+
+    fn check_symbols(
+        &self,
+        graph: &KicadNetGraph,
+        diagnostics: &mut Vec<KicadSchematicDiagnostic>,
+    ) {
+        for symbol in &self.symbols {
+            let reference = symbol.reference().unwrap_or("<no-reference>").to_string();
+            if symbol
+                .reference()
+                .is_none_or(|reference| reference.trim().is_empty())
+            {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "missing-reference",
+                    "symbol has no Reference property",
+                    Some(symbol.lib_id.clone()),
+                    None,
+                    None,
+                ));
+            }
+            if symbol.value().is_none_or(|value| value.trim().is_empty()) {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Warning,
+                    "missing-value",
+                    &format!("symbol '{reference}' has no Value property"),
+                    Some(reference.clone()),
+                    None,
+                    None,
+                ));
+            }
+
+            let Some(definition) = self.symbol_definition(&symbol.lib_id) else {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "missing-symbol-definition",
+                    &format!(
+                        "symbol '{reference}' uses missing library symbol '{}'",
+                        symbol.lib_id
+                    ),
+                    Some(reference),
+                    None,
+                    None,
+                ));
+                continue;
+            };
+            let Some(symbol_at) = symbol.at else {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "missing-symbol-position",
+                    &format!("symbol '{reference}' has no placement"),
+                    Some(reference),
+                    None,
+                    None,
+                ));
+                continue;
+            };
+
+            let mut definition_pins = definition.pins.iter().collect::<Vec<_>>();
+            definition_pins.sort_by(compare_pin_numbers);
+            if !definition_pins.is_empty() && symbol.pins.is_empty() {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Warning,
+                    "missing-pin-refs",
+                    &format!("symbol '{reference}' has no instance pin UUID references"),
+                    Some(reference.clone()),
+                    None,
+                    None,
+                ));
+            }
+            for pin in definition_pins {
+                let pin_label = format!("{}:{}", reference, pin.number);
+                let Some(pin_at) = pin.at else {
+                    diagnostics.push(kicad_schematic_diagnostic(
+                        KicadDiagnosticSeverity::Warning,
+                        "missing-pin-position",
+                        &format!("symbol '{reference}' pin '{}' has no position", pin.number),
+                        Some(reference.clone()),
+                        None,
+                        Some(pin.number.clone()),
+                    ));
+                    continue;
+                };
+                let point = transform_symbol_point(pin_at, symbol_at);
+                match graph.net_at(point) {
+                    Some("unconnected") | None => diagnostics.push(kicad_schematic_diagnostic(
+                        KicadDiagnosticSeverity::Warning,
+                        "unconnected-pin",
+                        &format!("symbol pin '{pin_label}' is not connected to a named net"),
+                        Some(reference.clone()),
+                        None,
+                        Some(pin.number.clone()),
+                    )),
+                    Some(net) if net.starts_with('n') => {
+                        diagnostics.push(kicad_schematic_diagnostic(
+                            KicadDiagnosticSeverity::Info,
+                            "generated-net-name",
+                            &format!("symbol pin '{pin_label}' is on generated net '{net}'"),
+                            Some(reference.clone()),
+                            Some(net.to_string()),
+                            Some(pin.number.clone()),
+                        ))
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+
+    fn check_wires(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
+        for (index, wire) in self.wires.iter().enumerate() {
+            if wire.points.len() < 2 {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "invalid-wire",
+                    &format!("wire #{index} has fewer than two points"),
+                    Some(format!("wire:{index}")),
+                    None,
+                    None,
+                ));
+            }
+        }
+    }
+
+    fn check_labels(&self, graph: &KicadNetGraph, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
+        for label in &self.labels {
+            if label.text.trim().is_empty() {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "empty-label",
+                    "label text is empty",
+                    None,
+                    None,
+                    None,
+                ));
+            }
+            if let Some(at) = label.at
+                && graph.net_at(at.point()).is_none()
+            {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Warning,
+                    "floating-label",
+                    &format!("label '{}' is not attached to any net", label.text),
+                    Some(label.text.clone()),
+                    None,
+                    None,
+                ));
+            }
+        }
+    }
+
+    fn check_spice_directives(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
+        let directives = self.spice_directives();
+        if directives.is_empty() {
+            diagnostics.push(kicad_schematic_diagnostic(
+                KicadDiagnosticSeverity::Warning,
+                "missing-spice-directive",
+                "schematic has no SPICE directives such as .tran, .ac, .dc, or .op",
+                None,
+                None,
+                None,
+            ));
+            return;
+        }
+        if !directives.iter().any(|directive| {
+            let text = directive.text.trim_start().to_ascii_lowercase();
+            text.starts_with(".tran")
+                || text.starts_with(".ac")
+                || text.starts_with(".dc")
+                || text.starts_with(".op")
+        }) {
+            diagnostics.push(kicad_schematic_diagnostic(
+                KicadDiagnosticSeverity::Warning,
+                "missing-analysis-directive",
+                "schematic has SPICE text but no analysis directive (.tran, .ac, .dc, .op)",
+                None,
+                None,
+                None,
+            ));
+        }
     }
 
     fn symbol_index_by_reference(&self, reference: &str) -> OslResult<usize> {
@@ -2605,6 +2930,24 @@ fn preferred_net_label(labels: Option<&BTreeSet<String>>) -> Option<String> {
         .or_else(|| labels.iter().find(|label| !label.is_empty()).cloned())
 }
 
+fn kicad_schematic_diagnostic(
+    severity: KicadDiagnosticSeverity,
+    code: &str,
+    message: &str,
+    item: Option<String>,
+    net: Option<String>,
+    pin: Option<String>,
+) -> KicadSchematicDiagnostic {
+    KicadSchematicDiagnostic {
+        severity,
+        code: code.to_string(),
+        message: message.to_string(),
+        item,
+        net,
+        pin,
+    }
+}
+
 fn symbol_instance_properties(
     definition: &KicadSymbolDef,
     reference: &str,
@@ -2816,6 +3159,76 @@ mod tests {
         assert!(netlist.contains("C1 out 0 100n"));
         assert!(netlist.contains(".tran 1u 1m"));
         assert!(netlist.ends_with(".end\n"));
+    }
+
+    #[test]
+    fn checks_kicad_schematic_fixture_without_errors() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        let report = schematic.check_report();
+
+        assert_eq!(report.error_count(), 0);
+        assert_eq!(report.symbol_count, 3);
+        assert!(report.net_count >= 3);
+        assert!(report.to_json().contains("\"error_count\": 0"));
+    }
+
+    #[test]
+    fn checks_kicad_schematic_structural_diagnostics() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:R"
+      (property "Reference" "R" (at 0 0 0))
+      (property "Value" "1k" (at 0 -2.54 0))
+      (symbol "R_0_1"
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "~") (number "1"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "~") (number "2"))
+      )
+    )
+  )
+  (wire (pts (xy 10 10) (xy 20 10)))
+  (label "floating" (at 40 40 0))
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 12.54 10 0)
+    (property "Reference" "R1" (at 12.54 8 0))
+    (property "Value" "" (at 12.54 12 0))
+  )
+  (symbol
+    (lib_id "Missing:X")
+    (at 30 30 0)
+    (property "Reference" "R1" (at 30 28 0))
+    (property "Value" "model" (at 30 32 0))
+  )
+)"#,
+            "bad.kicad_sch",
+        )
+        .unwrap();
+
+        let report = schematic.check_report();
+        let codes = report
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(report.error_count() >= 3);
+        assert!(codes.contains(&"duplicate-reference"));
+        assert!(codes.contains(&"missing-symbol-definition"));
+        assert!(codes.contains(&"missing-ground"));
+        assert!(codes.contains(&"missing-value"));
+        assert!(codes.contains(&"missing-spice-directive"));
+        assert!(report.to_json().contains("\"diagnostic_count\""));
     }
 
     #[test]

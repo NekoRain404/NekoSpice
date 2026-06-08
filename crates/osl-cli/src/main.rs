@@ -57,6 +57,7 @@ fn run_cli() -> OslResult<i32> {
         "model-check" => model_check_command(&args),
         "import" => import_command(&args),
         "kicad-inspect" => kicad_inspect_command(&args),
+        "kicad-check" => kicad_check_command(&args),
         "kicad-export" => kicad_export_command(&args),
         "kicad-edit" => kicad_edit_command(&args),
         "kicad-render" => kicad_render_command(&args),
@@ -80,6 +81,7 @@ Usage:
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
   osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
+  osl kicad-check <file.kicad_sch> [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
   osl kicad-render <file.kicad_sch> --output <file.svg>
@@ -385,6 +387,40 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
         print!("{json}");
     }
     Ok(0)
+}
+
+fn kicad_check_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing KiCad path for 'osl kicad-check'")?;
+    let output = flag_value(args, "--output");
+    let input_path = Path::new(input);
+    let extension = input_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if extension != "kicad_sch" {
+        return Err(OslError::InvalidInput(format!(
+            "{} is not a supported KiCad check input (.kicad_sch)",
+            input_path.display()
+        )));
+    }
+
+    let report = read_kicad_schematic(input_path)?.check_report();
+    let json = report.to_json();
+    if let Some(output) = output {
+        write_text(Path::new(&output), &json)?;
+        println!(
+            "kicad-check: {} diagnostics ({} errors, {} warnings) -> {}",
+            report.diagnostics.len(),
+            report.error_count(),
+            report.warning_count(),
+            output
+        );
+    } else {
+        print!("{json}");
+    }
+
+    Ok(if report.error_count() == 0 { 0 } else { 2 })
 }
 
 fn kicad_export_command(args: &[String]) -> OslResult<i32> {
