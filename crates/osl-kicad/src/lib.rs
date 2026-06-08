@@ -133,6 +133,10 @@ impl KicadSchematic {
         KicadNetGraph::build(self)
     }
 
+    pub fn canvas_scene(&self) -> KicadCanvasScene {
+        KicadCanvasScene::from_schematic(self)
+    }
+
     pub fn to_spice_netlist(&self) -> OslResult<String> {
         let graph = self.connectivity_graph();
         let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
@@ -288,6 +292,260 @@ impl KicadSchematic {
                 .sum::<usize>()
         )
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasScene {
+    pub source: String,
+    pub symbols: Vec<KicadCanvasSymbol>,
+    pub wires: Vec<KicadCanvasWire>,
+    pub labels: Vec<KicadCanvasLabel>,
+    pub junctions: Vec<KicadCanvasJunction>,
+    pub bounds: Option<KicadBoundingBox>,
+}
+
+impl KicadCanvasScene {
+    pub fn from_schematic(schematic: &KicadSchematic) -> Self {
+        let mut bounds = KicadBoundingBoxBuilder::default();
+
+        let symbols = schematic
+            .symbols
+            .iter()
+            .filter_map(|symbol| {
+                let definition = schematic.symbol_definition(&symbol.lib_id)?;
+                let at = symbol.at.unwrap_or(KicadAt {
+                    x: 0.0,
+                    y: 0.0,
+                    rotation: 0.0,
+                });
+                let graphics = definition
+                    .graphics
+                    .iter()
+                    .map(|graphic| graphic.transformed(at))
+                    .collect::<Vec<_>>();
+                let pins = definition
+                    .pins
+                    .iter()
+                    .filter_map(|pin| KicadCanvasPin::from_pin_def(pin, at))
+                    .collect::<Vec<_>>();
+                let symbol_bounds = canvas_symbol_bounds(&graphics, &pins);
+                if let Some(symbol_bounds) = symbol_bounds {
+                    bounds.include_box(symbol_bounds);
+                }
+
+                Some(KicadCanvasSymbol {
+                    lib_id: symbol.lib_id.clone(),
+                    reference: symbol.reference().unwrap_or_default().to_string(),
+                    value: symbol.value().unwrap_or_default().to_string(),
+                    at,
+                    graphics,
+                    pins,
+                    bounds: symbol_bounds,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let wires = schematic
+            .wires
+            .iter()
+            .map(|wire| {
+                for point in &wire.points {
+                    bounds.include(*point);
+                }
+                KicadCanvasWire {
+                    points: wire.points.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let labels = schematic
+            .labels
+            .iter()
+            .map(|label| {
+                if let Some(at) = label.at {
+                    bounds.include(at.point());
+                }
+                KicadCanvasLabel {
+                    text: label.text.clone(),
+                    kind: label.kind,
+                    at: label.at,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let junctions = schematic
+            .junctions
+            .iter()
+            .map(|junction| {
+                bounds.include(junction.at);
+                KicadCanvasJunction { at: junction.at }
+            })
+            .collect::<Vec<_>>();
+
+        Self {
+            source: schematic.source.clone(),
+            symbols,
+            wires,
+            labels,
+            junctions,
+            bounds: bounds.finish(),
+        }
+    }
+
+    pub fn to_summary_json(&self) -> String {
+        let bounds = self
+            .bounds
+            .map(kicad_bounding_box_json)
+            .unwrap_or_else(|| "null".to_string());
+        let graphic_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.graphics.len())
+            .sum::<usize>();
+        let pin_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.pins.len())
+            .sum::<usize>();
+
+        format!(
+            concat!(
+                "{{\n",
+                "  \"source\": \"{}\",\n",
+                "  \"symbol_count\": {},\n",
+                "  \"graphic_count\": {},\n",
+                "  \"pin_count\": {},\n",
+                "  \"wire_count\": {},\n",
+                "  \"label_count\": {},\n",
+                "  \"junction_count\": {},\n",
+                "  \"bounds\": {}\n",
+                "}}"
+            ),
+            json_escape(&self.source),
+            self.symbols.len(),
+            graphic_count,
+            pin_count,
+            self.wires.len(),
+            self.labels.len(),
+            self.junctions.len(),
+            bounds
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasSymbol {
+    pub lib_id: String,
+    pub reference: String,
+    pub value: String,
+    pub at: KicadAt,
+    pub graphics: Vec<KicadCanvasGraphic>,
+    pub pins: Vec<KicadCanvasPin>,
+    pub bounds: Option<KicadBoundingBox>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum KicadCanvasGraphic {
+    Polyline {
+        points: Vec<KicadPoint>,
+    },
+    Rectangle {
+        start: KicadPoint,
+        end: KicadPoint,
+    },
+    Circle {
+        center: KicadPoint,
+        radius: f64,
+    },
+    Arc {
+        start: KicadPoint,
+        mid: Option<KicadPoint>,
+        end: KicadPoint,
+    },
+    Text {
+        text: String,
+        at: Option<KicadAt>,
+    },
+}
+
+impl KicadCanvasGraphic {
+    fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
+        match self {
+            Self::Polyline { points } => {
+                for point in points {
+                    bounds.include(*point);
+                }
+            }
+            Self::Rectangle { start, end } => {
+                bounds.include(*start);
+                bounds.include(*end);
+            }
+            Self::Circle { center, radius } => {
+                bounds.include(KicadPoint {
+                    x: center.x - radius,
+                    y: center.y - radius,
+                });
+                bounds.include(KicadPoint {
+                    x: center.x + radius,
+                    y: center.y + radius,
+                });
+            }
+            Self::Arc { start, mid, end } => {
+                bounds.include(*start);
+                if let Some(mid) = mid {
+                    bounds.include(*mid);
+                }
+                bounds.include(*end);
+            }
+            Self::Text { at, .. } => {
+                if let Some(at) = at {
+                    bounds.include(at.point());
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasPin {
+    pub number: String,
+    pub name: String,
+    pub electrical_type: String,
+    pub start: KicadPoint,
+    pub end: KicadPoint,
+}
+
+impl KicadCanvasPin {
+    fn from_pin_def(pin: &KicadPinDef, symbol_at: KicadAt) -> Option<Self> {
+        let pin_at = pin.at?;
+        let local_start = pin_at.point();
+        let local_end = pin_body_end(pin_at, pin.length.unwrap_or(0.0));
+
+        Some(Self {
+            number: pin.number.clone(),
+            name: pin.name.clone(),
+            electrical_type: pin.electrical_type.clone(),
+            start: transform_local_point(local_start, symbol_at),
+            end: transform_local_point(local_end, symbol_at),
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasWire {
+    pub points: Vec<KicadPoint>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasLabel {
+    pub text: String,
+    pub kind: KicadLabelKind,
+    pub at: Option<KicadAt>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasJunction {
+    pub at: KicadPoint,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -789,6 +1047,34 @@ impl KicadGraphic {
             }
         }
     }
+
+    fn transformed(&self, symbol_at: KicadAt) -> KicadCanvasGraphic {
+        match self {
+            Self::Polyline { points } => KicadCanvasGraphic::Polyline {
+                points: points
+                    .iter()
+                    .map(|point| transform_local_point(*point, symbol_at))
+                    .collect(),
+            },
+            Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
+                start: transform_local_point(*start, symbol_at),
+                end: transform_local_point(*end, symbol_at),
+            },
+            Self::Circle { center, radius } => KicadCanvasGraphic::Circle {
+                center: transform_local_point(*center, symbol_at),
+                radius: *radius,
+            },
+            Self::Arc { start, mid, end } => KicadCanvasGraphic::Arc {
+                start: transform_local_point(*start, symbol_at),
+                mid: mid.map(|point| transform_local_point(point, symbol_at)),
+                end: transform_local_point(*end, symbol_at),
+            },
+            Self::Text { text, at } => KicadCanvasGraphic::Text {
+                text: text.clone(),
+                at: at.map(|at| transform_local_at(at, symbol_at)),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -829,6 +1115,11 @@ impl KicadBoundingBoxBuilder {
             },
             None => point,
         });
+    }
+
+    fn include_box(&mut self, bounds: KicadBoundingBox) {
+        self.include(bounds.min);
+        self.include(bounds.max);
     }
 
     fn finish(self) -> Option<KicadBoundingBox> {
@@ -1329,6 +1620,25 @@ fn json_option(value: Option<&str>) -> String {
     }
 }
 
+fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
+    format!(
+        concat!(
+            "{{ ",
+            "\"min\": {{ \"x\": {}, \"y\": {} }}, ",
+            "\"max\": {{ \"x\": {}, \"y\": {} }}, ",
+            "\"width\": {}, ",
+            "\"height\": {} ",
+            "}}"
+        ),
+        bounds.min.x,
+        bounds.min.y,
+        bounds.max.x,
+        bounds.max.y,
+        bounds.width(),
+        bounds.height()
+    )
+}
+
 fn resolve_kicad_uri(uri: &str, base_dir: &Path) -> PathBuf {
     let base_dir = normalize_base_dir(base_dir);
     let expanded = expand_kicad_uri(uri, &base_dir);
@@ -1380,14 +1690,23 @@ fn expand_kicad_uri(uri: &str, base_dir: &Path) -> String {
 }
 
 fn transform_symbol_point(pin_at: KicadAt, symbol_at: KicadAt) -> KicadPoint {
-    let local = KicadPoint {
-        x: pin_at.x,
-        y: pin_at.y,
-    };
+    transform_local_point(pin_at.point(), symbol_at)
+}
+
+fn transform_local_point(local: KicadPoint, symbol_at: KicadAt) -> KicadPoint {
     let rotated = rotate_point(local, symbol_at.rotation);
     KicadPoint {
         x: symbol_at.x + rotated.x,
         y: symbol_at.y + rotated.y,
+    }
+}
+
+fn transform_local_at(local_at: KicadAt, symbol_at: KicadAt) -> KicadAt {
+    let point = transform_local_point(local_at.point(), symbol_at);
+    KicadAt {
+        x: point.x,
+        y: point.y,
+        rotation: normalized_rotation(local_at.rotation + symbol_at.rotation),
     }
 }
 
@@ -1399,8 +1718,23 @@ fn pin_body_end(at: KicadAt, length: f64) -> KicadPoint {
     }
 }
 
+fn canvas_symbol_bounds(
+    graphics: &[KicadCanvasGraphic],
+    pins: &[KicadCanvasPin],
+) -> Option<KicadBoundingBox> {
+    let mut bounds = KicadBoundingBoxBuilder::default();
+    for graphic in graphics {
+        graphic.include_in_bounds(&mut bounds);
+    }
+    for pin in pins {
+        bounds.include(pin.start);
+        bounds.include(pin.end);
+    }
+    bounds.finish()
+}
+
 fn rotate_point(point: KicadPoint, rotation: f64) -> KicadPoint {
-    let normalized = ((rotation.round() as i32 % 360) + 360) % 360;
+    let normalized = normalized_rotation(rotation).round() as i32;
     match normalized {
         0 => point,
         90 => KicadPoint {
@@ -1422,6 +1756,15 @@ fn rotate_point(point: KicadPoint, rotation: f64) -> KicadPoint {
                 y: point.x * radians.sin() + point.y * radians.cos(),
             }
         }
+    }
+}
+
+fn normalized_rotation(rotation: f64) -> f64 {
+    let normalized = rotation % 360.0;
+    if normalized < 0.0 {
+        normalized + 360.0
+    } else {
+        normalized
     }
 }
 
@@ -1550,6 +1893,51 @@ mod tests {
     }
 
     #[test]
+    fn builds_canvas_scene_from_kicad_schematic_fixture() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.symbols.len(), 3);
+        assert_eq!(
+            scene
+                .symbols
+                .iter()
+                .map(|symbol| symbol.graphics.len())
+                .sum::<usize>(),
+            6
+        );
+        assert_eq!(
+            scene
+                .symbols
+                .iter()
+                .map(|symbol| symbol.pins.len())
+                .sum::<usize>(),
+            6
+        );
+        assert_eq!(scene.wires.len(), 3);
+        assert_eq!(scene.labels.len(), 3);
+        assert!(scene.bounds.unwrap().width() > 20.0);
+
+        let resistor = scene
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference == "R1")
+            .unwrap();
+        assert_eq!(resistor.lib_id, "NekoSpice:R");
+        assert_eq!(resistor.graphics.len(), 1);
+        assert_close(resistor.pins[0].start.x, 67.31);
+        assert_close(resistor.pins[0].end.x, 69.85);
+        assert!(scene.to_summary_json().contains("\"graphic_count\": 6"));
+        assert!(scene.to_summary_json().contains("\"pin_count\": 6"));
+    }
+
+    #[test]
     fn parses_kicad_symbol_library_fixture() {
         let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -1671,5 +2059,12 @@ mod tests {
 
         let error = parse_kicad_symbol_library_table("(kicad_sch)", "sym-lib-table").unwrap_err();
         assert!(error.to_string().contains("expected KiCad root"));
+    }
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < 1e-9,
+            "expected {actual} to be close to {expected}"
+        );
     }
 }

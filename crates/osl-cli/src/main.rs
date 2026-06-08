@@ -74,7 +74,7 @@ Usage:
   osl bench <directory> [--output <dir>] [--ngspice <path>]
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
-  osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--index] [--output <file>]
+  osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
@@ -341,6 +341,7 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
     let input = positional(args, 0, "missing KiCad path for 'osl kicad-inspect'")?;
     let output = flag_value(args, "--output");
     let path = Path::new(input);
+    let should_emit_canvas = has_flag(args, "--canvas");
     let should_index = has_flag(args, "--index");
     let extension = path
         .extension()
@@ -352,6 +353,9 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
         extension.as_str(),
         path.file_name().and_then(|name| name.to_str()),
     ) {
+        ("kicad_sch", _) if should_emit_canvas => {
+            read_kicad_schematic(path)?.canvas_scene().to_summary_json()
+        }
         ("kicad_sch", _) => read_kicad_schematic(path)?.to_summary_json(),
         ("kicad_sym", _) => read_kicad_symbol_library(path)?.to_summary_json(),
         (_, Some("sym-lib-table")) if should_index => {

@@ -37,6 +37,7 @@ cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output repor
 cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output reports/import_kicad_schematic_001
 cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output reports/import_with_models_001
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output reports/kicad_schematic.json
+cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas --output reports/kicad_canvas_scene.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output reports/kicad_symbol_library.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --output reports/kicad_symbol_index.json
 cargo run -p osl-cli -- waveform runs/rc_001/waveform.raw --signal v(out) --from 8us --to 10us --points 200 --output reports/vout-envelope.json
@@ -102,11 +103,12 @@ cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.os
 
 ```bash
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch
+cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index
 ```
 
-`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, and a symbol library index for later GUI library browsing and schematic symbol resolution. The local KiCad source mirror is treated only as reference material and is ignored by Git.
+`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, a symbol library index for later GUI library browsing and schematic symbol resolution, and a schematic canvas scene with transformed symbol graphics, pins, wires, labels, junctions, and scene bounds. The local KiCad source mirror is treated only as reference material and is ignored by Git.
 
 ## Validation
 
@@ -124,6 +126,7 @@ cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_project_file/project/
 cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_schematic
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_schematic/project/project.osl.yaml --output /tmp/nekospice_import/kicad_schematic_verify
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_schematic.json
+cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas --output /tmp/nekospice_import/kicad_canvas_scene.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/kicad_symbol_library.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --output /tmp/nekospice_import/kicad_symbol_index.json
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output /tmp/nekospice_import/ltspice_rc
