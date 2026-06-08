@@ -3,7 +3,7 @@ use osl_core::{
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
-use osl_netlist::{ImportReport, NormalizedDependency};
+use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
 use osl_waveform::{
     MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
@@ -68,7 +68,7 @@ Usage:
   osl verify <project.osl.yaml> [--output <dir>] [--ngspice <path>] [--jobs <n>]
   osl bench <directory> [--output <dir>] [--ngspice <path>]
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
-  osl import <spice-netlist> [--output <dir>]
+  osl import <spice-netlist-or-ltspice.asc> [--output <dir>]
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
@@ -257,8 +257,9 @@ fn import_command(args: &[String]) -> OslResult<i32> {
         .map_err(|err| OslError::io(format!("create {}", output_dir.display()), err))?;
 
     let input_path = Path::new(input);
-    let source_netlist = read_text(input_path)?;
-    let report = ImportReport::parse(input_path)?;
+    let import = read_import_input(input_path)?;
+    let source_netlist = import.source_netlist;
+    let report = import.report;
     write_text(&output_dir.join("import.json"), &report.to_json())?;
     write_text(
         &output_dir.join("report.html"),

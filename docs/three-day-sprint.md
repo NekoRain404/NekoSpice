@@ -53,7 +53,8 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output repor
 - 实现 `osl model-check <netlist-or-directory>` 的最小模型诊断闭环。
 - 输出 `.subckt` pin list、`.model` 索引、unsupported directive、方言风险和兼容性评分。
 - 支持 LTspice `.asy` symbol pin mapping：解析 `PINATTR PinName` / `SpiceOrder` 并对齐 `.subckt` pin list。
-- 实现 `osl import <spice-netlist>` 的导入报告和 normalized project 输出：组件数量、symbol 数量、directive 数量、include、兼容性评分、`project/input.cir`、`project/project.osl.yaml`、`project/manifest.json`，复制相对 `.include` / `.lib` 模型依赖，并生成可观测信号与 checks 模板建议。
+- 实现 `osl import <spice-netlist-or-ltspice.asc>` 的导入报告和 normalized project 输出：组件数量、symbol 数量、directive 数量、include、兼容性评分、`project/input.cir`、`project/project.osl.yaml`、`project/manifest.json`，复制相对 `.include` / `.lib` 模型依赖，并生成可观测信号与 checks 模板建议。
+- 实现 LTspice `.asc` 基础导入：支持常见 primitive symbol、`WIRE`、`FLAG` 和 `TEXT ... !<directive>`，并把不支持的 symbol 转成行级诊断。
 - 准备一个 KiCad-style SPICE netlist fixture，并确认它可以被 ngspice 运行。
 - 实现 `osl waveform <waveform.raw>` 的视窗 min/max envelope JSON 查询，为后续 GUI 波形查看器提供数据接口。
 - 补充文档和使用命令。
@@ -71,6 +72,8 @@ cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --out
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output reports/import_001
 cargo run -p osl-cli -- verify reports/import_001/project/project.osl.yaml --output reports/import_001_verify
+cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output reports/ltspice_import_001
+cargo run -p osl-cli -- verify reports/ltspice_import_001/project/project.osl.yaml --output reports/ltspice_import_001_verify
 cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output reports/import_models_001
 cargo run -p osl-cli -- verify reports/import_models_001/project/project.osl.yaml --output reports/import_models_001_verify
 cargo run -p osl-cli -- run examples/kicad_import/kicad_rc.cir --output runs/kicad_rc_001
@@ -81,6 +84,6 @@ cargo run -p osl-cli -- waveform runs/kicad_rc_001/waveform.raw --signal 'v(out)
 
 优先级从高到低：
 
-1. normalized import v2：解析 LTspice `.asc` / KiCad project metadata，把现有可观测信号/checks 建议升级为带工程意图的 checks 模板。
+1. normalized import v2：把 LTspice `.asc` 基础导入扩展到外部 `.asy` pin mapping、subckt symbol、KiCad project metadata，并把现有可观测信号/checks 建议升级为带工程意图的 checks 模板。
 2. waveform data layer：持久 LOD cache、mmap、大文件 viewport query 优化。
 3. richer verification DSL：backend、analysis、corner、Monte Carlo 和 worst-case search。

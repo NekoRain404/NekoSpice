@@ -3,6 +3,33 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 #[derive(Debug)]
+pub struct ImportInput {
+    pub source_netlist: String,
+    pub report: ImportReport,
+}
+
+pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
+    let content = read_text(path)?;
+    let source = path.display().to_string();
+    if is_ltspice_schematic(path) {
+        let imported = import_ltspice_asc(&content, &source);
+        let mut report = parse_netlist(&imported.netlist, &source)?;
+        report.flavor = NetlistFlavor::Ltspice;
+        report.diagnostics.extend(imported.diagnostics);
+        Ok(ImportInput {
+            source_netlist: imported.netlist,
+            report,
+        })
+    } else {
+        let report = parse_netlist(&content, &source)?;
+        Ok(ImportInput {
+            source_netlist: content,
+            report,
+        })
+    }
+}
+
+#[derive(Debug)]
 pub struct ImportReport {
     pub source: String,
     pub flavor: NetlistFlavor,
@@ -700,6 +727,637 @@ pub fn parse_netlist(input: &str, source: &str) -> OslResult<ImportReport> {
     Ok(report)
 }
 
+fn is_ltspice_schematic(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("asc"))
+}
+
+#[derive(Debug)]
+struct LtspiceSchematicImport {
+    netlist: String,
+    diagnostics: Vec<ImportDiagnostic>,
+}
+
+#[derive(Debug, Default)]
+struct LtspiceSchematic {
+    wires: Vec<LtspiceWire>,
+    flags: Vec<LtspiceFlag>,
+    symbols: Vec<LtspiceSymbol>,
+    directives: Vec<LtspiceDirective>,
+    diagnostics: Vec<ImportDiagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct AscPoint {
+    x: i32,
+    y: i32,
+}
+
+impl AscPoint {
+    fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+}
+
+#[derive(Debug)]
+struct LtspiceWire {
+    start: AscPoint,
+    end: AscPoint,
+}
+
+#[derive(Debug)]
+struct LtspiceFlag {
+    point: AscPoint,
+    name: String,
+}
+
+#[derive(Debug)]
+struct LtspiceSymbol {
+    line: usize,
+    name: String,
+    origin: AscPoint,
+    rotation: String,
+    attrs: BTreeMap<String, String>,
+}
+
+#[derive(Debug)]
+struct LtspiceDirective {
+    text: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LtspiceBuiltinSymbol {
+    prefix: &'static str,
+    pins: &'static [AscPoint],
+}
+
+#[derive(Debug)]
+struct AscNetGraph {
+    names: BTreeMap<AscPoint, String>,
+    has_ground: bool,
+}
+
+#[derive(Debug)]
+struct DisjointSet {
+    parents: Vec<usize>,
+}
+
+impl DisjointSet {
+    fn new(len: usize) -> Self {
+        Self {
+            parents: (0..len).collect(),
+        }
+    }
+
+    fn find(&mut self, item: usize) -> usize {
+        let parent = self.parents[item];
+        if parent == item {
+            item
+        } else {
+            let root = self.find(parent);
+            self.parents[item] = root;
+            root
+        }
+    }
+
+    fn union(&mut self, left: usize, right: usize) {
+        let left_root = self.find(left);
+        let right_root = self.find(right);
+        if left_root != right_root {
+            self.parents[right_root] = left_root;
+        }
+    }
+}
+
+impl AscNetGraph {
+    fn build(wires: &[LtspiceWire], flags: &[LtspiceFlag], pin_points: &[AscPoint]) -> AscNetGraph {
+        let mut points = BTreeSet::new();
+        for wire in wires {
+            points.insert(wire.start);
+            points.insert(wire.end);
+        }
+        for flag in flags {
+            points.insert(flag.point);
+        }
+        for point in pin_points {
+            points.insert(*point);
+        }
+        for left in wires {
+            for right in wires {
+                if let Some(point) = wire_intersection(left, right) {
+                    points.insert(point);
+                }
+            }
+        }
+
+        let ordered_points = points.into_iter().collect::<Vec<_>>();
+        let point_indexes = ordered_points
+            .iter()
+            .enumerate()
+            .map(|(index, point)| (*point, index))
+            .collect::<BTreeMap<_, _>>();
+        let mut graph = DisjointSet::new(ordered_points.len());
+
+        for wire in wires {
+            let mut segment_points = ordered_points
+                .iter()
+                .filter(|point| wire_contains_point(wire, **point))
+                .filter_map(|point| point_indexes.get(point).copied())
+                .collect::<Vec<_>>();
+            segment_points.sort_by_key(|index| ordered_points[*index]);
+            if let Some(first) = segment_points.first().copied() {
+                for point in segment_points.iter().copied().skip(1) {
+                    graph.union(first, point);
+                }
+            }
+        }
+
+        let mut flags_by_name = BTreeMap::<String, Vec<usize>>::new();
+        for flag in flags {
+            if let Some(index) = point_indexes.get(&flag.point).copied() {
+                flags_by_name
+                    .entry(flag.name.clone())
+                    .or_default()
+                    .push(index);
+            }
+        }
+        for flag_points in flags_by_name.values() {
+            if let Some(first) = flag_points.first().copied() {
+                for point in flag_points.iter().copied().skip(1) {
+                    graph.union(first, point);
+                }
+            }
+        }
+
+        let mut labels_by_root = BTreeMap::<usize, BTreeSet<String>>::new();
+        for flag in flags {
+            if let Some(index) = point_indexes.get(&flag.point).copied() {
+                let root = graph.find(index);
+                labels_by_root
+                    .entry(root)
+                    .or_default()
+                    .insert(flag.name.clone());
+            }
+        }
+
+        let mut names_by_root = BTreeMap::<usize, String>::new();
+        let mut generated_index = 1;
+        for (index, _) in ordered_points.iter().enumerate() {
+            let root = graph.find(index);
+            names_by_root.entry(root).or_insert_with(|| {
+                labels_by_root
+                    .get(&root)
+                    .and_then(preferred_label)
+                    .unwrap_or_else(|| {
+                        let name = format!("n{generated_index:03}");
+                        generated_index += 1;
+                        name
+                    })
+            });
+        }
+
+        let mut has_ground = false;
+        let mut names = BTreeMap::new();
+        for (index, point) in ordered_points.iter().enumerate() {
+            let root = graph.find(index);
+            let name = names_by_root.get(&root).cloned().unwrap_or_else(|| {
+                let name = format!("n{generated_index:03}");
+                generated_index += 1;
+                name
+            });
+            if is_ground_node(&name.to_ascii_lowercase()) {
+                has_ground = true;
+            }
+            names.insert(*point, name);
+        }
+
+        Self { names, has_ground }
+    }
+
+    fn node_name(&self, point: AscPoint) -> Option<&str> {
+        self.names.get(&point).map(String::as_str)
+    }
+}
+
+fn import_ltspice_asc(input: &str, source: &str) -> LtspiceSchematicImport {
+    let mut schematic = parse_ltspice_asc(input);
+    let pin_points = schematic
+        .symbols
+        .iter()
+        .flat_map(ltspice_symbol_pin_points)
+        .collect::<Vec<_>>();
+    let graph = AscNetGraph::build(&schematic.wires, &schematic.flags, &pin_points);
+
+    let mut lines = vec![
+        format!("* Imported from LTspice schematic: {source}"),
+        "* Generated by NekoSpice asc importer.".to_string(),
+    ];
+    for symbol in &schematic.symbols {
+        if let Some(line) = ltspice_symbol_to_netlist(symbol, &graph, &mut schematic.diagnostics) {
+            lines.push(line);
+        }
+    }
+    for directive in &schematic.directives {
+        lines.push(directive.text.clone());
+    }
+    if !lines
+        .iter()
+        .any(|line| line.trim().eq_ignore_ascii_case(".end"))
+    {
+        lines.push(".end".to_string());
+    }
+
+    if !schematic.symbols.is_empty() && !graph.has_ground {
+        schematic.diagnostics.push(import_diagnostic(
+            1,
+            ImportSeverity::Warning,
+            "ltspice_missing_ground",
+            "LTspice schematic has no node labelled 0 or ground",
+            "Add a ground symbol or FLAG 0 before running the imported netlist.",
+        ));
+    }
+
+    LtspiceSchematicImport {
+        netlist: format!("{}\n", lines.join("\n")),
+        diagnostics: schematic.diagnostics,
+    }
+}
+
+fn parse_ltspice_asc(input: &str) -> LtspiceSchematic {
+    let mut schematic = LtspiceSchematic::default();
+    let mut current_symbol = None::<LtspiceSymbol>;
+
+    for (line_number, raw_line) in input.lines().enumerate() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let tokens = line.split_whitespace().collect::<Vec<_>>();
+        let Some(keyword) = tokens.first().copied() else {
+            continue;
+        };
+
+        match keyword {
+            "WIRE" => match parse_wire_tokens(&tokens) {
+                Some(wire) => schematic.wires.push(wire),
+                None => schematic.diagnostics.push(import_diagnostic(
+                    line_number + 1,
+                    ImportSeverity::Error,
+                    "ltspice_bad_wire",
+                    "WIRE statement must contain four integer coordinates",
+                    "Check the LTspice schematic export around this line.",
+                )),
+            },
+            "FLAG" => match parse_flag_tokens(&tokens) {
+                Some(flag) => schematic.flags.push(flag),
+                None => schematic.diagnostics.push(import_diagnostic(
+                    line_number + 1,
+                    ImportSeverity::Error,
+                    "ltspice_bad_flag",
+                    "FLAG statement must contain x, y, and node name",
+                    "Check the LTspice schematic export around this line.",
+                )),
+            },
+            "SYMBOL" => {
+                if let Some(symbol) = current_symbol.take() {
+                    schematic.symbols.push(symbol);
+                }
+                match parse_symbol_tokens(&tokens, line_number + 1) {
+                    Some(symbol) => current_symbol = Some(symbol),
+                    None => schematic.diagnostics.push(import_diagnostic(
+                        line_number + 1,
+                        ImportSeverity::Error,
+                        "ltspice_bad_symbol",
+                        "SYMBOL statement must contain name, x, y, and rotation",
+                        "Check the LTspice schematic export around this line.",
+                    )),
+                }
+            }
+            "SYMATTR" => {
+                if let Some(symbol) = current_symbol.as_mut() {
+                    if let Some((key, value)) = split_key_value(line.trim_start_matches("SYMATTR"))
+                    {
+                        symbol.attrs.insert(key.to_string(), value.to_string());
+                    }
+                } else {
+                    schematic.diagnostics.push(import_diagnostic(
+                        line_number + 1,
+                        ImportSeverity::Warning,
+                        "ltspice_orphan_attribute",
+                        "SYMATTR appears before any SYMBOL",
+                        "Move the attribute below the symbol it belongs to.",
+                    ));
+                }
+            }
+            "TEXT" => {
+                if let Some(directive) = parse_text_directive(&tokens) {
+                    schematic.directives.push(directive);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(symbol) = current_symbol.take() {
+        schematic.symbols.push(symbol);
+    }
+    schematic
+}
+
+fn parse_wire_tokens(tokens: &[&str]) -> Option<LtspiceWire> {
+    Some(LtspiceWire {
+        start: AscPoint::new(tokens.get(1)?.parse().ok()?, tokens.get(2)?.parse().ok()?),
+        end: AscPoint::new(tokens.get(3)?.parse().ok()?, tokens.get(4)?.parse().ok()?),
+    })
+}
+
+fn parse_flag_tokens(tokens: &[&str]) -> Option<LtspiceFlag> {
+    Some(LtspiceFlag {
+        point: AscPoint::new(tokens.get(1)?.parse().ok()?, tokens.get(2)?.parse().ok()?),
+        name: tokens.get(3)?.to_string(),
+    })
+}
+
+fn parse_symbol_tokens(tokens: &[&str], line: usize) -> Option<LtspiceSymbol> {
+    Some(LtspiceSymbol {
+        line,
+        name: tokens.get(1)?.to_string(),
+        origin: AscPoint::new(tokens.get(2)?.parse().ok()?, tokens.get(3)?.parse().ok()?),
+        rotation: tokens.get(4)?.to_string(),
+        attrs: BTreeMap::new(),
+    })
+}
+
+fn parse_text_directive(tokens: &[&str]) -> Option<LtspiceDirective> {
+    let text = tokens.get(5..)?.join(" ");
+    let directive = text.strip_prefix('!')?.trim();
+    if directive.is_empty() {
+        None
+    } else {
+        Some(LtspiceDirective {
+            text: directive.to_string(),
+        })
+    }
+}
+
+fn split_key_value(input: &str) -> Option<(&str, &str)> {
+    let input = input.trim();
+    let split_at = input
+        .char_indices()
+        .find(|(_, character)| character.is_whitespace())
+        .map(|(index, _)| index)?;
+    let key = input[..split_at].trim();
+    let value = input[split_at..].trim();
+    if key.is_empty() {
+        None
+    } else {
+        Some((key, value))
+    }
+}
+
+fn ltspice_symbol_pin_points(symbol: &LtspiceSymbol) -> Vec<AscPoint> {
+    let Some(spec) = ltspice_builtin_symbol(&symbol.name) else {
+        return Vec::new();
+    };
+    spec.pins
+        .iter()
+        .filter_map(|pin| transform_ltspice_point(*pin, symbol.origin, &symbol.rotation))
+        .collect()
+}
+
+fn ltspice_symbol_to_netlist(
+    symbol: &LtspiceSymbol,
+    graph: &AscNetGraph,
+    diagnostics: &mut Vec<ImportDiagnostic>,
+) -> Option<String> {
+    let Some(spec) = ltspice_builtin_symbol(&symbol.name) else {
+        diagnostics.push(import_diagnostic(
+            symbol.line,
+            ImportSeverity::Error,
+            "ltspice_unsupported_symbol",
+            &format!(
+                "LTspice symbol '{}' is not supported by the importer yet",
+                symbol.name
+            ),
+            "Replace it with a supported primitive or add an .asy pin mapping rule.",
+        ));
+        return None;
+    };
+    let pins = ltspice_symbol_pin_points(symbol);
+    if pins.len() != spec.pins.len() {
+        diagnostics.push(import_diagnostic(
+            symbol.line,
+            ImportSeverity::Error,
+            "ltspice_unsupported_rotation",
+            &format!(
+                "LTspice symbol '{}' uses unsupported rotation '{}'",
+                symbol.name, symbol.rotation
+            ),
+            "Use R0, R90, R180, R270, M0, M90, M180, or M270 before importing.",
+        ));
+        return None;
+    }
+
+    let mut nodes = Vec::new();
+    for pin in pins {
+        let Some(node) = graph.node_name(pin) else {
+            diagnostics.push(import_diagnostic(
+                symbol.line,
+                ImportSeverity::Error,
+                "ltspice_unmapped_pin",
+                &format!(
+                    "LTspice symbol '{}' has a pin at {},{} that is not in the net graph",
+                    symbol.name, pin.x, pin.y
+                ),
+                "Connect the pin to a wire or label before importing.",
+            ));
+            return None;
+        };
+        nodes.push(node.to_string());
+    }
+
+    let instance = symbol_instance_name(symbol, spec, diagnostics);
+    let value = symbol_value(symbol, spec, diagnostics)?;
+    Some(format!("{} {} {}", instance, nodes.join(" "), value))
+}
+
+fn symbol_instance_name(
+    symbol: &LtspiceSymbol,
+    spec: LtspiceBuiltinSymbol,
+    diagnostics: &mut Vec<ImportDiagnostic>,
+) -> String {
+    symbol
+        .attrs
+        .get("InstName")
+        .filter(|name| !name.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| {
+            diagnostics.push(import_diagnostic(
+                symbol.line,
+                ImportSeverity::Warning,
+                "ltspice_missing_instance_name",
+                &format!("LTspice symbol '{}' has no InstName", symbol.name),
+                "Assign a stable reference designator before importing.",
+            ));
+            format!("{}{}", spec.prefix, symbol.line)
+        })
+}
+
+fn symbol_value(
+    symbol: &LtspiceSymbol,
+    spec: LtspiceBuiltinSymbol,
+    diagnostics: &mut Vec<ImportDiagnostic>,
+) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(value) = symbol
+        .attrs
+        .get("Value")
+        .filter(|value| !value.trim().is_empty())
+    {
+        parts.push(value.trim().to_string());
+    }
+    for key in ["Value2", "SpiceLine", "SpiceLine2"] {
+        if let Some(value) = symbol
+            .attrs
+            .get(key)
+            .filter(|value| !value.trim().is_empty())
+        {
+            parts.push(value.trim().to_string());
+        }
+    }
+    if parts.is_empty() {
+        diagnostics.push(import_diagnostic(
+            symbol.line,
+            ImportSeverity::Error,
+            "ltspice_missing_value",
+            &format!("LTspice symbol '{}' has no Value attribute", symbol.name),
+            &format!(
+                "Add a value compatible with {} before importing.",
+                spec.prefix
+            ),
+        ));
+        None
+    } else {
+        Some(parts.join(" "))
+    }
+}
+
+fn ltspice_builtin_symbol(name: &str) -> Option<LtspiceBuiltinSymbol> {
+    const RES_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 16 }, AscPoint { x: 16, y: 96 }];
+    const CAP_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 0 }, AscPoint { x: 16, y: 64 }];
+    const SOURCE_PINS: &[AscPoint] = &[AscPoint { x: 0, y: 16 }, AscPoint { x: 0, y: 96 }];
+    const CURRENT_PINS: &[AscPoint] = &[AscPoint { x: 0, y: 0 }, AscPoint { x: 0, y: 80 }];
+    const DIODE_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 0 }, AscPoint { x: 16, y: 64 }];
+
+    match ltspice_symbol_basename(name).as_str() {
+        "res" | "res2" => Some(LtspiceBuiltinSymbol {
+            prefix: "R",
+            pins: RES_PINS,
+        }),
+        "cap" | "polcap" => Some(LtspiceBuiltinSymbol {
+            prefix: "C",
+            pins: CAP_PINS,
+        }),
+        "ind" | "ind2" => Some(LtspiceBuiltinSymbol {
+            prefix: "L",
+            pins: RES_PINS,
+        }),
+        "voltage" => Some(LtspiceBuiltinSymbol {
+            prefix: "V",
+            pins: SOURCE_PINS,
+        }),
+        "current" => Some(LtspiceBuiltinSymbol {
+            prefix: "I",
+            pins: CURRENT_PINS,
+        }),
+        "diode" | "led" | "schottky" | "tvsdiode" | "varactor" | "zener" => {
+            Some(LtspiceBuiltinSymbol {
+                prefix: "D",
+                pins: DIODE_PINS,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn ltspice_symbol_basename(name: &str) -> String {
+    name.replace('\\', "/")
+        .split('/')
+        .next_back()
+        .unwrap_or(name)
+        .to_ascii_lowercase()
+}
+
+fn transform_ltspice_point(point: AscPoint, origin: AscPoint, rotation: &str) -> Option<AscPoint> {
+    let (x, y) = match rotation {
+        "R0" => (point.x, point.y),
+        "R90" => (-point.y, point.x),
+        "R180" => (-point.x, -point.y),
+        "R270" => (point.y, -point.x),
+        "M0" => (-point.x, point.y),
+        "M90" => (-point.y, -point.x),
+        "M180" => (point.x, -point.y),
+        "M270" => (point.y, point.x),
+        _ => return None,
+    };
+    Some(AscPoint::new(origin.x + x, origin.y + y))
+}
+
+fn preferred_label(labels: &BTreeSet<String>) -> Option<String> {
+    labels
+        .iter()
+        .find(|label| is_ground_node(&label.to_ascii_lowercase()))
+        .cloned()
+        .or_else(|| labels.iter().next().cloned())
+}
+
+fn wire_contains_point(wire: &LtspiceWire, point: AscPoint) -> bool {
+    if wire.start.x == wire.end.x {
+        point.x == wire.start.x && between_inclusive(point.y, wire.start.y, wire.end.y)
+    } else if wire.start.y == wire.end.y {
+        point.y == wire.start.y && between_inclusive(point.x, wire.start.x, wire.end.x)
+    } else {
+        false
+    }
+}
+
+fn wire_intersection(left: &LtspiceWire, right: &LtspiceWire) -> Option<AscPoint> {
+    if left.start.x == left.end.x && right.start.y == right.end.y {
+        let point = AscPoint::new(left.start.x, right.start.y);
+        return (wire_contains_point(left, point) && wire_contains_point(right, point))
+            .then_some(point);
+    }
+    if left.start.y == left.end.y && right.start.x == right.end.x {
+        let point = AscPoint::new(right.start.x, left.start.y);
+        return (wire_contains_point(left, point) && wire_contains_point(right, point))
+            .then_some(point);
+    }
+    None
+}
+
+fn between_inclusive(value: i32, left: i32, right: i32) -> bool {
+    let min = left.min(right);
+    let max = left.max(right);
+    value >= min && value <= max
+}
+
+fn import_diagnostic(
+    line: usize,
+    severity: ImportSeverity,
+    code: &str,
+    message: &str,
+    suggestion: &str,
+) -> ImportDiagnostic {
+    ImportDiagnostic {
+        line,
+        severity,
+        code: code.to_string(),
+        message: message.to_string(),
+        suggestion: suggestion.to_string(),
+    }
+}
+
 fn parse_directive(line: usize, statement: &str, report: &mut ImportReport) {
     let name = statement
         .split_whitespace()
@@ -1098,7 +1756,11 @@ fn yaml_scalar(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{ComponentKind, NetlistFlavor, NormalizedDependency, parse_netlist};
+    use super::{
+        ComponentKind, ImportSeverity, NetlistFlavor, NormalizedDependency, import_ltspice_asc,
+        parse_netlist, read_import_input,
+    };
+    use std::path::Path;
 
     #[test]
     fn parses_kicad_style_netlist_summary() {
@@ -1213,5 +1875,52 @@ XU1 in out vcc vee GOODAMP
                 .contains("\"project_path\": \"models/models.lib\"")
         );
         assert_eq!(project.dependencies.len(), 1);
+    }
+
+    #[test]
+    fn imports_ltspice_asc_to_runnable_netlist() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let input =
+            read_import_input(&workspace_root.join("examples/ltspice_import/ltspice_rc.asc"))
+                .unwrap();
+
+        assert_eq!(input.report.flavor, NetlistFlavor::Ltspice);
+        assert_eq!(input.report.error_count(), 0);
+        assert!(input.source_netlist.contains("V1 n001 0 PULSE"));
+        assert!(input.source_netlist.contains("R1 out n001 1k"));
+        assert!(input.source_netlist.contains("C1 out 0 100n"));
+        assert!(input.source_netlist.contains(".tran 1u 500u"));
+        assert!(input.source_netlist.contains("out"));
+
+        let project = input.report.normalized_project(&input.source_netlist);
+        assert!(project.validation_yaml.contains("signal: \"v(out)\""));
+        assert!(project.manifest_json.contains("\"flavor\": \"ltspice\""));
+    }
+
+    #[test]
+    fn reports_unsupported_ltspice_asc_symbol() {
+        let input = r#"
+Version 4
+SHEET 1 880 680
+FLAG 0 0 0
+SYMBOL opamp 0 0 R0
+SYMATTR InstName U1
+SYMATTR Value OPAMP
+TEXT 0 96 Left 2 !.op
+"#;
+
+        let imported = import_ltspice_asc(input, "unsupported.asc");
+
+        assert!(imported.netlist.contains(".op"));
+        assert!(
+            imported
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "ltspice_unsupported_symbol"
+                    && diagnostic.severity == ImportSeverity::Error)
+        );
     }
 }
