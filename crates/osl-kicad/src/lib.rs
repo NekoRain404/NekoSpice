@@ -2091,6 +2091,8 @@ impl KicadSchematic {
                 "  \"sheet_pin_count\": {},\n",
                 "  \"text_count\": {},\n",
                 "  \"text_box_count\": {},\n",
+                "  \"styled_text_box_count\": {},\n",
+                "  \"locked_text_box_count\": {},\n",
                 "  \"spice_directive_count\": {},\n",
                 "  \"sheet_instance_count\": {},\n",
                 "  \"symbol_instance_count\": {},\n",
@@ -2149,6 +2151,8 @@ impl KicadSchematic {
                 .sum::<usize>(),
             self.text_items.len(),
             self.text_boxes.len(),
+            self.styled_text_box_count(),
+            self.locked_text_box_count(),
             self.spice_directives().len(),
             self.sheet_instances.len(),
             self.symbol_instances.len(),
@@ -2232,6 +2236,20 @@ impl KicadSchematic {
         self.graphics
             .iter()
             .filter(|graphic| graphic.locked == Some(true))
+            .count()
+    }
+
+    fn styled_text_box_count(&self) -> usize {
+        self.text_boxes
+            .iter()
+            .filter(|text_box| text_box.stroke.is_some() || text_box.fill.is_some())
+            .count()
+    }
+
+    fn locked_text_box_count(&self) -> usize {
+        self.text_boxes
+            .iter()
+            .filter(|text_box| text_box.locked == Some(true))
             .count()
     }
 
@@ -2918,6 +2936,8 @@ impl KicadCanvasScene {
                     at: text_box.at,
                     size: text_box.size,
                     margins: text_box.margins,
+                    stroke: text_box.stroke.clone(),
+                    fill: text_box.fill.clone(),
                     effects: text_box.effects.clone(),
                 }
             })
@@ -3225,6 +3245,8 @@ pub struct KicadCanvasTextBox {
     pub at: Option<KicadAt>,
     pub size: Option<KicadSize>,
     pub margins: Option<KicadMargins>,
+    pub stroke: Option<KicadStroke>,
+    pub fill: Option<KicadFill>,
     pub effects: Option<KicadTextEffects>,
 }
 
@@ -5066,8 +5088,11 @@ pub struct KicadTextBox {
     pub at: Option<KicadAt>,
     pub size: Option<KicadSize>,
     pub margins: Option<KicadMargins>,
+    pub stroke: Option<KicadStroke>,
+    pub fill: Option<KicadFill>,
     pub exclude_from_sim: Option<bool>,
     pub uuid: Option<String>,
+    pub locked: Option<bool>,
     pub effects: Option<KicadTextEffects>,
 }
 
@@ -5121,11 +5146,18 @@ impl KicadTextBox {
                 format_number(margins.bottom)
             ));
         }
-        output.push_str(&format!("{}  (stroke (width 0) (type default))\n", pad));
-        output.push_str(&format!("{}  (fill (type none))\n", pad));
+        output.push_str(&format!("{} ", pad));
+        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+        output.push('\n');
+        output.push_str(&format!("{} ", pad));
+        write_inline_fill(output, self.fill.as_ref());
+        output.push('\n');
         write_text_effects_line(output, indent + 2, self.effects.as_ref());
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        if self.locked == Some(true) {
+            output.push_str(&format!("{}  (locked yes)\n", pad));
         }
         output.push_str(&format!("{})\n", pad));
     }
@@ -6025,8 +6057,11 @@ fn parse_text_box(node: &Sexp) -> Option<KicadTextBox> {
         at: child(items, "at").and_then(parse_at),
         size: child(items, "size").and_then(parse_size),
         margins: child(items, "margins").and_then(parse_margins),
+        stroke: child(items, "stroke").map(parse_stroke),
+        fill: child(items, "fill").map(parse_fill),
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
         uuid: child_value(items, "uuid"),
+        locked: parse_optional_bool_child(items, "locked"),
         effects: child(items, "effects").map(parse_text_effects),
     })
 }
@@ -7621,6 +7656,7 @@ mod tests {
     (fill (type color) (color 255 228 206 0.7490196078))
     (effects (font (size 1.27 1.27) (color 10 9 37 1)))
     (uuid "45454545-4545-4545-8545-454545454545")
+    (locked)
   )
 )"#,
             "text_box.kicad_sch",
@@ -7632,6 +7668,43 @@ mod tests {
         assert_eq!(schematic.text_boxes[0].exclude_from_sim, Some(false));
         assert_close(schematic.text_boxes[0].size.unwrap().width, 17.78);
         assert_close(schematic.text_boxes[0].margins.unwrap().left, 0.9525);
+        assert_close(
+            schematic.text_boxes[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .width
+                .unwrap(),
+            0.0508,
+        );
+        assert_eq!(
+            schematic.text_boxes[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash_dot")
+        );
+        assert_eq!(
+            schematic.text_boxes[0].stroke.as_ref().unwrap().color,
+            Some(KicadColor {
+                red: 255.0,
+                green: 50.0,
+                blue: 55.0,
+                alpha: 1.0,
+            })
+        );
+        assert_eq!(
+            schematic.text_boxes[0]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("color")
+        );
+        assert_eq!(schematic.text_boxes[0].locked, Some(true));
         assert_eq!(
             schematic.text_boxes[0].uuid.as_deref(),
             Some("45454545-4545-4545-8545-454545454545")
@@ -7641,9 +7714,28 @@ mod tests {
                 .to_summary_json()
                 .contains("\"text_box_count\": 1")
         );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_text_box_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"locked_text_box_count\": 1")
+        );
 
         let scene = schematic.canvas_scene();
         assert_eq!(scene.text_boxes.len(), 1);
+        assert_eq!(
+            scene.text_boxes[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash_dot")
+        );
         assert!(scene.bounds.unwrap().width() >= 17.78);
         assert!(scene.to_summary_json().contains("\"text_box_count\": 1"));
 
@@ -7651,10 +7743,23 @@ mod tests {
         assert!(roundtrip.contains("(text_box \"Bigger\\nMultiline\\nText\""));
         assert!(roundtrip.contains("(size 17.78 12.7)"));
         assert!(roundtrip.contains("(margins 0.9525 0.9525 0.9525 0.9525)"));
+        assert!(roundtrip.contains("(stroke (width 0.0508) (type dash_dot) (color 255 50 55 1))"));
+        assert!(roundtrip.contains("(fill (type color) (color 255 228 206 0.7490196078))"));
         assert!(roundtrip.contains("(uuid \"45454545-4545-4545-8545-454545454545\")"));
+        assert!(roundtrip.contains("(locked yes)"));
         let reparsed = parse_kicad_schematic(&roundtrip, "text_box_roundtrip.kicad_sch").unwrap();
         assert_eq!(reparsed.text_boxes.len(), 1);
         assert_eq!(reparsed.text_boxes[0].text, "Bigger\nMultiline\nText");
+        assert_eq!(
+            reparsed.text_boxes[0]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("color")
+        );
+        assert_eq!(reparsed.text_boxes[0].locked, Some(true));
         assert_eq!(reparsed.canvas_scene().text_boxes.len(), 1);
     }
 

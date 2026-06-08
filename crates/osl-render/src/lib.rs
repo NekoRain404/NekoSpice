@@ -1,8 +1,8 @@
 use osl_core::html_escape;
 use osl_kicad::{
     KicadAt, KicadBoundingBox, KicadCanvasGraphic, KicadCanvasImage, KicadCanvasScene,
-    KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable, KicadCanvasTextBox, KicadLabelKind,
-    KicadPoint,
+    KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable, KicadCanvasTextBox, KicadColor,
+    KicadFill, KicadLabelKind, KicadPoint, KicadStroke,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -279,21 +279,38 @@ fn render_text_box(output: &mut String, viewport: &SvgViewport, text_box: &Kicad
 
     output.push_str("    <g data-text-box=\"true\">\n");
     if let Some(size) = text_box.size {
+        let stroke = svg_stroke_color(text_box.stroke.as_ref(), "#64748b");
+        let stroke_width = svg_stroke_width(text_box.stroke.as_ref(), viewport, 1.4);
+        let dash_array = svg_stroke_dasharray(text_box.stroke.as_ref());
+        let fill = svg_fill_color(text_box.fill.as_ref(), "#fef3c7");
+        let fill_opacity = if fill == "none" { "1" } else { "0.22" };
         output.push_str(&format!(
-            "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"2\" stroke=\"#64748b\" stroke-width=\"1.4\" fill=\"#fef3c7\" fill-opacity=\"0.22\"/>\n",
+            "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"2\" stroke=\"{}\" stroke-width=\"{}\"{} fill=\"{}\" fill-opacity=\"{}\"/>\n",
             fmt(origin.x),
             fmt(origin.y),
             fmt(size.width.abs() * viewport.scale),
-            fmt(size.height.abs() * viewport.scale)
+            fmt(size.height.abs() * viewport.scale),
+            stroke,
+            fmt(stroke_width),
+            dash_array,
+            fill,
+            fill_opacity
         ));
     }
 
     let text_x = origin.x + margin;
     let mut text_y = origin.y + margin + 11.0;
+    let text_fill = text_box
+        .effects
+        .as_ref()
+        .and_then(|effects| effects.font_color)
+        .map(svg_color)
+        .unwrap_or_else(|| "#334155".to_string());
     output.push_str(&format!(
-        "      <text x=\"{}\" y=\"{}\" fill=\"#334155\" stroke=\"none\">",
+        "      <text x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\">",
         fmt(text_x),
-        fmt(text_y)
+        fmt(text_y),
+        text_fill
     ));
     for (index, line) in text_box.text.lines().enumerate() {
         if index == 0 {
@@ -318,6 +335,61 @@ fn render_text_box(output: &mut String, viewport: &SvgViewport, text_box: &Kicad
     }
     output.push_str("</text>\n");
     output.push_str("    </g>\n");
+}
+
+fn svg_color(color: KicadColor) -> String {
+    format!(
+        "rgba({},{},{},{})",
+        fmt(color.red.clamp(0.0, 255.0)),
+        fmt(color.green.clamp(0.0, 255.0)),
+        fmt(color.blue.clamp(0.0, 255.0)),
+        fmt(color.alpha.clamp(0.0, 1.0))
+    )
+}
+
+fn svg_stroke_color(stroke: Option<&KicadStroke>, default: &str) -> String {
+    stroke
+        .and_then(|stroke| stroke.color)
+        .map(svg_color)
+        .unwrap_or_else(|| default.to_string())
+}
+
+fn svg_stroke_width(stroke: Option<&KicadStroke>, viewport: &SvgViewport, default: f64) -> f64 {
+    stroke
+        .and_then(|stroke| stroke.width)
+        .filter(|width| width.is_finite() && *width > 0.0)
+        .map(|width| (width * viewport.scale).max(1.0))
+        .unwrap_or(default)
+}
+
+fn svg_stroke_dasharray(stroke: Option<&KicadStroke>) -> String {
+    match stroke
+        .and_then(|stroke| stroke.stroke_type.as_deref())
+        .unwrap_or("default")
+    {
+        "dash" => " stroke-dasharray=\"8 5\"".to_string(),
+        "dot" => " stroke-dasharray=\"2 5\"".to_string(),
+        "dash_dot" => " stroke-dasharray=\"8 4 2 4\"".to_string(),
+        "dash_dot_dot" => " stroke-dasharray=\"8 4 2 4 2 4\"".to_string(),
+        _ => String::new(),
+    }
+}
+
+fn svg_fill_color(fill: Option<&KicadFill>, default: &str) -> String {
+    let Some(fill) = fill else {
+        return default.to_string();
+    };
+    if fill
+        .fill_type
+        .as_deref()
+        .map(|fill_type| fill_type.eq_ignore_ascii_case("none"))
+        .unwrap_or(false)
+    {
+        return "none".to_string();
+    }
+    fill.color
+        .map(svg_color)
+        .unwrap_or_else(|| default.to_string())
 }
 
 fn render_image(output: &mut String, viewport: &SvgViewport, image: &KicadCanvasImage) {
