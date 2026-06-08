@@ -1,7 +1,8 @@
 use osl_core::{OslError, OslResult, json_escape, read_text};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::env;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Sexp {
@@ -30,6 +31,17 @@ pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
 pub fn read_kicad_symbol_library(path: &Path) -> OslResult<KicadSymbolLibrary> {
     let content = read_text(path)?;
     parse_kicad_symbol_library(&content, &path.display().to_string())
+}
+
+pub fn read_kicad_symbol_library_table(path: &Path) -> OslResult<KicadSymbolLibraryTable> {
+    let content = read_text(path)?;
+    parse_kicad_symbol_library_table(&content, &path.display().to_string())
+}
+
+pub fn read_kicad_symbol_library_index(path: &Path) -> OslResult<KicadSymbolLibraryIndex> {
+    let table = read_kicad_symbol_library_table(path)?;
+    let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
+    Ok(KicadSymbolLibraryIndex::from_table(table, base_dir))
 }
 
 pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchematic> {
@@ -82,6 +94,22 @@ pub fn parse_kicad_symbol_library(input: &str, source: &str) -> OslResult<KicadS
         generator: child_value(root_list, "generator"),
         symbols: direct_children(root_list, "symbol")
             .filter_map(parse_symbol_def)
+            .collect(),
+    })
+}
+
+pub fn parse_kicad_symbol_library_table(
+    input: &str,
+    source: &str,
+) -> OslResult<KicadSymbolLibraryTable> {
+    let root = parse_sexpr(input)?;
+    let root_list = expect_root_list(&root, "sym_lib_table")?;
+
+    Ok(KicadSymbolLibraryTable {
+        source: source.to_string(),
+        version: child_value(root_list, "version"),
+        libraries: direct_children(root_list, "lib")
+            .filter_map(parse_symbol_library_table_row)
             .collect(),
     })
 }
@@ -435,6 +463,206 @@ impl KicadSymbolLibrary {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct KicadSymbolLibraryTable {
+    pub source: String,
+    pub version: Option<String>,
+    pub libraries: Vec<KicadSymbolLibraryTableRow>,
+}
+
+impl KicadSymbolLibraryTable {
+    pub fn enabled_kicad_libraries(&self) -> impl Iterator<Item = &KicadSymbolLibraryTableRow> {
+        self.libraries
+            .iter()
+            .filter(|row| !row.disabled && row.library_type.eq_ignore_ascii_case("KiCad"))
+    }
+
+    pub fn to_summary_json(&self) -> String {
+        format!(
+            concat!(
+                "{{\n",
+                "  \"source\": \"{}\",\n",
+                "  \"version\": {},\n",
+                "  \"library_count\": {},\n",
+                "  \"enabled_kicad_library_count\": {},\n",
+                "  \"disabled_library_count\": {},\n",
+                "  \"hidden_library_count\": {}\n",
+                "}}"
+            ),
+            json_escape(&self.source),
+            json_option(self.version.as_deref()),
+            self.libraries.len(),
+            self.enabled_kicad_libraries().count(),
+            self.libraries.iter().filter(|row| row.disabled).count(),
+            self.libraries.iter().filter(|row| row.hidden).count(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSymbolLibraryTableRow {
+    pub name: String,
+    pub library_type: String,
+    pub uri: String,
+    pub options: Option<String>,
+    pub description: Option<String>,
+    pub hidden: bool,
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSymbolLibraryIndex {
+    pub source: String,
+    pub libraries: Vec<KicadIndexedLibrary>,
+    pub symbols: Vec<KicadIndexedSymbol>,
+    pub diagnostics: Vec<KicadLibraryDiagnostic>,
+}
+
+impl KicadSymbolLibraryIndex {
+    pub fn from_table(table: KicadSymbolLibraryTable, base_dir: &Path) -> Self {
+        let mut libraries = Vec::new();
+        let mut symbols = Vec::new();
+        let mut diagnostics = Vec::new();
+
+        for row in table.libraries {
+            if row.disabled {
+                diagnostics.push(KicadLibraryDiagnostic {
+                    library: row.name.clone(),
+                    severity: KicadDiagnosticSeverity::Info,
+                    message: "library row is disabled".to_string(),
+                });
+                continue;
+            }
+            if !row.library_type.eq_ignore_ascii_case("KiCad") {
+                diagnostics.push(KicadLibraryDiagnostic {
+                    library: row.name.clone(),
+                    severity: KicadDiagnosticSeverity::Warning,
+                    message: format!("unsupported symbol library type '{}'", row.library_type),
+                });
+                continue;
+            }
+
+            let resolved_path = resolve_kicad_uri(&row.uri, base_dir);
+            match read_kicad_symbol_library(&resolved_path) {
+                Ok(library) => {
+                    let symbol_count = library.symbols.len();
+                    for symbol in &library.symbols {
+                        symbols.push(KicadIndexedSymbol {
+                            id: format!("{}:{}", row.name, symbol.local_name()),
+                            library: row.name.clone(),
+                            name: symbol.local_name().to_string(),
+                            source: resolved_path.display().to_string(),
+                            pin_count: symbol.pins.len(),
+                            graphic_count: symbol.graphics.len(),
+                            bounding_box: symbol.bounding_box(),
+                        });
+                    }
+                    libraries.push(KicadIndexedLibrary {
+                        name: row.name,
+                        source: resolved_path.display().to_string(),
+                        symbol_count,
+                    });
+                }
+                Err(error) => {
+                    diagnostics.push(KicadLibraryDiagnostic {
+                        library: row.name,
+                        severity: KicadDiagnosticSeverity::Error,
+                        message: format!("failed to load {}: {}", resolved_path.display(), error),
+                    });
+                }
+            }
+        }
+
+        Self {
+            source: table.source,
+            libraries,
+            symbols,
+            diagnostics,
+        }
+    }
+
+    pub fn symbol(&self, lib_id: &str) -> Option<&KicadIndexedSymbol> {
+        self.symbols.iter().find(|symbol| symbol.id == lib_id)
+    }
+
+    pub fn to_summary_json(&self) -> String {
+        let diagnostics = self
+            .diagnostics
+            .iter()
+            .map(|diagnostic| {
+                format!(
+                    "    {{ \"severity\": \"{}\", \"library\": \"{}\", \"message\": \"{}\" }}",
+                    diagnostic.severity.as_str(),
+                    json_escape(&diagnostic.library),
+                    json_escape(&diagnostic.message)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n");
+
+        format!(
+            concat!(
+                "{{\n",
+                "  \"source\": \"{}\",\n",
+                "  \"library_count\": {},\n",
+                "  \"symbol_count\": {},\n",
+                "  \"diagnostic_count\": {},\n",
+                "  \"diagnostics\": [\n",
+                "{}\n",
+                "  ]\n",
+                "}}"
+            ),
+            json_escape(&self.source),
+            self.libraries.len(),
+            self.symbols.len(),
+            self.diagnostics.len(),
+            diagnostics
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadIndexedLibrary {
+    pub name: String,
+    pub source: String,
+    pub symbol_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadIndexedSymbol {
+    pub id: String,
+    pub library: String,
+    pub name: String,
+    pub source: String,
+    pub pin_count: usize,
+    pub graphic_count: usize,
+    pub bounding_box: Option<KicadBoundingBox>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadLibraryDiagnostic {
+    pub library: String,
+    pub severity: KicadDiagnosticSeverity,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KicadDiagnosticSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+impl KicadDiagnosticSeverity {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Warning => "warning",
+            Self::Error => "error",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct KicadSymbolInstance {
     pub lib_id: String,
     pub at: Option<KicadAt>,
@@ -491,6 +719,13 @@ impl KicadSymbolDef {
             }
         }
         bounds.finish()
+    }
+
+    pub fn local_name(&self) -> &str {
+        self.name
+            .rsplit_once(':')
+            .map(|(_, local_name)| local_name)
+            .unwrap_or(&self.name)
     }
 }
 
@@ -880,6 +1115,19 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     })
 }
 
+fn parse_symbol_library_table_row(node: &Sexp) -> Option<KicadSymbolLibraryTableRow> {
+    let items = list_items(node);
+    Some(KicadSymbolLibraryTableRow {
+        name: child_value(items, "name")?,
+        library_type: child_value(items, "type")?,
+        uri: child_value(items, "uri")?,
+        options: child_value(items, "options"),
+        description: child_value(items, "descr"),
+        hidden: child(items, "hidden").is_some(),
+        disabled: child(items, "disabled").is_some(),
+    })
+}
+
 fn parse_pin_def(node: &Sexp) -> Option<KicadPinDef> {
     let items = list_items(node);
     Some(KicadPinDef {
@@ -1081,6 +1329,56 @@ fn json_option(value: Option<&str>) -> String {
     }
 }
 
+fn resolve_kicad_uri(uri: &str, base_dir: &Path) -> PathBuf {
+    let base_dir = normalize_base_dir(base_dir);
+    let expanded = expand_kicad_uri(uri, &base_dir);
+    let path = PathBuf::from(expanded);
+    if path.is_absolute() {
+        path
+    } else {
+        base_dir.join(path)
+    }
+}
+
+fn normalize_base_dir(base_dir: &Path) -> PathBuf {
+    if base_dir.is_absolute() {
+        base_dir.to_path_buf()
+    } else {
+        env::current_dir()
+            .map(|cwd| cwd.join(base_dir))
+            .unwrap_or_else(|_| base_dir.to_path_buf())
+    }
+}
+
+fn expand_kicad_uri(uri: &str, base_dir: &Path) -> String {
+    let mut expanded = String::new();
+    let mut remaining = uri;
+
+    while let Some(start) = remaining.find("${") {
+        expanded.push_str(&remaining[..start]);
+        let after_start = &remaining[start + 2..];
+        let Some(end) = after_start.find('}') else {
+            expanded.push_str(&remaining[start..]);
+            return expanded;
+        };
+
+        let name = &after_start[..end];
+        if name == "KIPRJMOD" {
+            expanded.push_str(&base_dir.display().to_string());
+        } else if let Ok(value) = env::var(name) {
+            expanded.push_str(&value);
+        } else {
+            expanded.push_str("${");
+            expanded.push_str(name);
+            expanded.push('}');
+        }
+        remaining = &after_start[end + 1..];
+    }
+
+    expanded.push_str(remaining);
+    expanded
+}
+
 fn transform_symbol_point(pin_at: KicadAt, symbol_at: KicadAt) -> KicadPoint {
     let local = KicadPoint {
         x: pin_at.x,
@@ -1176,8 +1474,10 @@ fn preferred_net_label(labels: Option<&BTreeSet<String>>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        KicadLabelKind, parse_kicad_schematic, parse_kicad_symbol_library, parse_sexpr,
-        read_kicad_schematic, read_kicad_symbol_library,
+        KicadLabelKind, parse_kicad_schematic, parse_kicad_symbol_library,
+        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_schematic,
+        read_kicad_symbol_library, read_kicad_symbol_library_index,
+        read_kicad_symbol_library_table,
     };
     use std::path::Path;
 
@@ -1275,6 +1575,81 @@ mod tests {
     }
 
     #[test]
+    fn parses_kicad_symbol_library_table_fixture() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let table = read_kicad_symbol_library_table(
+            &workspace_root.join("examples/kicad_schematic/sym-lib-table"),
+        )
+        .unwrap();
+
+        assert_eq!(table.version.as_deref(), Some("7"));
+        assert_eq!(table.libraries.len(), 1);
+        assert_eq!(table.libraries[0].name, "NekoSpice");
+        assert_eq!(table.libraries[0].library_type, "KiCad");
+        assert_eq!(
+            table.libraries[0].description.as_deref(),
+            Some("NekoSpice analog simulation symbols")
+        );
+        assert_eq!(table.enabled_kicad_libraries().count(), 1);
+        assert!(table.to_summary_json().contains("\"library_count\": 1"));
+    }
+
+    #[test]
+    fn builds_kicad_symbol_library_index_fixture() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let index = read_kicad_symbol_library_index(
+            &workspace_root.join("examples/kicad_schematic/sym-lib-table"),
+        )
+        .unwrap();
+
+        assert_eq!(index.libraries.len(), 1);
+        assert_eq!(index.symbols.len(), 3);
+        assert_eq!(index.diagnostics.len(), 0);
+        let resistor = index.symbol("NekoSpice:R").unwrap();
+        assert_eq!(resistor.library, "NekoSpice");
+        assert_eq!(resistor.name, "R");
+        assert_eq!(resistor.pin_count, 2);
+        assert_eq!(resistor.graphic_count, 1);
+        assert!(resistor.bounding_box.is_some());
+        assert!(index.to_summary_json().contains("\"symbol_count\": 3"));
+    }
+
+    #[test]
+    fn indexes_kicad_library_table_diagnostics() {
+        let table = parse_kicad_symbol_library_table(
+            r#"(sym_lib_table
+  (version 7)
+  (lib (name "Disabled")(type "KiCad")(uri "disabled.kicad_sym")(options "")(descr "")(disabled))
+  (lib (name "Future")(type "FutureCAD")(uri "future.kicad_sym")(options "")(descr ""))
+)"#,
+            "inline",
+        )
+        .unwrap();
+
+        let index = super::KicadSymbolLibraryIndex::from_table(table, Path::new("."));
+        assert_eq!(index.libraries.len(), 0);
+        assert_eq!(index.symbols.len(), 0);
+        assert_eq!(index.diagnostics.len(), 2);
+        assert!(
+            index
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message == "library row is disabled")
+        );
+        assert!(index.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("unsupported symbol library type")
+        }));
+    }
+
+    #[test]
     fn parses_quoted_strings_and_comments() {
         let parsed =
             parse_sexpr("(root ; comment\n  \"quoted value\" (child \"a\\\\b\"))").unwrap();
@@ -1292,6 +1667,9 @@ mod tests {
         assert!(error.to_string().contains("expected KiCad root"));
 
         let error = parse_kicad_symbol_library("(kicad_sch)", "bad.kicad_sym").unwrap_err();
+        assert!(error.to_string().contains("expected KiCad root"));
+
+        let error = parse_kicad_symbol_library_table("(kicad_sch)", "sym-lib-table").unwrap_err();
         assert!(error.to_string().contains("expected KiCad root"));
     }
 }

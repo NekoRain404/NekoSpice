@@ -11,7 +11,7 @@ The current three-day build is a vertical slice:
 - `osl bench`: run every `.cir` under a directory and collect timings.
 - `osl model-check`: scan imported SPICE models for `.subckt`, `.model`, LTspice symbol pin mapping, dialect risks, and unsupported directives.
 - `osl import`: inspect SPICE/KiCad-style netlists, Rust-native KiCad schematics, and LTspice schematics, then generate an import compatibility report and runnable NekoSpice project.
-- `osl kicad-inspect`: parse KiCad `.kicad_sch` / `.kicad_sym` assets through the Rust-native KiCad IR and emit a JSON summary.
+- `osl kicad-inspect`: parse KiCad `.kicad_sch`, `.kicad_sym`, and `sym-lib-table` assets through the Rust-native KiCad IR and emit a JSON summary or symbol-library index.
 - `osl waveform`: query raw waveforms into viewport-sized min/max envelope JSON.
 - HTML and JSON reports for runs and verification batches.
 - Run artifacts include `waveform.raw`, `waveform.csv`, and `waveform-summary.json`.
@@ -38,6 +38,7 @@ cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output re
 cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output reports/import_with_models_001
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output reports/kicad_schematic.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output reports/kicad_symbol_library.json
+cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --output reports/kicad_symbol_index.json
 cargo run -p osl-cli -- waveform runs/rc_001/waveform.raw --signal v(out) --from 8us --to 10us --points 200 --output reports/vout-envelope.json
 ```
 
@@ -102,9 +103,10 @@ cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.os
 ```bash
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym
+cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index
 ```
 
-`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, and placement metadata. The local KiCad source mirror is treated only as reference material and is ignored by Git.
+`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, and a symbol library index for later GUI library browsing and schematic symbol resolution. The local KiCad source mirror is treated only as reference material and is ignored by Git.
 
 ## Validation
 
@@ -123,6 +125,7 @@ cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output /t
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_schematic/project/project.osl.yaml --output /tmp/nekospice_import/kicad_schematic_verify
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_schematic.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/kicad_symbol_library.json
+cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --output /tmp/nekospice_import/kicad_symbol_index.json
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output /tmp/nekospice_import/ltspice_rc
 cargo run -p osl-cli -- verify /tmp/nekospice_import/ltspice_rc/project/project.osl.yaml --output /tmp/nekospice_import/ltspice_rc_verify
 cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output /tmp/nekospice_import/kicad_with_models
