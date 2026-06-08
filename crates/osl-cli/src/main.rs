@@ -3,7 +3,7 @@ use osl_core::{
     make_run_id, parameters_json, read_text, write_text,
 };
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
-use osl_waveform::{MeasurementKind, measure, read_ngspice_ascii_raw};
+use osl_waveform::{MeasurementKind, WaveformSummary, measure, read_ngspice_ascii_raw};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -717,6 +717,7 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
                 from: check.from,
                 to: check.to,
                 value: None,
+                summary: None,
                 min: check.min,
                 max: check.max,
                 passed: false,
@@ -734,6 +735,7 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
                 from: check.from,
                 to: check.to,
                 value: None,
+                summary: None,
                 min: check.min,
                 max: check.max,
                 passed: false,
@@ -751,6 +753,7 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
                 from: check.from,
                 to: check.to,
                 value: None,
+                summary: None,
                 min: check.min,
                 max: check.max,
                 passed: false,
@@ -768,6 +771,25 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
                 from: check.from,
                 to: check.to,
                 value: None,
+                summary: None,
+                min: check.min,
+                max: check.max,
+                passed: false,
+                message: error.to_string(),
+            };
+        }
+    };
+    let summary = match WaveformSummary::summarize(&values) {
+        Ok(summary) => summary,
+        Err(error) => {
+            return CheckResult {
+                name: check.name.clone(),
+                kind: check.kind.clone(),
+                signal: check.signal.clone(),
+                from: check.from,
+                to: check.to,
+                value: None,
+                summary: None,
                 min: check.min,
                 max: check.max,
                 passed: false,
@@ -794,6 +816,7 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
         from: check.from,
         to: check.to,
         value: Some(value),
+        summary: Some(summary),
         min: check.min,
         max: check.max,
         passed,
@@ -847,6 +870,7 @@ struct CheckResult {
     from: Option<f64>,
     to: Option<f64>,
     value: Option<f64>,
+    summary: Option<WaveformSummary>,
     min: Option<f64>,
     max: Option<f64>,
     passed: bool,
@@ -894,7 +918,7 @@ impl VerifyReport {
                         concat!(
                             "    {{ \"run\": \"{}\", \"netlist\": \"{}\", \"run_dir\": \"{}\", ",
                             "\"check\": \"{}\", \"signal\": \"{}\", \"value\": {}, ",
-                            "\"min\": {}, \"max\": {}, \"message\": \"{}\" }}"
+                            "\"min\": {}, \"max\": {}, \"summary\": {}, \"message\": \"{}\" }}"
                         ),
                         json_escape(&result.name),
                         json_escape(&result.netlist),
@@ -904,6 +928,7 @@ impl VerifyReport {
                         option_f64_json(check.value),
                         option_f64_json(check.min),
                         option_f64_json(check.max),
+                        summary_json(check.summary),
                         json_escape(&check.message)
                     )
                 })
@@ -922,7 +947,7 @@ impl VerifyReport {
                         format!(
                             concat!(
                                 "        {{ \"name\": \"{}\", \"kind\": \"{}\", \"signal\": \"{}\", ",
-                                "\"from\": {}, \"to\": {}, \"value\": {}, \"min\": {}, \"max\": {}, \"passed\": {}, \"message\": \"{}\" }}"
+                                "\"from\": {}, \"to\": {}, \"value\": {}, \"min\": {}, \"max\": {}, \"passed\": {}, \"summary\": {}, \"message\": \"{}\" }}"
                             ),
                             json_escape(&check.name),
                             json_escape(&check.kind),
@@ -933,6 +958,7 @@ impl VerifyReport {
                             option_f64_json(check.min),
                             option_f64_json(check.max),
                             check.passed,
+                            summary_json(check.summary),
                             json_escape(&check.message)
                         )
                     })
@@ -1008,12 +1034,13 @@ impl VerifyReport {
                     format!(
                         concat!(
                             "<tr class=\"failed\"><td>{}</td><td>{}</td><td>{}</td>",
-                            "<td>{}</td><td><a href=\"{}\">run</a> <a href=\"{}\">waveform</a> <a href=\"{}\">log</a></td></tr>"
+                            "<td>{}</td><td>{}</td><td><a href=\"{}\">run</a> <a href=\"{}\">waveform</a> <a href=\"{}\">log</a></td></tr>"
                         ),
                         html_escape(&result.name),
                         html_escape(&parameters_text(&result.parameters)),
                         html_escape(&check.name),
                         html_escape(&check.message),
+                        html_escape(&summary_text(check.summary)),
                         html_escape(&result.artifact_href("report.html")),
                         html_escape(&result.artifact_href("waveform.raw")),
                         html_escape(&result.artifact_href("ngspice.log"))
@@ -1027,7 +1054,7 @@ impl VerifyReport {
             format!(
                 concat!(
                     "<section><h2>Failures</h2>",
-                    "<table><thead><tr><th>Run</th><th>Parameters</th><th>Check</th><th>Message</th><th>Artifacts</th></tr></thead>",
+                    "<table><thead><tr><th>Run</th><th>Parameters</th><th>Check</th><th>Message</th><th>Summary</th><th>Artifacts</th></tr></thead>",
                     "<tbody>{}</tbody></table></section>"
                 ),
                 failure_rows
@@ -1048,10 +1075,11 @@ impl VerifyReport {
                         .iter()
                         .map(|check| {
                             format!(
-                                "{}: {} ({})",
+                                "{}: {} ({}; {})",
                                 check.name,
                                 check.status_text(),
-                                check.message
+                                check.message,
+                                summary_text(check.summary)
                             )
                         })
                         .collect::<Vec<_>>()
@@ -1274,6 +1302,43 @@ fn option_f64_text(value: Option<f64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "none".to_string())
+}
+
+fn summary_json(summary: Option<WaveformSummary>) -> String {
+    match summary {
+        Some(summary) => format!(
+            concat!(
+                "{{ \"samples\": {}, \"first\": {}, \"last\": {}, \"min\": {}, ",
+                "\"max\": {}, \"avg\": {}, \"pp\": {}, \"rms\": {} }}"
+            ),
+            summary.samples,
+            summary.first,
+            summary.last,
+            summary.min,
+            summary.max,
+            summary.avg,
+            summary.peak_to_peak,
+            summary.rms
+        ),
+        None => "null".to_string(),
+    }
+}
+
+fn summary_text(summary: Option<WaveformSummary>) -> String {
+    match summary {
+        Some(summary) => format!(
+            "samples={} first={} last={} min={} max={} avg={} pp={} rms={}",
+            summary.samples,
+            summary.first,
+            summary.last,
+            summary.min,
+            summary.max,
+            summary.avg,
+            summary.peak_to_peak,
+            summary.rms
+        ),
+        None => "summary unavailable".to_string(),
+    }
 }
 
 fn window_text(from: Option<f64>, to: Option<f64>) -> String {

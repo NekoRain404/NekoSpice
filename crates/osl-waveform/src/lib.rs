@@ -126,6 +126,39 @@ impl MeasurementKind {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct WaveformSummary {
+    pub samples: usize,
+    pub first: f64,
+    pub last: f64,
+    pub min: f64,
+    pub max: f64,
+    pub avg: f64,
+    pub peak_to_peak: f64,
+    pub rms: f64,
+}
+
+impl WaveformSummary {
+    pub fn summarize(values: &[f64]) -> OslResult<Self> {
+        if values.is_empty() {
+            return Err(OslError::InvalidInput(
+                "cannot summarize an empty waveform signal".to_string(),
+            ));
+        }
+
+        Ok(Self {
+            samples: values.len(),
+            first: values[0],
+            last: values[values.len() - 1],
+            min: measure(MeasurementKind::Min, values)?,
+            max: measure(MeasurementKind::Max, values)?,
+            avg: measure(MeasurementKind::Avg, values)?,
+            peak_to_peak: measure(MeasurementKind::PeakToPeak, values)?,
+            rms: measure(MeasurementKind::Rms, values)?,
+        })
+    }
+}
+
 pub fn measure(kind: MeasurementKind, values: &[f64]) -> OslResult<f64> {
     if values.is_empty() {
         return Err(OslError::InvalidInput(
@@ -450,5 +483,13 @@ Values:
                 .unwrap(),
             vec![4.0]
         );
+        let summary =
+            WaveformSummary::summarize(waveform.signal_values("v(out)").unwrap()).unwrap();
+        assert_eq!(summary.samples, 2);
+        assert_eq!(summary.first, 2.0);
+        assert_eq!(summary.last, 4.0);
+        assert_eq!(summary.min, 2.0);
+        assert_eq!(summary.max, 4.0);
+        assert_eq!(summary.peak_to_peak, 2.0);
     }
 }

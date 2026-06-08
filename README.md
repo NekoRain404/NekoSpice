@@ -8,7 +8,7 @@ The current three-day build is a vertical slice:
 - `osl verify`: run a small YAML verification plan.
 - `osl bench`: run every `.cir` under a directory and collect timings.
 - HTML and JSON reports for runs and verification batches.
-- Failure drilldown with failed checks, parameters, logs, netlists, and waveform artifacts.
+- Failure drilldown with failed checks, waveform summaries, parameters, logs, netlists, and waveform artifacts.
 - Measurement checks over ngspice ASCII `waveform.raw`: `final_value`, `avg`, `min`, `max`, `pp`, `rms`.
 
 ## Requirements
@@ -45,7 +45,7 @@ runs:
         max: 0.50
 ```
 
-Each sweep dimension expands into a Cartesian product of ngspice runs. `--jobs <n>` runs independent cases concurrently. Parameters are injected as `.param` overrides in the working netlist and recorded in `run.json` and `verify.json`; reports are sorted by the original expansion order. Checks can use optional `from` / `to` windows with SPICE-style suffixes such as `8us`, `3ms`, or `1k`.
+Each sweep dimension expands into a Cartesian product of ngspice runs. `--jobs <n>` runs independent cases concurrently. Parameters are injected as `.param` overrides in the working netlist and recorded in `run.json` and `verify.json`; reports are sorted by the original expansion order. Checks can use optional `from` / `to` windows with SPICE-style suffixes such as `8us`, `3ms`, or `1k`. Verification reports include a compact summary for each evaluated signal window: sample count, first/last value, min/max, average, peak-to-peak, and RMS.
 
 The ngspice runner automatically injects an ASCII raw export into the working netlist:
 
