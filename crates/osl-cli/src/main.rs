@@ -2,7 +2,7 @@ use osl_core::{
     OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape, json_escape,
     make_run_id, parameters_json, read_text, write_text,
 };
-use osl_model::ModelCheckReport;
+use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
 use osl_waveform::{MeasurementKind, WaveformSummary, measure, read_ngspice_raw};
 use std::env;
@@ -61,7 +61,7 @@ Usage:
   osl run <netlist.cir> [--output <dir>] [--ngspice <path>]
   osl verify <project.osl.yaml> [--output <dir>] [--ngspice <path>] [--jobs <n>]
   osl bench <directory> [--output <dir>] [--ngspice <path>]
-  osl model-check <netlist-or-directory> [--output <dir>]
+  osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl report <run-or-verify-dir>
   osl --version
 
@@ -206,6 +206,7 @@ fn bench_command(args: &[String]) -> OslResult<i32> {
 
 fn model_check_command(args: &[String]) -> OslResult<i32> {
     let input = positional(args, 0, "missing path for 'osl model-check'")?;
+    let symbol_path = flag_value(args, "--symbol").map(PathBuf::from);
     let output_dir = flag_value(args, "--output")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("reports").join(make_run_id("model-check")));
@@ -213,7 +214,8 @@ fn model_check_command(args: &[String]) -> OslResult<i32> {
     fs::create_dir_all(&output_dir)
         .map_err(|err| OslError::io(format!("create {}", output_dir.display()), err))?;
 
-    let report = ModelCheckReport::scan(Path::new(input))?;
+    let options = ModelCheckOptions { symbol_path };
+    let report = ModelCheckReport::scan_with_options(Path::new(input), &options)?;
     write_text(&output_dir.join("model-check.json"), &report.to_json())?;
     write_text(
         &output_dir.join("report.html"),

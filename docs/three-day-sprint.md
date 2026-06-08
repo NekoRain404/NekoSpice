@@ -52,9 +52,10 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output repor
 - 实现 `osl bench <directory>`。
 - 实现 `osl model-check <netlist-or-directory>` 的最小模型诊断闭环。
 - 输出 `.subckt` pin list、`.model` 索引、unsupported directive、方言风险和兼容性评分。
+- 支持 LTspice `.asy` symbol pin mapping：解析 `PINATTR PinName` / `SpiceOrder` 并对齐 `.subckt` pin list。
 - 补充文档和使用命令。
 - 建立 Git 工程。
-- 固化三天后下一步任务：measurement、sweep、pin mapping、波形数据层。
+- 固化三天后下一步任务：measurement、sweep、KiCad/LTspice 导入、波形数据层。
 
 验收：
 
@@ -63,6 +64,7 @@ cargo fmt --check
 cargo test --workspace
 cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
+cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
 ```
 
 ## 三天后继续做什么
@@ -70,5 +72,5 @@ cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --out
 优先级从高到低：
 
 1. richer YAML parser：替换当前最小子集解析器。
-2. pin mapping：导入 KiCad / LTspice symbol pin 信息并与 `.subckt` pin list 对齐。
+2. KiCad / LTspice import：解析 KiCad SPICE netlist 和更多 LTspice symbol 属性。
 3. waveform data layer：LOD、mmap、viewport query。
