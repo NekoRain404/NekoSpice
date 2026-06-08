@@ -669,9 +669,14 @@ impl KicadSchematic {
         self.symbols.push(KicadSymbolInstance {
             lib_id: lib_id.clone(),
             at: Some(at),
+            mirror: None,
             unit: Some(unit.unwrap_or(1)),
             uuid: Some(instance_uuid),
             exclude_from_sim: None,
+            in_bom: None,
+            on_board: None,
+            dnp: None,
+            fields_autoplaced: None,
             properties,
             pins,
             instances: Vec::new(),
@@ -961,6 +966,10 @@ impl KicadSchematic {
             size: Some(size),
             uuid: Some(sheet_uuid),
             exclude_from_sim: None,
+            in_bom: None,
+            on_board: None,
+            dnp: None,
+            fields_autoplaced: None,
             properties: sheet_properties(name, file, at, size),
             pins: checked_pins,
             instances: Vec::new(),
@@ -2075,6 +2084,11 @@ impl KicadSchematic {
                 "  \"embedded_project_instance_count\": {},\n",
                 "  \"embedded_instance_path_count\": {},\n",
                 "  \"variant_instance_count\": {},\n",
+                "  \"dnp_item_count\": {},\n",
+                "  \"bom_excluded_count\": {},\n",
+                "  \"board_excluded_count\": {},\n",
+                "  \"mirrored_symbol_count\": {},\n",
+                "  \"fields_autoplaced_count\": {},\n",
                 "  \"embedded_fonts\": {},\n",
                 "  \"library_graphic_count\": {}\n",
                 "}}"
@@ -2122,6 +2136,11 @@ impl KicadSchematic {
             self.embedded_project_instance_count(),
             self.embedded_instance_path_count(),
             self.variant_instance_count(),
+            self.dnp_item_count(),
+            self.bom_excluded_count(),
+            self.board_excluded_count(),
+            self.mirrored_symbol_count(),
+            self.fields_autoplaced_count(),
             json_bool_option(self.embedded_fonts),
             self.library_symbols
                 .iter()
@@ -2177,6 +2196,61 @@ impl KicadSchematic {
             .map(|instance| instance.variants.len())
             .sum::<usize>();
         embedded_variants + top_level_variants
+    }
+
+    fn dnp_item_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.dnp == Some(true))
+            .count()
+            + self
+                .sheets
+                .iter()
+                .filter(|sheet| sheet.dnp == Some(true))
+                .count()
+    }
+
+    fn bom_excluded_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.in_bom == Some(false))
+            .count()
+            + self
+                .sheets
+                .iter()
+                .filter(|sheet| sheet.in_bom == Some(false))
+                .count()
+    }
+
+    fn board_excluded_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.on_board == Some(false))
+            .count()
+            + self
+                .sheets
+                .iter()
+                .filter(|sheet| sheet.on_board == Some(false))
+                .count()
+    }
+
+    fn mirrored_symbol_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.mirror.is_some())
+            .count()
+    }
+
+    fn fields_autoplaced_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.fields_autoplaced == Some(true))
+            .count()
+            + self
+                .sheets
+                .iter()
+                .filter(|sheet| sheet.fields_autoplaced == Some(true))
+                .count()
     }
 }
 
@@ -3450,9 +3524,14 @@ impl KicadDiagnosticSeverity {
 pub struct KicadSymbolInstance {
     pub lib_id: String,
     pub at: Option<KicadAt>,
+    pub mirror: Option<String>,
     pub unit: Option<u32>,
     pub uuid: Option<String>,
     pub exclude_from_sim: Option<bool>,
+    pub in_bom: Option<bool>,
+    pub on_board: Option<bool>,
+    pub dnp: Option<bool>,
+    pub fields_autoplaced: Option<bool>,
     pub properties: Vec<KicadProperty>,
     pub pins: Vec<KicadSymbolPinRef>,
     pub instances: Vec<KicadProjectInstance>,
@@ -3565,6 +3644,13 @@ impl KicadSymbolInstance {
                 format_number(at.rotation)
             ));
         }
+        if let Some(mirror) = &self.mirror {
+            output.push_str(&format!(
+                "{}  (mirror {})\n",
+                pad,
+                sexpr_atom_or_string(mirror)
+            ));
+        }
         if let Some(unit) = self.unit {
             output.push_str(&format!("{}  (unit {})\n", pad, unit));
         }
@@ -3578,6 +3664,15 @@ impl KicadSymbolInstance {
                 if exclude_from_sim { "yes" } else { "no" }
             ));
         }
+        write_optional_bool_sexpr(output, indent + 2, "in_bom", self.in_bom);
+        write_optional_bool_sexpr(output, indent + 2, "on_board", self.on_board);
+        write_optional_bool_sexpr(output, indent + 2, "dnp", self.dnp);
+        write_optional_bool_sexpr(
+            output,
+            indent + 2,
+            "fields_autoplaced",
+            self.fields_autoplaced,
+        );
         for property in &self.properties {
             property.write_property_sexpr(output, indent + 2);
         }
@@ -4545,6 +4640,10 @@ pub struct KicadSheet {
     pub size: Option<KicadSize>,
     pub uuid: Option<String>,
     pub exclude_from_sim: Option<bool>,
+    pub in_bom: Option<bool>,
+    pub on_board: Option<bool>,
+    pub dnp: Option<bool>,
+    pub fields_autoplaced: Option<bool>,
     pub properties: Vec<KicadProperty>,
     pub pins: Vec<KicadSheetPin>,
     pub instances: Vec<KicadProjectInstance>,
@@ -4604,6 +4703,15 @@ impl KicadSheet {
                 if exclude_from_sim { "yes" } else { "no" }
             ));
         }
+        write_optional_bool_sexpr(output, indent + 2, "in_bom", self.in_bom);
+        write_optional_bool_sexpr(output, indent + 2, "on_board", self.on_board);
+        write_optional_bool_sexpr(output, indent + 2, "dnp", self.dnp);
+        write_optional_bool_sexpr(
+            output,
+            indent + 2,
+            "fields_autoplaced",
+            self.fields_autoplaced,
+        );
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
         }
@@ -5015,9 +5123,14 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
     Some(KicadSymbolInstance {
         lib_id: child_value(items, "lib_id")?,
         at: child(items, "at").and_then(parse_at),
+        mirror: child_value(items, "mirror"),
         unit: child_value(items, "unit").and_then(|value| value.parse().ok()),
         uuid: child_value(items, "uuid"),
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
+        in_bom: child_value(items, "in_bom").and_then(parse_kicad_bool_value),
+        on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
+        dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
+        fields_autoplaced: child_value(items, "fields_autoplaced").and_then(parse_kicad_bool_value),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -5263,6 +5376,18 @@ fn write_variant_instance_sexpr(
     output.push_str(&format!("{})\n", pad));
 }
 
+fn write_optional_bool_sexpr(output: &mut String, indent: usize, name: &str, value: Option<bool>) {
+    if let Some(value) = value {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}({} {})\n",
+            pad,
+            name,
+            if value { "yes" } else { "no" }
+        ));
+    }
+}
+
 fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     let items = list_items(node);
     Some(KicadSymbolDef {
@@ -5456,6 +5581,10 @@ fn parse_sheet(node: &Sexp) -> Option<KicadSheet> {
         size: child(items, "size").and_then(parse_size),
         uuid: child_value(items, "uuid"),
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
+        in_bom: child_value(items, "in_bom").and_then(parse_kicad_bool_value),
+        on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
+        dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
+        fields_autoplaced: child_value(items, "fields_autoplaced").and_then(parse_kicad_bool_value),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -7398,6 +7527,96 @@ mod tests {
             reparsed.sheets[0].instances[0].paths[0].page.as_deref(),
             Some("2")
         );
+    }
+
+    #[test]
+    fn preserves_symbol_and_sheet_assembly_flags() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20251028)
+  (generator "eeschema")
+  (paper "A4")
+  (lib_symbols)
+  (symbol
+    (lib_id "Device:R")
+    (at 10 20 0)
+    (mirror x)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board yes)
+    (dnp yes)
+    (fields_autoplaced yes)
+    (uuid "11111111-1111-4111-8111-111111111111")
+    (property "Reference" "Rskip" (at 10 17.46 0))
+    (property "Value" "DNP" (at 10 22.54 0))
+    (pin "1" (uuid "22222222-2222-4222-8222-222222222222"))
+  )
+  (sheet
+    (at 40 20)
+    (size 20 10)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board no)
+    (dnp no)
+    (fields_autoplaced yes)
+    (uuid "33333333-3333-4333-8333-333333333333")
+    (property "Sheetname" "Sub" (at 40 17.46 0))
+    (property "Sheetfile" "sub.kicad_sch" (at 40 32.54 0))
+  )
+)"#,
+            "assembly_flags.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.symbols[0].mirror.as_deref(), Some("x"));
+        assert_eq!(schematic.symbols[0].in_bom, Some(false));
+        assert_eq!(schematic.symbols[0].on_board, Some(true));
+        assert_eq!(schematic.symbols[0].dnp, Some(true));
+        assert_eq!(schematic.symbols[0].fields_autoplaced, Some(true));
+        assert_eq!(schematic.sheets[0].in_bom, Some(true));
+        assert_eq!(schematic.sheets[0].on_board, Some(false));
+        assert_eq!(schematic.sheets[0].dnp, Some(false));
+        assert_eq!(schematic.sheets[0].fields_autoplaced, Some(true));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"dnp_item_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"bom_excluded_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"board_excluded_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"mirrored_symbol_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"fields_autoplaced_count\": 2")
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(mirror x)"));
+        assert!(roundtrip.contains("(in_bom no)"));
+        assert!(roundtrip.contains("(on_board yes)"));
+        assert!(roundtrip.contains("(dnp yes)"));
+        assert!(roundtrip.contains("(fields_autoplaced yes)"));
+        assert!(roundtrip.contains("(on_board no)"));
+        let reparsed =
+            parse_kicad_schematic(&roundtrip, "assembly_flags_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.symbols[0].mirror.as_deref(), Some("x"));
+        assert_eq!(reparsed.symbols[0].dnp, Some(true));
+        assert_eq!(reparsed.sheets[0].on_board, Some(false));
+        assert_eq!(reparsed.sheets[0].fields_autoplaced, Some(true));
     }
 
     #[test]
