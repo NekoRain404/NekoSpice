@@ -1964,6 +1964,7 @@ fn parse_kicad_sheet_pin(value: &str) -> OslResult<KicadSheetPin> {
         pin_type,
         at: Some(at),
         uuid: None,
+        effects: None,
     })
 }
 

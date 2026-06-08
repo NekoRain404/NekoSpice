@@ -849,6 +849,7 @@ impl KicadSchematic {
             kind,
             at: Some(at),
             uuid,
+            effects: None,
         });
 
         Ok(KicadEditSummary {
@@ -877,6 +878,7 @@ impl KicadSchematic {
             text: text.clone(),
             at: Some(at),
             uuid,
+            effects: None,
         });
 
         Ok(KicadEditSummary {
@@ -954,6 +956,7 @@ impl KicadSchematic {
                 pin_type: pin_type.to_string(),
                 at: Some(at),
                 uuid: Some(pin_uuid),
+                effects: pin.effects.clone(),
             });
             if checked_pins[..index]
                 .iter()
@@ -2691,6 +2694,7 @@ impl KicadCanvasScene {
                             name: pin.name.clone(),
                             pin_type: pin.pin_type.clone(),
                             at: pin.at,
+                            effects: pin.effects.clone(),
                         }
                     })
                     .collect();
@@ -2817,6 +2821,7 @@ impl KicadCanvasScene {
                     text: label.text.clone(),
                     kind: label.kind,
                     at: label.at,
+                    effects: label.effects.clone(),
                 }
             })
             .collect::<Vec<_>>();
@@ -2832,6 +2837,7 @@ impl KicadCanvasScene {
                     text: text.text.clone(),
                     at: text.at,
                     is_spice_directive: text.text.trim_start().starts_with('.'),
+                    effects: text.effects.clone(),
                 }
             })
             .collect::<Vec<_>>();
@@ -2850,6 +2856,7 @@ impl KicadCanvasScene {
                     at: text_box.at,
                     size: text_box.size,
                     margins: text_box.margins,
+                    effects: text_box.effects.clone(),
                 }
             })
             .collect::<Vec<_>>();
@@ -2992,6 +2999,7 @@ pub struct KicadCanvasSheetPin {
     pub name: String,
     pub pin_type: String,
     pub at: Option<KicadAt>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3138,6 +3146,7 @@ pub struct KicadCanvasLabel {
     pub text: String,
     pub kind: KicadLabelKind,
     pub at: Option<KicadAt>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3145,6 +3154,7 @@ pub struct KicadCanvasText {
     pub text: String,
     pub at: Option<KicadAt>,
     pub is_spice_directive: bool,
+    pub effects: Option<KicadTextEffects>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3153,6 +3163,7 @@ pub struct KicadCanvasTextBox {
     pub at: Option<KicadAt>,
     pub size: Option<KicadSize>,
     pub margins: Option<KicadMargins>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4461,22 +4472,54 @@ impl KicadProperty {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadTextEffects {
     pub font_size: Option<KicadSize>,
+    pub font_thickness: Option<f64>,
+    pub font_bold: Option<bool>,
+    pub font_italic: Option<bool>,
+    pub font_color: Option<KicadColor>,
     pub justify: Vec<String>,
+    pub hide: bool,
+    pub href: Option<String>,
 }
 
 impl KicadTextEffects {
     fn write_effects_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(effects", pad));
+        self.write_font_sexpr(output);
+        self.write_effect_tail(output);
+        output.push_str(")\n");
+    }
+
+    fn write_inline_effects_sexpr(&self, output: &mut String) {
+        output.push_str(" (effects");
+        self.write_font_sexpr(output);
+        self.write_effect_tail(output);
+        output.push(')');
+    }
+
+    fn write_font_sexpr(&self, output: &mut String) {
+        output.push_str(" (font");
         if let Some(size) = self.font_size {
             output.push_str(&format!(
-                " (font (size {} {}))",
+                " (size {} {})",
                 format_number(size.width),
                 format_number(size.height)
             ));
         } else {
-            output.push_str(" (font (size 1.27 1.27))");
+            output.push_str(" (size 1.27 1.27)");
         }
+        if let Some(thickness) = self.font_thickness {
+            output.push_str(&format!(" (thickness {})", format_number(thickness)));
+        }
+        write_inline_optional_bool_sexpr(output, "bold", self.font_bold);
+        write_inline_optional_bool_sexpr(output, "italic", self.font_italic);
+        if let Some(color) = self.font_color {
+            color.write_inline_color_sexpr(output);
+        }
+        output.push(')');
+    }
+
+    fn write_effect_tail(&self, output: &mut String) {
         if !self.justify.is_empty() {
             output.push_str(" (justify");
             for token in &self.justify {
@@ -4484,7 +4527,32 @@ impl KicadTextEffects {
             }
             output.push(')');
         }
-        output.push_str(")\n");
+        if self.hide {
+            output.push_str(" hide");
+        }
+        if let Some(href) = &self.href {
+            output.push_str(&format!(" (href {})", sexpr_string(href)));
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KicadColor {
+    pub red: f64,
+    pub green: f64,
+    pub blue: f64,
+    pub alpha: f64,
+}
+
+impl KicadColor {
+    fn write_inline_color_sexpr(self, output: &mut String) {
+        output.push_str(&format!(
+            " (color {} {} {} {})",
+            format_number(self.red),
+            format_number(self.green),
+            format_number(self.blue),
+            format_number(self.alpha)
+        ));
     }
 }
 
@@ -4673,6 +4741,7 @@ pub struct KicadLabel {
     pub kind: KicadLabelKind,
     pub at: Option<KicadAt>,
     pub uuid: Option<String>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 impl KicadLabel {
@@ -4692,7 +4761,7 @@ impl KicadLabel {
                 format_number(at.rotation)
             ));
         }
-        output.push_str(" (effects (font (size 1.27 1.27)))");
+        write_inline_text_effects(output, self.effects.as_ref());
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
         }
@@ -4815,6 +4884,7 @@ pub struct KicadSheetPin {
     pub pin_type: String,
     pub at: Option<KicadAt>,
     pub uuid: Option<String>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 impl KicadSheetPin {
@@ -4837,7 +4907,8 @@ impl KicadSheetPin {
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
         }
-        output.push_str(" (effects (font (size 1.27 1.27))))\n");
+        write_inline_text_effects(output, self.effects.as_ref());
+        output.push_str(")\n");
     }
 }
 
@@ -4846,6 +4917,7 @@ pub struct KicadTextItem {
     pub text: String,
     pub at: Option<KicadAt>,
     pub uuid: Option<String>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 impl KicadTextItem {
@@ -4860,7 +4932,7 @@ impl KicadTextItem {
                 format_number(at.rotation)
             ));
         }
-        output.push_str(" (effects (font (size 1.27 1.27)))");
+        write_inline_text_effects(output, self.effects.as_ref());
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
         }
@@ -4876,6 +4948,7 @@ pub struct KicadTextBox {
     pub margins: Option<KicadMargins>,
     pub exclude_from_sim: Option<bool>,
     pub uuid: Option<String>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 impl KicadTextBox {
@@ -4930,7 +5003,7 @@ impl KicadTextBox {
         }
         output.push_str(&format!("{}  (stroke (width 0) (type default))\n", pad));
         output.push_str(&format!("{}  (fill (type none))\n", pad));
-        output.push_str(&format!("{}  (effects (font (size 1.27 1.27)))\n", pad));
+        write_text_effects_line(output, indent + 2, self.effects.as_ref());
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
         }
@@ -5471,6 +5544,29 @@ fn write_optional_bool_sexpr(output: &mut String, indent: usize, name: &str, val
     }
 }
 
+fn write_inline_optional_bool_sexpr(output: &mut String, name: &str, value: Option<bool>) {
+    if let Some(value) = value {
+        output.push_str(&format!(" ({} {})", name, if value { "yes" } else { "no" }));
+    }
+}
+
+fn write_inline_text_effects(output: &mut String, effects: Option<&KicadTextEffects>) {
+    match effects {
+        Some(effects) => effects.write_inline_effects_sexpr(output),
+        None => output.push_str(" (effects (font (size 1.27 1.27)))"),
+    }
+}
+
+fn write_text_effects_line(output: &mut String, indent: usize, effects: Option<&KicadTextEffects>) {
+    match effects {
+        Some(effects) => effects.write_effects_sexpr(output, indent),
+        None => {
+            let pad = " ".repeat(indent);
+            output.push_str(&format!("{pad}(effects (font (size 1.27 1.27)))\n"));
+        }
+    }
+}
+
 fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     let items = list_items(node);
     Some(KicadSymbolDef {
@@ -5524,10 +5620,14 @@ fn parse_property(node: &Sexp) -> Option<KicadProperty> {
 
 fn parse_text_effects(node: &Sexp) -> KicadTextEffects {
     let items = list_items(node);
+    let font = child(items, "font");
+    let font_items = font.map(list_items).unwrap_or_default();
     KicadTextEffects {
-        font_size: child(items, "font")
-            .and_then(|font| child(list_items(font), "size"))
-            .and_then(parse_size),
+        font_size: child(font_items, "size").and_then(parse_size),
+        font_thickness: child_value(font_items, "thickness").and_then(|value| value.parse().ok()),
+        font_bold: parse_effect_bool(font_items, "bold"),
+        font_italic: parse_effect_bool(font_items, "italic"),
+        font_color: child(font_items, "color").and_then(parse_color),
         justify: child(items, "justify")
             .map(|justify| {
                 list_items(justify)
@@ -5538,7 +5638,22 @@ fn parse_text_effects(node: &Sexp) -> KicadTextEffects {
                     .collect()
             })
             .unwrap_or_default(),
+        hide: has_effect_flag(items, "hide"),
+        href: child_value(items, "href"),
     }
+}
+
+fn parse_effect_bool(items: &[Sexp], name: &str) -> Option<bool> {
+    child(items, name)
+        .and_then(|node| list_value(node, 1).and_then(parse_kicad_bool_value))
+        .or_else(|| has_effect_flag(items, name).then_some(true))
+}
+
+fn has_effect_flag(items: &[Sexp], name: &str) -> bool {
+    items
+        .iter()
+        .skip(1)
+        .any(|item| atom_text(item) == Some(name) || head(item) == Some(name))
 }
 
 fn parse_wire(node: &Sexp) -> KicadWire {
@@ -5677,6 +5792,7 @@ fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
         kind,
         at: child(items, "at").and_then(parse_at),
         uuid: child_value(items, "uuid"),
+        effects: child(items, "effects").map(parse_text_effects),
     })
 }
 
@@ -5710,6 +5826,7 @@ fn parse_sheet_pin(node: &Sexp) -> Option<KicadSheetPin> {
         pin_type: list_value(node, 2).unwrap_or_else(|| "unspecified".to_string()),
         at: child(items, "at").and_then(parse_at),
         uuid: child_value(items, "uuid"),
+        effects: child(items, "effects").map(parse_text_effects),
     })
 }
 
@@ -5719,6 +5836,7 @@ fn parse_text_item(node: &Sexp) -> Option<KicadTextItem> {
         text: list_value(node, 1)?,
         at: child(items, "at").and_then(parse_at),
         uuid: child_value(items, "uuid"),
+        effects: child(items, "effects").map(parse_text_effects),
     })
 }
 
@@ -5731,6 +5849,7 @@ fn parse_text_box(node: &Sexp) -> Option<KicadTextBox> {
         margins: child(items, "margins").and_then(parse_margins),
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
         uuid: child_value(items, "uuid"),
+        effects: child(items, "effects").map(parse_text_effects),
     })
 }
 
@@ -5779,6 +5898,16 @@ fn parse_size(node: &Sexp) -> Option<KicadSize> {
     Some(KicadSize {
         width: atom_text(items.get(1)?)?.parse().ok()?,
         height: atom_text(items.get(2)?)?.parse().ok()?,
+    })
+}
+
+fn parse_color(node: &Sexp) -> Option<KicadColor> {
+    let items = list_items(node);
+    Some(KicadColor {
+        red: atom_text(items.get(1)?)?.parse().ok()?,
+        green: atom_text(items.get(2)?)?.parse().ok()?,
+        blue: atom_text(items.get(3)?)?.parse().ok()?,
+        alpha: atom_text(items.get(4)?)?.parse().ok()?,
     })
 }
 
@@ -6808,7 +6937,7 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        KicadAt, KicadDiagnosticSeverity, KicadGraphic, KicadLabelKind, KicadPoint,
+        KicadAt, KicadColor, KicadDiagnosticSeverity, KicadGraphic, KicadLabelKind, KicadPoint,
         KicadSchematicEdit, KicadSheetPin, KicadSize, parse_kicad_project, parse_kicad_schematic,
         parse_kicad_symbol_library, parse_kicad_symbol_library_table, parse_sexpr,
         read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
@@ -7766,8 +7895,13 @@ mod tests {
       (effects
         (font
           (size 1.524 1.016)
+          (thickness 0.254)
+          (bold yes)
+          (italic yes)
+          (color 10 9 37 1)
         )
         (justify left bottom)
+        (href "https://kicad.org")
       )
     )
     (property "Value" "1k"
@@ -7792,10 +7926,23 @@ mod tests {
         let effects = property.effects.as_ref().unwrap();
         assert_close(effects.font_size.unwrap().width, 1.524);
         assert_close(effects.font_size.unwrap().height, 1.016);
+        assert_close(effects.font_thickness.unwrap(), 0.254);
+        assert_eq!(effects.font_bold, Some(true));
+        assert_eq!(effects.font_italic, Some(true));
+        assert_eq!(
+            effects.font_color,
+            Some(KicadColor {
+                red: 10.0,
+                green: 9.0,
+                blue: 37.0,
+                alpha: 1.0,
+            })
+        );
         assert_eq!(
             effects.justify,
             vec!["left".to_string(), "bottom".to_string()]
         );
+        assert_eq!(effects.href.as_deref(), Some("https://kicad.org"));
         assert!(
             schematic
                 .to_summary_json()
@@ -7811,17 +7958,155 @@ mod tests {
         assert!(roundtrip.contains("(hide yes)"));
         assert!(roundtrip.contains("(show_name no)"));
         assert!(roundtrip.contains("(do_not_autoplace no)"));
-        assert!(roundtrip.contains("(font (size 1.524 1.016))"));
+        assert!(roundtrip.contains("(font (size 1.524 1.016)"));
+        assert!(roundtrip.contains("(thickness 0.254)"));
+        assert!(roundtrip.contains("(bold yes)"));
+        assert!(roundtrip.contains("(italic yes)"));
+        assert!(roundtrip.contains("(color 10 9 37 1)"));
         assert!(roundtrip.contains("(justify left bottom)"));
+        assert!(roundtrip.contains("(href \"https://kicad.org\")"));
         let reparsed =
             parse_kicad_schematic(&roundtrip, "property_effects_roundtrip.kicad_sch").unwrap();
         let property = &reparsed.symbols[0].properties[0];
         assert_eq!(property.hide, Some(true));
         assert_eq!(property.show_name, Some(false));
         assert_eq!(property.do_not_autoplace, Some(false));
+        assert_eq!(property.effects.as_ref().unwrap().font_bold, Some(true));
         assert_eq!(
             property.effects.as_ref().unwrap().justify,
             vec!["left".to_string(), "bottom".to_string()]
+        );
+    }
+
+    #[test]
+    fn preserves_canvas_text_effects() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20251028)
+  (generator "eeschema")
+  (paper "A4")
+  (lib_symbols)
+  (label "OUT"
+    (at 10 5 0)
+    (effects (font (size 1.27 1.27) italic) (justify left bottom) hide)
+    (uuid "11111111-1111-4111-8111-111111111111")
+  )
+  (text "note"
+    (at 20 5 0)
+    (effects
+      (font
+        (size 1.905 1.905)
+        (thickness 0.254)
+        (bold yes)
+        (color 10 9 37 1)
+      )
+      (justify right)
+      (href "https://kicad.org")
+    )
+    (uuid "22222222-2222-4222-8222-222222222222")
+  )
+  (text_box "box"
+    (at 30 5 0)
+    (size 10 5)
+    (effects (font (size 1.27 1.27) (italic yes)) (justify center))
+    (uuid "33333333-3333-4333-8333-333333333333")
+  )
+  (sheet
+    (at 40 5)
+    (size 15 10)
+    (uuid "44444444-4444-4444-8444-444444444444")
+    (property "Sheetname" "Sub" (at 40 4 0))
+    (property "Sheetfile" "sub.kicad_sch" (at 40 16 0))
+    (pin "BUS{0}" bidirectional
+      (at 55 10 0)
+      (effects (font (size 1.27 1.27)) (justify right))
+      (uuid "55555555-5555-4555-8555-555555555555")
+    )
+  )
+)"#,
+            "canvas_text_effects.kicad_sch",
+        )
+        .unwrap();
+
+        let label_effects = schematic.labels[0].effects.as_ref().unwrap();
+        assert_eq!(label_effects.font_italic, Some(true));
+        assert_eq!(
+            label_effects.justify,
+            vec!["left".to_string(), "bottom".to_string()]
+        );
+        assert!(label_effects.hide);
+
+        let text_effects = schematic.text_items[0].effects.as_ref().unwrap();
+        assert_close(text_effects.font_size.unwrap().width, 1.905);
+        assert_close(text_effects.font_thickness.unwrap(), 0.254);
+        assert_eq!(text_effects.font_bold, Some(true));
+        assert_eq!(
+            text_effects.font_color,
+            Some(KicadColor {
+                red: 10.0,
+                green: 9.0,
+                blue: 37.0,
+                alpha: 1.0,
+            })
+        );
+        assert_eq!(text_effects.href.as_deref(), Some("https://kicad.org"));
+        assert_eq!(
+            schematic.text_boxes[0]
+                .effects
+                .as_ref()
+                .unwrap()
+                .font_italic,
+            Some(true)
+        );
+        assert_eq!(
+            schematic.sheets[0].pins[0]
+                .effects
+                .as_ref()
+                .unwrap()
+                .justify,
+            vec!["right".to_string()]
+        );
+
+        let scene = schematic.canvas_scene();
+        assert!(scene.labels[0].effects.as_ref().unwrap().hide);
+        assert_eq!(
+            scene.text_items[0]
+                .effects
+                .as_ref()
+                .unwrap()
+                .href
+                .as_deref(),
+            Some("https://kicad.org")
+        );
+        assert_eq!(
+            scene.text_boxes[0].effects.as_ref().unwrap().font_italic,
+            Some(true)
+        );
+        assert_eq!(
+            scene.sheets[0].pins[0].effects.as_ref().unwrap().justify,
+            vec!["right".to_string()]
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(justify left bottom) hide"));
+        assert!(roundtrip.contains("(thickness 0.254)"));
+        assert!(roundtrip.contains("(bold yes)"));
+        assert!(roundtrip.contains("(color 10 9 37 1)"));
+        assert!(roundtrip.contains("(href \"https://kicad.org\")"));
+        assert!(roundtrip.contains("(justify right)"));
+        let reparsed =
+            parse_kicad_schematic(&roundtrip, "canvas_text_effects_roundtrip.kicad_sch").unwrap();
+        assert_eq!(
+            reparsed.labels[0].effects.as_ref().unwrap().font_italic,
+            Some(true)
+        );
+        assert_eq!(
+            reparsed.text_items[0].effects.as_ref().unwrap().font_bold,
+            Some(true)
+        );
+        assert_eq!(
+            reparsed.sheets[0].pins[0].effects.as_ref().unwrap().justify,
+            vec!["right".to_string()]
         );
     }
 
@@ -8364,6 +8649,7 @@ mod tests {
                             rotation: 180.0,
                         }),
                         uuid: None,
+                        effects: None,
                     },
                     KicadSheetPin {
                         name: "out".to_string(),
@@ -8374,6 +8660,7 @@ mod tests {
                             rotation: 0.0,
                         }),
                         uuid: None,
+                        effects: None,
                     },
                 ],
                 uuid: Some("cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd".to_string()),
