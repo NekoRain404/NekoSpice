@@ -9,6 +9,7 @@ The current three-day build is a vertical slice:
 - `osl bench`: run every `.cir` under a directory and collect timings.
 - `osl model-check`: scan imported SPICE models for `.subckt`, `.model`, LTspice symbol pin mapping, dialect risks, and unsupported directives.
 - `osl import`: inspect SPICE/KiCad-style netlists and generate an import compatibility report.
+- `osl waveform`: query raw waveforms into viewport-sized min/max envelope JSON.
 - HTML and JSON reports for runs and verification batches.
 - Run artifacts include `waveform.raw`, `waveform.csv`, and `waveform-summary.json`.
 - Failure drilldown with failed checks, waveform summaries, parameters, logs, netlists, and waveform artifacts.
@@ -29,6 +30,7 @@ cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output reports/import_001
+cargo run -p osl-cli -- waveform runs/rc_001/waveform.raw --signal v(out) --from 8us --to 10us --points 200 --output reports/vout-envelope.json
 ```
 
 ## Verification Config
@@ -62,6 +64,8 @@ write waveform.raw all
 
 Checks can target any signal present in the raw variable table, such as `v(out)` or `i(v1)`. The waveform reader auto-detects ngspice `Binary:` and `Values:` raw files, so older ASCII artifacts remain readable. Every successful run exports `waveform.csv` for external tools and `waveform-summary.json` with per-signal sample count, first/last, min/max, average, peak-to-peak, and RMS.
 
+For UI and plotting workflows, `osl waveform <waveform.raw> --signal <name>` returns min/max envelope buckets for a requested viewport. Use `--from`, `--to`, and `--points` to control the time window and target bucket count.
+
 ## Model Check
 
 ```bash
@@ -87,6 +91,7 @@ cargo fmt --check
 cargo test --workspace
 cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/basic
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
+cargo run -p osl-cli -- waveform /tmp/nekospice_reports/basic/runs/rc_filter/waveform.raw --signal 'v(out)' --points 100 --output /tmp/nekospice_reports/basic/vout-envelope.json
 bash -lc 'cargo run -p osl-cli -- verify examples/failing_validation.osl.yaml --output /tmp/nekospice_reports/failing; test $? -eq 2'
 bash -lc 'cargo run -p osl-cli -- model-check examples/vendor_model_issues --output /tmp/nekospice_modelcheck/bad; test $? -eq 2'
 bash -lc 'cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/bad_opamp.asy --output /tmp/nekospice_modelcheck/pinmap_bad; test $? -eq 2'

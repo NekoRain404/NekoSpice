@@ -173,6 +173,70 @@ impl Waveform {
         ))
     }
 
+    pub fn viewport_envelope(&self, query: &WaveformViewportQuery) -> OslResult<WaveformEnvelope> {
+        self.validate_column_lengths()?;
+        if query.max_points == 0 {
+            return Err(OslError::InvalidInput(
+                "viewport max_points must be greater than 0".to_string(),
+            ));
+        }
+        if let (Some(from), Some(to)) = (query.from, query.to)
+            && from > to
+        {
+            return Err(OslError::InvalidInput(format!(
+                "invalid viewport window: from={} is greater than to={}",
+                from, to
+            )));
+        }
+
+        let time = self.signal_values("time")?;
+        let values = self.signal_values(&query.signal)?;
+        let selected = time
+            .iter()
+            .copied()
+            .zip(values.iter().copied())
+            .filter(|(time, _)| query.from.is_none_or(|from| *time >= from))
+            .filter(|(time, _)| query.to.is_none_or(|to| *time <= to))
+            .collect::<Vec<_>>();
+
+        if selected.is_empty() {
+            return Err(OslError::InvalidInput(format!(
+                "viewport for '{}' contains no samples",
+                query.signal
+            )));
+        }
+
+        let bucket_count = selected.len().min(query.max_points);
+        let mut buckets = Vec::with_capacity(bucket_count);
+        for bucket_index in 0..bucket_count {
+            let start = bucket_index * selected.len() / bucket_count;
+            let end = ((bucket_index + 1) * selected.len() / bucket_count).max(start + 1);
+            let slice = &selected[start..end];
+            let mut min_value = f64::INFINITY;
+            let mut max_value = f64::NEG_INFINITY;
+            for (_, value) in slice {
+                min_value = min_value.min(*value);
+                max_value = max_value.max(*value);
+            }
+            buckets.push(WaveformEnvelopeBucket {
+                start_time: slice[0].0,
+                end_time: slice[slice.len() - 1].0,
+                min: min_value,
+                max: max_value,
+                samples: slice.len(),
+            });
+        }
+
+        Ok(WaveformEnvelope {
+            signal: query.signal.clone(),
+            from: query.from,
+            to: query.to,
+            source_points: selected.len(),
+            max_points: query.max_points,
+            buckets,
+        })
+    }
+
     fn validate_column_lengths(&self) -> OslResult<()> {
         if self.variables.len() != self.columns.len() {
             return Err(OslError::InvalidInput(format!(
@@ -198,6 +262,97 @@ impl Waveform {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct WaveformViewportQuery {
+    pub signal: String,
+    pub from: Option<f64>,
+    pub to: Option<f64>,
+    pub max_points: usize,
+}
+
+impl WaveformViewportQuery {
+    pub fn new(signal: impl Into<String>, max_points: usize) -> Self {
+        Self {
+            signal: signal.into(),
+            from: None,
+            to: None,
+            max_points,
+        }
+    }
+
+    pub fn with_window(mut self, from: Option<f64>, to: Option<f64>) -> Self {
+        self.from = from;
+        self.to = to;
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct WaveformEnvelope {
+    pub signal: String,
+    pub from: Option<f64>,
+    pub to: Option<f64>,
+    pub source_points: usize,
+    pub max_points: usize,
+    pub buckets: Vec<WaveformEnvelopeBucket>,
+}
+
+impl WaveformEnvelope {
+    pub fn to_json(&self) -> String {
+        let buckets = self
+            .buckets
+            .iter()
+            .map(|bucket| {
+                format!(
+                    concat!(
+                        "    {{ \"start_time\": {}, \"end_time\": {}, ",
+                        "\"min\": {}, \"max\": {}, \"samples\": {} }}"
+                    ),
+                    f64_json(bucket.start_time),
+                    f64_json(bucket.end_time),
+                    f64_json(bucket.min),
+                    f64_json(bucket.max),
+                    bucket.samples
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n");
+
+        format!(
+            concat!(
+                "{{\n",
+                "  \"schema_version\": 1,\n",
+                "  \"signal\": \"{}\",\n",
+                "  \"from\": {},\n",
+                "  \"to\": {},\n",
+                "  \"source_points\": {},\n",
+                "  \"max_points\": {},\n",
+                "  \"bucket_count\": {},\n",
+                "  \"buckets\": [\n",
+                "{}\n",
+                "  ]\n",
+                "}}\n"
+            ),
+            json_escape(&self.signal),
+            option_f64_json(self.from),
+            option_f64_json(self.to),
+            self.source_points,
+            self.max_points,
+            self.buckets.len(),
+            buckets
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct WaveformEnvelopeBucket {
+    pub start_time: f64,
+    pub end_time: f64,
+    pub min: f64,
+    pub max: f64,
+    pub samples: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -732,6 +887,10 @@ fn f64_json(value: f64) -> String {
     }
 }
 
+fn option_f64_json(value: Option<f64>) -> String {
+    value.map(f64_json).unwrap_or_else(|| "null".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -795,6 +954,20 @@ Values:
         assert!(summary_json.contains("\"point_count\": 2"));
         assert!(summary_json.contains("\"name\": \"v(out)\""));
         assert!(summary_json.contains("\"pp\": 2"));
+
+        let query = WaveformViewportQuery::new("v(out)", 1).with_window(Some(0.0), Some(1.0e-6));
+        let envelope = waveform.viewport_envelope(&query).unwrap();
+        assert_eq!(envelope.signal, "v(out)");
+        assert_eq!(envelope.source_points, 2);
+        assert_eq!(envelope.buckets.len(), 1);
+        assert_eq!(envelope.buckets[0].start_time, 0.0);
+        assert_eq!(envelope.buckets[0].end_time, 1.0e-6);
+        assert_eq!(envelope.buckets[0].min, 2.0);
+        assert_eq!(envelope.buckets[0].max, 4.0);
+
+        let envelope_json = envelope.to_json();
+        assert!(envelope_json.contains("\"bucket_count\": 1"));
+        assert!(envelope_json.contains("\"source_points\": 2"));
     }
 
     #[test]
@@ -847,5 +1020,28 @@ Binary:\n"
         let error = parse_ngspice_binary_raw(&raw, "bad.raw").unwrap_err();
 
         assert!(error.to_string().contains("not aligned to f64 values"));
+    }
+
+    #[test]
+    fn rejects_empty_viewport() {
+        let raw = r#"
+Title: demo
+Plotname: Transient Analysis
+Flags: real
+No. Variables: 2
+No. Points: 1
+Variables:
+	0	time	time
+	1	v(out)	voltage
+Values:
+ 0	0.000000000000000e+00
+	2.000000000000000e+00
+"#;
+        let waveform = parse_ngspice_ascii_raw(raw, "test.raw").unwrap();
+        let query = WaveformViewportQuery::new("v(out)", 10).with_window(Some(1.0), Some(2.0));
+
+        let error = waveform.viewport_envelope(&query).unwrap_err();
+
+        assert!(error.to_string().contains("contains no samples"));
     }
 }

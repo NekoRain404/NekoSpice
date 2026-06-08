@@ -5,7 +5,9 @@ use osl_core::{
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::ImportReport;
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
-use osl_waveform::{MeasurementKind, WaveformSummary, measure, read_ngspice_raw};
+use osl_waveform::{
+    MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
+};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,6 +49,7 @@ fn run_cli() -> OslResult<i32> {
         "bench" => bench_command(&args),
         "model-check" => model_check_command(&args),
         "import" => import_command(&args),
+        "waveform" => waveform_command(&args),
         "report" => report_command(&args),
         unknown => Err(OslError::InvalidInput(format!(
             "unknown command '{unknown}'. Run 'osl help'."
@@ -65,6 +68,7 @@ Usage:
   osl bench <directory> [--output <dir>] [--ngspice <path>]
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl import <spice-netlist> [--output <dir>]
+  osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
 
@@ -269,6 +273,44 @@ fn import_command(args: &[String]) -> OslResult<i32> {
     );
 
     Ok(if report.error_count() == 0 { 0 } else { 2 })
+}
+
+fn waveform_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing raw path for 'osl waveform'")?;
+    let signal = flag_value(args, "--signal").ok_or_else(|| {
+        OslError::InvalidInput("missing --signal <name> for 'osl waveform'".to_string())
+    })?;
+    let max_points = flag_value(args, "--points")
+        .map(|value| parse_positive_usize(&value, "--points"))
+        .transpose()?
+        .unwrap_or(500);
+    let from = flag_value(args, "--from")
+        .map(|value| parse_number(&value, "waveform --from"))
+        .transpose()?;
+    let to = flag_value(args, "--to")
+        .map(|value| parse_number(&value, "waveform --to"))
+        .transpose()?;
+    let output = flag_value(args, "--output");
+
+    let waveform = read_ngspice_raw(Path::new(input))?;
+    let query = WaveformViewportQuery::new(signal, max_points).with_window(from, to);
+    let envelope = waveform.viewport_envelope(&query)?;
+    let json = envelope.to_json();
+
+    if let Some(output) = output {
+        write_text(Path::new(&output), &json)?;
+        println!(
+            "waveform: signal={}, buckets={}, source_points={} -> {}",
+            envelope.signal,
+            envelope.buckets.len(),
+            envelope.source_points,
+            output
+        );
+    } else {
+        print!("{json}");
+    }
+
+    Ok(0)
 }
 
 fn report_command(args: &[String]) -> OslResult<i32> {
@@ -1367,16 +1409,20 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 }
 
 fn parse_jobs(value: &str) -> OslResult<usize> {
+    parse_positive_usize(value, "--jobs")
+}
+
+fn parse_positive_usize(value: &str, flag: &str) -> OslResult<usize> {
     let jobs = value.parse::<usize>().map_err(|_| {
         OslError::InvalidInput(format!(
-            "--jobs expects a positive integer, got '{}'",
+            "{flag} expects a positive integer, got '{}'",
             value
         ))
     })?;
     if jobs == 0 {
-        return Err(OslError::InvalidInput(
-            "--jobs expects a positive integer, got 0".to_string(),
-        ));
+        return Err(OslError::InvalidInput(format!(
+            "{flag} expects a positive integer, got 0"
+        )));
     }
     Ok(jobs)
 }
