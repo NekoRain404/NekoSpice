@@ -1,4 +1,4 @@
-use osl_core::{OslError, OslResult, json_escape, read_text};
+use osl_core::{OslError, OslResult, json_escape, read_text, write_text};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -31,6 +31,10 @@ pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
 pub fn read_kicad_symbol_library(path: &Path) -> OslResult<KicadSymbolLibrary> {
     let content = read_text(path)?;
     parse_kicad_symbol_library(&content, &path.display().to_string())
+}
+
+pub fn write_kicad_symbol_library(path: &Path, library: &KicadSymbolLibrary) -> OslResult<()> {
+    write_text(path, &library.to_kicad_symbol_library_sexpr())
 }
 
 pub fn read_kicad_symbol_library_table(path: &Path) -> OslResult<KicadSymbolLibraryTable> {
@@ -697,6 +701,22 @@ impl KicadSymbolLibrary {
         self.symbols.iter().find(|symbol| symbol.name == name)
     }
 
+    pub fn to_kicad_symbol_library_sexpr(&self) -> String {
+        let mut output = String::new();
+        output.push_str("(kicad_symbol_lib\n");
+        if let Some(version) = &self.version {
+            output.push_str(&format!("  (version {})\n", sexpr_atom_or_string(version)));
+        }
+        if let Some(generator) = &self.generator {
+            output.push_str(&format!("  (generator {})\n", sexpr_string(generator)));
+        }
+        for symbol in &self.symbols {
+            symbol.write_symbol_sexpr(&mut output, 2);
+        }
+        output.push_str(")\n");
+        output
+    }
+
     pub fn to_summary_json(&self) -> String {
         format!(
             concat!(
@@ -985,6 +1005,27 @@ impl KicadSymbolDef {
             .map(|(_, local_name)| local_name)
             .unwrap_or(&self.name)
     }
+
+    fn write_symbol_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(symbol {}\n", pad, sexpr_string(&self.name)));
+        for property in &self.properties {
+            property.write_property_sexpr(output, indent + 2);
+        }
+        output.push_str(&format!(
+            "{}  (symbol {}\n",
+            pad,
+            sexpr_string(&format!("{}_0_1", self.local_name()))
+        ));
+        for graphic in &self.graphics {
+            graphic.write_graphic_sexpr(output, indent + 4);
+        }
+        for pin in &self.pins {
+            pin.write_pin_sexpr(output, indent + 4);
+        }
+        output.push_str(&format!("{}  )\n", pad));
+        output.push_str(&format!("{})\n", pad));
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1075,6 +1116,72 @@ impl KicadGraphic {
             },
         }
     }
+
+    fn write_graphic_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        match self {
+            Self::Polyline { points } => {
+                let points = points
+                    .iter()
+                    .map(|point| {
+                        format!("(xy {} {})", format_number(point.x), format_number(point.y))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                output.push_str(&format!(
+                    "{}(polyline (pts {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
+                    pad, points
+                ));
+            }
+            Self::Rectangle { start, end } => {
+                output.push_str(&format!(
+                    "{}(rectangle (start {} {}) (end {} {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
+                    pad,
+                    format_number(start.x),
+                    format_number(start.y),
+                    format_number(end.x),
+                    format_number(end.y)
+                ));
+            }
+            Self::Circle { center, radius } => {
+                output.push_str(&format!(
+                    "{}(circle (center {} {}) (radius {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
+                    pad,
+                    format_number(center.x),
+                    format_number(center.y),
+                    format_number(*radius)
+                ));
+            }
+            Self::Arc { start, mid, end } => {
+                let mid = mid.unwrap_or(KicadPoint {
+                    x: (start.x + end.x) / 2.0,
+                    y: (start.y + end.y) / 2.0,
+                });
+                output.push_str(&format!(
+                    "{}(arc (start {} {}) (mid {} {}) (end {} {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
+                    pad,
+                    format_number(start.x),
+                    format_number(start.y),
+                    format_number(mid.x),
+                    format_number(mid.y),
+                    format_number(end.x),
+                    format_number(end.y)
+                ));
+            }
+            Self::Text { text, at } => {
+                output.push_str(&format!("{}(text {}", pad, sexpr_string(text)));
+                if let Some(at) = at {
+                    output.push_str(&format!(
+                        " (at {} {} {})",
+                        format_number(at.x),
+                        format_number(at.y),
+                        format_number(at.rotation)
+                    ));
+                }
+                output.push_str(" (effects (font (size 1.27 1.27))))\n");
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1140,11 +1247,64 @@ pub struct KicadPinDef {
     pub length: Option<f64>,
 }
 
+impl KicadPinDef {
+    fn write_pin_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(pin {} {}",
+            pad,
+            sexpr_atom_or_string(&self.electrical_type),
+            sexpr_atom_or_string(&self.shape)
+        ));
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                " (at {} {} {})",
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        if let Some(length) = self.length {
+            output.push_str(&format!(" (length {})", format_number(length)));
+        }
+        output.push_str(&format!(
+            " (name {} (effects (font (size 1.27 1.27))))",
+            sexpr_string(&self.name)
+        ));
+        output.push_str(&format!(
+            " (number {} (effects (font (size 1.27 1.27))))",
+            sexpr_string(&self.number)
+        ));
+        output.push_str(")\n");
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadProperty {
     pub name: String,
     pub value: String,
     pub at: Option<KicadAt>,
+}
+
+impl KicadProperty {
+    fn write_property_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(property {} {}",
+            pad,
+            sexpr_string(&self.name),
+            sexpr_string(&self.value)
+        ));
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                " (at {} {} {})",
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        output.push_str(" (effects (font (size 1.27 1.27))))\n");
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1620,6 +1780,50 @@ fn json_option(value: Option<&str>) -> String {
     }
 }
 
+fn sexpr_string(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len() + 2);
+    escaped.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            character => escaped.push(character),
+        }
+    }
+    escaped.push('"');
+    escaped
+}
+
+fn sexpr_atom_or_string(value: &str) -> String {
+    if is_plain_sexpr_atom(value) {
+        value.to_string()
+    } else {
+        sexpr_string(value)
+    }
+}
+
+fn is_plain_sexpr_atom(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| !byte.is_ascii_whitespace() && !matches!(byte, b'(' | b')' | b'"' | b';'))
+}
+
+fn format_number(value: f64) -> String {
+    let normalized = if value == -0.0 { 0.0 } else { value };
+    let mut formatted = format!("{normalized:.12}");
+    while formatted.contains('.') && formatted.ends_with('0') {
+        formatted.pop();
+    }
+    if formatted.ends_with('.') {
+        formatted.pop();
+    }
+    formatted
+}
+
 fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
     format!(
         concat!(
@@ -1960,6 +2164,40 @@ mod tests {
         assert!(bounds.width() > 5.0);
         assert!(library.to_summary_json().contains("\"symbol_count\": 3"));
         assert!(library.to_summary_json().contains("\"graphic_count\": 6"));
+    }
+
+    #[test]
+    fn roundtrips_kicad_symbol_library_fixture_through_writer() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let library = read_kicad_symbol_library(
+            &workspace_root.join("examples/kicad_schematic/neko_spice.kicad_sym"),
+        )
+        .unwrap();
+
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(kicad_symbol_lib"));
+        assert!(exported.contains("(symbol \"NekoSpice:R\""));
+        let reparsed = parse_kicad_symbol_library(&exported, "roundtrip.kicad_sym").unwrap();
+
+        assert_eq!(reparsed.symbols.len(), library.symbols.len());
+        assert_eq!(
+            reparsed
+                .symbols
+                .iter()
+                .map(|symbol| symbol.graphics.len())
+                .sum::<usize>(),
+            6
+        );
+        let resistor = reparsed.symbol("NekoSpice:R").unwrap();
+        assert_eq!(resistor.pins.len(), 2);
+        assert_eq!(resistor.property("Reference"), Some("R"));
+        assert_eq!(resistor.graphics.len(), 1);
+        let bounds = resistor.bounding_box().unwrap();
+        assert_close(bounds.min.x, -2.54);
+        assert_close(bounds.max.x, 2.54);
     }
 
     #[test]

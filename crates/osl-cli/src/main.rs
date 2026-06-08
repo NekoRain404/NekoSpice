@@ -4,7 +4,7 @@ use osl_core::{
 };
 use osl_kicad::{
     read_kicad_schematic, read_kicad_symbol_library, read_kicad_symbol_library_index,
-    read_kicad_symbol_library_table,
+    read_kicad_symbol_library_table, write_kicad_symbol_library,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
@@ -55,6 +55,7 @@ fn run_cli() -> OslResult<i32> {
         "model-check" => model_check_command(&args),
         "import" => import_command(&args),
         "kicad-inspect" => kicad_inspect_command(&args),
+        "kicad-export" => kicad_export_command(&args),
         "waveform" => waveform_command(&args),
         "report" => report_command(&args),
         unknown => Err(OslError::InvalidInput(format!(
@@ -75,6 +76,7 @@ Usage:
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
   osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
+  osl kicad-export <file.kicad_sym> --output <file.kicad_sym>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
@@ -376,6 +378,38 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
     } else {
         print!("{json}");
     }
+    Ok(0)
+}
+
+fn kicad_export_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing KiCad path for 'osl kicad-export'")?;
+    let output = flag_value(args, "--output").ok_or_else(|| {
+        OslError::InvalidInput(
+            "missing --output <file.kicad_sym> for 'osl kicad-export'".to_string(),
+        )
+    })?;
+    let input_path = Path::new(input);
+    let output_path = Path::new(&output);
+    let extension = input_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+
+    match extension.as_str() {
+        "kicad_sym" => {
+            let library = read_kicad_symbol_library(input_path)?;
+            write_kicad_symbol_library(output_path, &library)?;
+        }
+        _ => {
+            return Err(OslError::InvalidInput(format!(
+                "{} is not a supported KiCad export input (.kicad_sym)",
+                input_path.display()
+            )));
+        }
+    }
+
+    println!("kicad-export -> {output}");
     Ok(0)
 }
 
