@@ -65,6 +65,7 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         version: child_value(root_list, "version"),
         generator: child_value(root_list, "generator"),
         uuid: child_value(root_list, "uuid"),
+        paper: child_value(root_list, "paper"),
         library_symbols,
         symbols: direct_children(root_list, "symbol")
             .filter_map(parse_symbol_instance)
@@ -128,6 +129,7 @@ pub struct KicadSchematic {
     pub version: Option<String>,
     pub generator: Option<String>,
     pub uuid: Option<String>,
+    pub paper: Option<String>,
     pub library_symbols: Vec<KicadSymbolDef>,
     pub symbols: Vec<KicadSymbolInstance>,
     pub wires: Vec<KicadWire>,
@@ -193,7 +195,10 @@ impl KicadSchematic {
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("  (uuid {})\n", sexpr_string(uuid)));
         }
-        output.push_str("  (paper \"A4\")\n");
+        output.push_str(&format!(
+            "  (paper {})\n",
+            sexpr_string(self.paper.as_deref().unwrap_or("A4"))
+        ));
         output.push_str("  (lib_symbols\n");
         for symbol in &self.library_symbols {
             symbol.write_symbol_sexpr(&mut output, 4);
@@ -985,7 +990,7 @@ pub struct KicadSymbolInstance {
     pub unit: Option<u32>,
     pub uuid: Option<String>,
     pub properties: Vec<KicadProperty>,
-    pub pins: Vec<String>,
+    pub pins: Vec<KicadSymbolPinRef>,
 }
 
 impl KicadSymbolInstance {
@@ -1031,14 +1036,31 @@ impl KicadSymbolInstance {
             property.write_property_sexpr(output, indent + 2);
         }
         for pin in &self.pins {
-            output.push_str(&format!(
-                "{}  (pin {} (uuid {}))\n",
-                pad,
-                sexpr_string(pin),
-                sexpr_string(pin)
-            ));
+            pin.write_pin_ref_sexpr(output, indent + 2);
         }
         output.push_str(&format!("{})\n", pad));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSymbolPinRef {
+    pub number: Option<String>,
+    pub uuid: Option<String>,
+}
+
+impl KicadSymbolPinRef {
+    fn write_pin_ref_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        let number = self
+            .number
+            .as_deref()
+            .or(self.uuid.as_deref())
+            .unwrap_or("?");
+        output.push_str(&format!("{}(pin {}", pad, sexpr_string(number)));
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        output.push_str(")\n");
     }
 }
 
@@ -1385,6 +1407,7 @@ impl KicadProperty {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadWire {
     pub points: Vec<KicadPoint>,
+    pub uuid: Option<String>,
 }
 
 impl KicadWire {
@@ -1392,7 +1415,11 @@ impl KicadWire {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(wire", pad));
         write_points_sexpr(output, &self.points);
-        output.push_str(" (stroke (width 0) (type default)))\n");
+        output.push_str(" (stroke (width 0) (type default))");
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        output.push_str(")\n");
     }
 }
 
@@ -1401,6 +1428,7 @@ pub struct KicadLabel {
     pub text: String,
     pub kind: KicadLabelKind,
     pub at: Option<KicadAt>,
+    pub uuid: Option<String>,
 }
 
 impl KicadLabel {
@@ -1420,7 +1448,11 @@ impl KicadLabel {
                 format_number(at.rotation)
             ));
         }
-        output.push_str(" (effects (font (size 1.27 1.27))))\n");
+        output.push_str(" (effects (font (size 1.27 1.27)))");
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        output.push_str(")\n");
     }
 }
 
@@ -1445,6 +1477,7 @@ impl KicadLabelKind {
 pub struct KicadTextItem {
     pub text: String,
     pub at: Option<KicadAt>,
+    pub uuid: Option<String>,
 }
 
 impl KicadTextItem {
@@ -1459,7 +1492,11 @@ impl KicadTextItem {
                 format_number(at.rotation)
             ));
         }
-        output.push_str(" (effects (font (size 1.27 1.27))))\n");
+        output.push_str(" (effects (font (size 1.27 1.27)))");
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        output.push_str(")\n");
     }
 }
 
@@ -1680,8 +1717,16 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
             .filter_map(parse_property)
             .collect(),
         pins: direct_children(items, "pin")
-            .filter_map(|pin| child_value(list_items(pin), "uuid").or_else(|| list_value(pin, 1)))
+            .filter_map(parse_symbol_pin_ref)
             .collect(),
+    })
+}
+
+fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
+    let items = list_items(node);
+    Some(KicadSymbolPinRef {
+        number: list_value(node, 1),
+        uuid: child_value(items, "uuid"),
     })
 }
 
@@ -1735,6 +1780,7 @@ fn parse_wire(node: &Sexp) -> KicadWire {
     let items = list_items(node);
     KicadWire {
         points: child(items, "pts").map(parse_points).unwrap_or_default(),
+        uuid: child_value(items, "uuid"),
     }
 }
 
@@ -1744,6 +1790,7 @@ fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
         text: list_value(node, 1)?,
         kind,
         at: child(items, "at").and_then(parse_at),
+        uuid: child_value(items, "uuid"),
     })
 }
 
@@ -1752,6 +1799,7 @@ fn parse_text_item(node: &Sexp) -> Option<KicadTextItem> {
     Some(KicadTextItem {
         text: list_value(node, 1)?,
         at: child(items, "at").and_then(parse_at),
+        uuid: child_value(items, "uuid"),
     })
 }
 
@@ -2179,6 +2227,7 @@ mod tests {
                 .unwrap();
 
         assert_eq!(schematic.version.as_deref(), Some("20230121"));
+        assert_eq!(schematic.paper.as_deref(), Some("A4"));
         assert_eq!(schematic.symbols.len(), 3);
         assert_eq!(schematic.library_symbols.len(), 3);
         assert_eq!(
@@ -2190,9 +2239,26 @@ mod tests {
             6
         );
         assert_eq!(schematic.wires.len(), 3);
+        assert_eq!(
+            schematic.wires[0].uuid.as_deref(),
+            Some("22222222-2222-2222-2222-222222222222")
+        );
         assert_eq!(schematic.labels.len(), 3);
+        assert_eq!(
+            schematic.labels[1].uuid.as_deref(),
+            Some("66666666-6666-6666-6666-666666666666")
+        );
         assert_eq!(schematic.spice_directives()[0].text, ".tran 1u 1m");
+        assert_eq!(
+            schematic.spice_directives()[0].uuid.as_deref(),
+            Some("77777777-7777-7777-7777-777777777777")
+        );
         assert_eq!(schematic.symbols[0].reference(), Some("V1"));
+        assert_eq!(schematic.symbols[0].pins[0].number.as_deref(), Some("1"));
+        assert_eq!(
+            schematic.symbols[0].pins[0].uuid.as_deref(),
+            Some("99999999-9999-9999-9999-999999999991")
+        );
         assert_eq!(schematic.symbols[1].value(), Some("1k"));
         assert!(
             schematic
@@ -2298,10 +2364,28 @@ mod tests {
         let reparsed = parse_kicad_schematic(&exported, "roundtrip.kicad_sch").unwrap();
 
         assert_eq!(reparsed.symbols.len(), 3);
+        assert_eq!(reparsed.paper.as_deref(), Some("A4"));
         assert_eq!(reparsed.library_symbols.len(), 3);
         assert_eq!(reparsed.wires.len(), 3);
+        assert_eq!(
+            reparsed.wires[0].uuid.as_deref(),
+            Some("22222222-2222-2222-2222-222222222222")
+        );
         assert_eq!(reparsed.labels.len(), 3);
+        assert_eq!(
+            reparsed.labels[1].uuid.as_deref(),
+            Some("66666666-6666-6666-6666-666666666666")
+        );
         assert_eq!(reparsed.spice_directives()[0].text, ".tran 1u 1m");
+        assert_eq!(
+            reparsed.spice_directives()[0].uuid.as_deref(),
+            Some("77777777-7777-7777-7777-777777777777")
+        );
+        assert_eq!(reparsed.symbols[0].pins[0].number.as_deref(), Some("1"));
+        assert_eq!(
+            reparsed.symbols[0].pins[0].uuid.as_deref(),
+            Some("99999999-9999-9999-9999-999999999991")
+        );
         assert_eq!(
             reparsed
                 .library_symbols

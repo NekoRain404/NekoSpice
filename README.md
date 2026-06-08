@@ -113,7 +113,7 @@ cargo run -p osl-cli -- kicad-export examples/kicad_schematic/rc.kicad_sch --out
 cargo run -p osl-cli -- kicad-export examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/neko_spice_roundtrip.kicad_sym
 ```
 
-`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, a symbol library index for later GUI library browsing and schematic symbol resolution, a schematic canvas scene with transformed symbol graphics, pins, wires, labels, junctions, and scene bounds, and `.kicad_sch` / `.kicad_sym` writer support for asset roundtrips. The local KiCad source mirror is treated only as reference material and is ignored by Git.
+`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, a symbol library index for later GUI library browsing and schematic symbol resolution, a schematic canvas scene with transformed symbol graphics, pins, wires, labels, junctions, and scene bounds, and `.kicad_sch` / `.kicad_sym` writer support for asset roundtrips. Schematic roundtrips preserve paper size, schematic UUID, wire/label/text UUIDs, symbol instance UUIDs, and symbol pin number/UUID pairs for the supported IR. The local KiCad source mirror is treated only as reference material and is ignored by Git.
 
 ## Validation
 
