@@ -3007,7 +3007,7 @@ impl KicadCanvasScene {
             .graphics
             .iter()
             .map(|graphic| {
-                let canvas_graphic = graphic.graphic.to_canvas_graphic();
+                let canvas_graphic = graphic.to_canvas_graphic();
                 canvas_graphic.include_in_bounds(&mut bounds);
                 canvas_graphic
             })
@@ -3357,47 +3357,98 @@ pub struct KicadCanvasDirectiveLabel {
 pub enum KicadCanvasGraphic {
     Polyline {
         points: Vec<KicadPoint>,
+        stroke: Option<KicadStroke>,
+        fill: Option<KicadFill>,
     },
     Bezier {
         points: Vec<KicadPoint>,
+        stroke: Option<KicadStroke>,
+        fill: Option<KicadFill>,
     },
     Rectangle {
         start: KicadPoint,
         end: KicadPoint,
+        stroke: Option<KicadStroke>,
+        fill: Option<KicadFill>,
     },
     Circle {
         center: KicadPoint,
         radius: f64,
+        stroke: Option<KicadStroke>,
+        fill: Option<KicadFill>,
     },
     Arc {
         start: KicadPoint,
         mid: Option<KicadPoint>,
         end: KicadPoint,
+        stroke: Option<KicadStroke>,
+        fill: Option<KicadFill>,
     },
     Text {
         text: String,
         at: Option<KicadAt>,
+        stroke: Option<KicadStroke>,
+        fill: Option<KicadFill>,
     },
 }
 
 impl KicadCanvasGraphic {
+    fn with_style(mut self, stroke: Option<KicadStroke>, fill: Option<KicadFill>) -> Self {
+        match &mut self {
+            Self::Polyline {
+                stroke: graphic_stroke,
+                fill: graphic_fill,
+                ..
+            }
+            | Self::Bezier {
+                stroke: graphic_stroke,
+                fill: graphic_fill,
+                ..
+            }
+            | Self::Rectangle {
+                stroke: graphic_stroke,
+                fill: graphic_fill,
+                ..
+            }
+            | Self::Circle {
+                stroke: graphic_stroke,
+                fill: graphic_fill,
+                ..
+            }
+            | Self::Arc {
+                stroke: graphic_stroke,
+                fill: graphic_fill,
+                ..
+            }
+            | Self::Text {
+                stroke: graphic_stroke,
+                fill: graphic_fill,
+                ..
+            } => {
+                *graphic_stroke = stroke;
+                *graphic_fill = fill;
+            }
+        }
+        self
+    }
+
     fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
         match self {
-            Self::Polyline { points } => {
+            Self::Polyline { points, .. } => {
                 for point in points {
                     bounds.include(*point);
                 }
             }
-            Self::Bezier { points } => {
+            Self::Bezier { points, .. } => {
                 for point in points {
                     bounds.include(*point);
                 }
             }
-            Self::Rectangle { start, end } => {
+            Self::Rectangle { start, end, .. } => {
                 bounds.include(*start);
                 bounds.include(*end);
             }
-            Self::Circle { center, radius } => {
+            Self::Circle { center, radius, .. } => {
                 bounds.include(KicadPoint {
                     x: center.x - radius,
                     y: center.y - radius,
@@ -3407,7 +3458,9 @@ impl KicadCanvasGraphic {
                     y: center.y + radius,
                 });
             }
-            Self::Arc { start, mid, end } => {
+            Self::Arc {
+                start, mid, end, ..
+            } => {
                 bounds.include(*start);
                 if let Some(mid) = mid {
                     bounds.include(*mid);
@@ -4126,7 +4179,7 @@ pub struct KicadSymbolDef {
     pub name: String,
     pub exclude_from_sim: Option<bool>,
     pub properties: Vec<KicadProperty>,
-    pub graphics: Vec<KicadGraphic>,
+    pub graphics: Vec<KicadSymbolGraphic>,
     pub pins: Vec<KicadPinDef>,
 }
 
@@ -4180,7 +4233,7 @@ impl KicadSymbolDef {
             sexpr_string(&format!("{}_0_1", self.local_name()))
         ));
         for graphic in &self.graphics {
-            graphic.write_graphic_sexpr(output, indent + 4);
+            graphic.write_symbol_graphic_sexpr(output, indent + 4);
         }
         for pin in &self.pins {
             pin.write_pin_sexpr(output, indent + 4);
@@ -4188,6 +4241,51 @@ impl KicadSymbolDef {
         output.push_str(&format!("{}  )\n", pad));
         output.push_str(&format!("{})\n", pad));
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSymbolGraphic {
+    pub graphic: KicadGraphic,
+    pub private: bool,
+    pub stroke: Option<KicadStroke>,
+    pub fill: Option<KicadFill>,
+    pub uuid: Option<String>,
+    pub locked: Option<bool>,
+}
+
+impl KicadSymbolGraphic {
+    fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
+        self.graphic.include_in_bounds(bounds);
+    }
+
+    fn transformed(&self, symbol_at: KicadAt) -> KicadCanvasGraphic {
+        self.graphic
+            .transformed(symbol_at)
+            .with_style(self.stroke.clone(), self.fill.clone())
+    }
+
+    fn write_symbol_graphic_sexpr(&self, output: &mut String, indent: usize) {
+        self.graphic.write_symbol_graphic_sexpr(
+            output,
+            indent,
+            KicadSymbolGraphicFormat {
+                private: self.private,
+                stroke: self.stroke.as_ref(),
+                fill: self.fill.as_ref(),
+                uuid: self.uuid.as_deref(),
+                locked: self.locked,
+            },
+        );
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct KicadSymbolGraphicFormat<'a> {
+    private: bool,
+    stroke: Option<&'a KicadStroke>,
+    fill: Option<&'a KicadFill>,
+    uuid: Option<&'a str>,
+    locked: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4266,29 +4364,41 @@ impl KicadGraphic {
                     .iter()
                     .map(|point| transform_local_point(*point, symbol_at))
                     .collect(),
+                stroke: None,
+                fill: None,
             },
             Self::Bezier { points } => KicadCanvasGraphic::Bezier {
                 points: points
                     .iter()
                     .map(|point| transform_local_point(*point, symbol_at))
                     .collect(),
+                stroke: None,
+                fill: None,
             },
             Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
                 start: transform_local_point(*start, symbol_at),
                 end: transform_local_point(*end, symbol_at),
+                stroke: None,
+                fill: None,
             },
             Self::Circle { center, radius } => KicadCanvasGraphic::Circle {
                 center: transform_local_point(*center, symbol_at),
                 radius: *radius,
+                stroke: None,
+                fill: None,
             },
             Self::Arc { start, mid, end } => KicadCanvasGraphic::Arc {
                 start: transform_local_point(*start, symbol_at),
                 mid: mid.map(|point| transform_local_point(point, symbol_at)),
                 end: transform_local_point(*end, symbol_at),
+                stroke: None,
+                fill: None,
             },
             Self::Text { text, at } => KicadCanvasGraphic::Text {
                 text: text.clone(),
                 at: at.map(|at| transform_local_at(at, symbol_at)),
+                stroke: None,
+                fill: None,
             },
         }
     }
@@ -4297,77 +4407,95 @@ impl KicadGraphic {
         match self {
             Self::Polyline { points } => KicadCanvasGraphic::Polyline {
                 points: points.clone(),
+                stroke: None,
+                fill: None,
             },
             Self::Bezier { points } => KicadCanvasGraphic::Bezier {
                 points: points.clone(),
+                stroke: None,
+                fill: None,
             },
             Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
                 start: *start,
                 end: *end,
+                stroke: None,
+                fill: None,
             },
             Self::Circle { center, radius } => KicadCanvasGraphic::Circle {
                 center: *center,
                 radius: *radius,
+                stroke: None,
+                fill: None,
             },
             Self::Arc { start, mid, end } => KicadCanvasGraphic::Arc {
                 start: *start,
                 mid: *mid,
                 end: *end,
+                stroke: None,
+                fill: None,
             },
             Self::Text { text, at } => KicadCanvasGraphic::Text {
                 text: text.clone(),
                 at: *at,
+                stroke: None,
+                fill: None,
             },
         }
     }
 
-    fn write_graphic_sexpr(&self, output: &mut String, indent: usize) {
+    fn write_symbol_graphic_sexpr(
+        &self,
+        output: &mut String,
+        indent: usize,
+        format: KicadSymbolGraphicFormat<'_>,
+    ) {
         let pad = " ".repeat(indent);
+        let private = if format.private { " private" } else { "" };
         match self {
             Self::Polyline { points } => {
-                let points = points
-                    .iter()
-                    .map(|point| {
-                        format!("(xy {} {})", format_number(point.x), format_number(point.y))
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                output.push_str(&format!(
-                    "{}(polyline (pts {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
-                    pad, points
-                ));
+                output.push_str(&format!("{}(polyline{}", pad, private));
+                write_points_sexpr(output, points);
+                write_inline_stroke(output, format.stroke, 0.254);
+                write_inline_fill(output, format.fill);
+                write_symbol_graphic_metadata(output, format.uuid, format.locked);
+                output.push_str(")\n");
             }
             Self::Bezier { points } => {
-                let points = points
-                    .iter()
-                    .map(|point| {
-                        format!("(xy {} {})", format_number(point.x), format_number(point.y))
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                output.push_str(&format!(
-                    "{}(bezier (pts {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
-                    pad, points
-                ));
+                output.push_str(&format!("{}(bezier{}", pad, private));
+                write_points_sexpr(output, points);
+                write_inline_stroke(output, format.stroke, 0.254);
+                write_inline_fill(output, format.fill);
+                write_symbol_graphic_metadata(output, format.uuid, format.locked);
+                output.push_str(")\n");
             }
             Self::Rectangle { start, end } => {
                 output.push_str(&format!(
-                    "{}(rectangle (start {} {}) (end {} {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
+                    "{}(rectangle{} (start {} {}) (end {} {})",
                     pad,
+                    private,
                     format_number(start.x),
                     format_number(start.y),
                     format_number(end.x),
                     format_number(end.y)
                 ));
+                write_inline_stroke(output, format.stroke, 0.254);
+                write_inline_fill(output, format.fill);
+                write_symbol_graphic_metadata(output, format.uuid, format.locked);
+                output.push_str(")\n");
             }
             Self::Circle { center, radius } => {
                 output.push_str(&format!(
-                    "{}(circle (center {} {}) (radius {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
+                    "{}(circle{} (center {} {}) (radius {})",
                     pad,
+                    private,
                     format_number(center.x),
                     format_number(center.y),
                     format_number(*radius)
                 ));
+                write_inline_stroke(output, format.stroke, 0.254);
+                write_inline_fill(output, format.fill);
+                write_symbol_graphic_metadata(output, format.uuid, format.locked);
+                output.push_str(")\n");
             }
             Self::Arc { start, mid, end } => {
                 let mid = mid.unwrap_or(KicadPoint {
@@ -4375,8 +4503,9 @@ impl KicadGraphic {
                     y: (start.y + end.y) / 2.0,
                 });
                 output.push_str(&format!(
-                    "{}(arc (start {} {}) (mid {} {}) (end {} {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
+                    "{}(arc{} (start {} {}) (mid {} {}) (end {} {})",
                     pad,
+                    private,
                     format_number(start.x),
                     format_number(start.y),
                     format_number(mid.x),
@@ -4384,9 +4513,13 @@ impl KicadGraphic {
                     format_number(end.x),
                     format_number(end.y)
                 ));
+                write_inline_stroke(output, format.stroke, 0.254);
+                write_inline_fill(output, format.fill);
+                write_symbol_graphic_metadata(output, format.uuid, format.locked);
+                output.push_str(")\n");
             }
             Self::Text { text, at } => {
-                output.push_str(&format!("{}(text {}", pad, sexpr_string(text)));
+                output.push_str(&format!("{}(text{} {}", pad, private, sexpr_string(text)));
                 if let Some(at) = at {
                     output.push_str(&format!(
                         " (at {} {} {})",
@@ -4395,9 +4528,20 @@ impl KicadGraphic {
                         format_number(at.rotation)
                     ));
                 }
-                output.push_str(" (effects (font (size 1.27 1.27))))\n");
+                output.push_str(" (effects (font (size 1.27 1.27)))");
+                write_symbol_graphic_metadata(output, format.uuid, format.locked);
+                output.push_str(")\n");
             }
         }
+    }
+}
+
+fn write_symbol_graphic_metadata(output: &mut String, uuid: Option<&str>, locked: Option<bool>) {
+    if let Some(uuid) = uuid {
+        output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+    }
+    if locked == Some(true) {
+        output.push_str(" (locked yes)");
     }
 }
 
@@ -4411,6 +4555,12 @@ pub struct KicadSchematicGraphic {
 }
 
 impl KicadSchematicGraphic {
+    fn to_canvas_graphic(&self) -> KicadCanvasGraphic {
+        self.graphic
+            .to_canvas_graphic()
+            .with_style(self.stroke.clone(), self.fill.clone())
+    }
+
     fn write_schematic_graphic_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         match &self.graphic {
@@ -6871,20 +7021,40 @@ fn collect_pin_defs_into(node: &Sexp, pins: &mut Vec<KicadPinDef>) {
     }
 }
 
-fn collect_graphics(node: &Sexp) -> Vec<KicadGraphic> {
+fn collect_graphics(node: &Sexp) -> Vec<KicadSymbolGraphic> {
     let mut graphics = Vec::new();
     collect_graphics_into(node, &mut graphics);
     graphics
 }
 
-fn collect_graphics_into(node: &Sexp, graphics: &mut Vec<KicadGraphic>) {
-    if let Some(graphic) = parse_graphic(node) {
+fn collect_graphics_into(node: &Sexp, graphics: &mut Vec<KicadSymbolGraphic>) {
+    if let Some(graphic) = parse_symbol_graphic(node) {
         graphics.push(graphic);
     }
     for child in list_items(node) {
         if matches!(child, Sexp::List(_)) {
             collect_graphics_into(child, graphics);
         }
+    }
+}
+
+fn parse_symbol_graphic(node: &Sexp) -> Option<KicadSymbolGraphic> {
+    match head(node)? {
+        "polyline" | "bezier" | "rectangle" | "circle" | "arc" | "text" => {
+            let items = list_items(node);
+            Some(KicadSymbolGraphic {
+                graphic: parse_graphic(node)?,
+                private: items
+                    .iter()
+                    .skip(1)
+                    .any(|item| atom_text(item) == Some("private")),
+                stroke: child(items, "stroke").map(parse_stroke),
+                fill: child(items, "fill").map(parse_fill),
+                uuid: child_value(items, "uuid"),
+                locked: parse_optional_bool_child(items, "locked"),
+            })
+        }
+        _ => None,
     }
 }
 
@@ -8531,7 +8701,18 @@ mod tests {
         assert_eq!(scene.graphics.len(), 5);
         assert!(matches!(
             &scene.graphics[1],
-            super::KicadCanvasGraphic::Bezier { points } if points.len() == 4
+            super::KicadCanvasGraphic::Bezier {
+                points,
+                stroke: Some(stroke),
+                ..
+            } if points.len() == 4 && stroke.stroke_type.as_deref() == Some("dash")
+        ));
+        assert!(matches!(
+            &scene.graphics[2],
+            super::KicadCanvasGraphic::Rectangle {
+                fill: Some(fill),
+                ..
+            } if fill.fill_type.as_deref() == Some("hatch")
         ));
         assert!(scene.to_summary_json().contains("\"graphic_count\": 5"));
         assert!(
@@ -10703,7 +10884,7 @@ mod tests {
 
         let symbol = library.symbol("NekoSpice:Curve").unwrap();
         assert_eq!(symbol.graphics.len(), 1);
-        if let KicadGraphic::Bezier { points } = &symbol.graphics[0] {
+        if let KicadGraphic::Bezier { points } = &symbol.graphics[0].graphic {
             assert_eq!(points.len(), 4);
             assert_close(points[0].x, -2.54);
             assert_close(points[3].x, 2.54);
@@ -10722,9 +10903,165 @@ mod tests {
         let reparsed = parse_kicad_symbol_library(&exported, "curve_roundtrip.kicad_sym").unwrap();
         let reparsed_symbol = reparsed.symbol("NekoSpice:Curve").unwrap();
         assert!(matches!(
-            &reparsed_symbol.graphics[0],
+            &reparsed_symbol.graphics[0].graphic,
             KicadGraphic::Bezier { points } if points.len() == 4
         ));
+    }
+
+    #[test]
+    fn preserves_kicad_symbol_graphic_styles_and_roundtrips() {
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "NekoSpice:Styled"
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Styled" (at 0 -2.54 0))
+    (symbol "Styled_0_1"
+      (polyline private
+        (pts (xy -2.54 -1.27) (xy 0 1.27) (xy 2.54 -1.27))
+        (stroke (width 0.0254) (type dash_dot) (color 58 104 255 0.5))
+        (fill (type outline))
+        (uuid "a5cd8da1-8f7f-4f80-bb23-0317de562222")
+        (locked yes)
+      )
+      (rectangle
+        (start -1 -1)
+        (end 1 1)
+        (stroke (width 0) (type default) (color 0 0 0 0))
+        (fill (type background))
+      )
+    )
+  )
+)"#,
+            "styled_symbol.kicad_sym",
+        )
+        .unwrap();
+
+        let symbol = library.symbol("NekoSpice:Styled").unwrap();
+        assert_eq!(symbol.graphics.len(), 2);
+        let styled = &symbol.graphics[0];
+        assert!(styled.private);
+        assert!(matches!(
+            styled.graphic,
+            KicadGraphic::Polyline { ref points } if points.len() == 3
+        ));
+        assert_close(styled.stroke.as_ref().unwrap().width.unwrap(), 0.0254);
+        assert_eq!(
+            styled.stroke.as_ref().unwrap().stroke_type.as_deref(),
+            Some("dash_dot")
+        );
+        assert_eq!(
+            styled.stroke.as_ref().unwrap().color,
+            Some(KicadColor {
+                red: 58.0,
+                green: 104.0,
+                blue: 255.0,
+                alpha: 0.5,
+            })
+        );
+        assert_eq!(
+            styled.fill.as_ref().unwrap().fill_type.as_deref(),
+            Some("outline")
+        );
+        assert_eq!(
+            styled.uuid.as_deref(),
+            Some("a5cd8da1-8f7f-4f80-bb23-0317de562222")
+        );
+        assert_eq!(styled.locked, Some(true));
+        assert_eq!(
+            symbol.graphics[1]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("background")
+        );
+
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:Styled"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "Styled" (at 0 -2.54 0))
+      (symbol "Styled_0_1"
+        (polyline private
+          (pts (xy -2.54 -1.27) (xy 0 1.27) (xy 2.54 -1.27))
+          (stroke (width 0.0254) (type dash_dot) (color 58 104 255 0.5))
+          (fill (type outline))
+        )
+      )
+    )
+  )
+  (symbol
+    (lib_id "NekoSpice:Styled")
+    (at 10 10 0)
+    (property "Reference" "U1" (at 10 7 0))
+    (property "Value" "Styled" (at 10 13 0))
+  )
+)"#,
+            "styled_symbol_canvas.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.symbols.len(), 1);
+        assert!(matches!(
+            &scene.symbols[0].graphics[0],
+            super::KicadCanvasGraphic::Polyline {
+                stroke: Some(stroke),
+                fill: Some(fill),
+                ..
+            } if stroke.stroke_type.as_deref() == Some("dash_dot")
+                && fill.fill_type.as_deref() == Some("outline")
+        ));
+
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(polyline private"));
+        assert!(
+            exported.contains("(stroke (width 0.0254) (type dash_dot) (color 58 104 255 0.5))")
+        );
+        assert!(exported.contains("(fill (type outline))"));
+        assert!(exported.contains("(uuid \"a5cd8da1-8f7f-4f80-bb23-0317de562222\")"));
+        assert!(exported.contains("(locked yes)"));
+        assert!(exported.contains("(fill (type background))"));
+
+        let reparsed =
+            parse_kicad_symbol_library(&exported, "styled_symbol_roundtrip.kicad_sym").unwrap();
+        let reparsed_symbol = reparsed.symbol("NekoSpice:Styled").unwrap();
+        assert_eq!(reparsed_symbol.graphics.len(), 2);
+        assert!(reparsed_symbol.graphics[0].private);
+        assert_eq!(
+            reparsed_symbol.graphics[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash_dot")
+        );
+        assert_eq!(
+            reparsed_symbol.graphics[0]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("outline")
+        );
+        assert_eq!(reparsed_symbol.graphics[0].locked, Some(true));
+        assert_eq!(
+            reparsed_symbol.graphics[1]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("background")
+        );
     }
 
     #[test]

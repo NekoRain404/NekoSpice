@@ -619,13 +619,36 @@ fn render_graphic(
     fill: &str,
 ) {
     match graphic {
-        KicadCanvasGraphic::Polyline { points } => {
-            render_polyline(output, viewport, points, stroke, 1.8);
+        KicadCanvasGraphic::Polyline {
+            points,
+            stroke: graphic_stroke,
+            ..
+        } => {
+            render_stroked_polyline(
+                output,
+                viewport,
+                points,
+                graphic_stroke.as_ref(),
+                stroke,
+                1.8,
+            );
         }
-        KicadCanvasGraphic::Bezier { points } => {
-            render_bezier(output, viewport, points, stroke, 1.8);
+        KicadCanvasGraphic::Bezier {
+            points,
+            stroke: graphic_stroke,
+            ..
+        } => {
+            let color = svg_stroke_color(graphic_stroke.as_ref(), stroke);
+            let stroke_width = svg_stroke_width(graphic_stroke.as_ref(), viewport, 1.8);
+            let dash_array = svg_stroke_dasharray(graphic_stroke.as_ref());
+            render_bezier(output, viewport, points, &color, stroke_width, &dash_array);
         }
-        KicadCanvasGraphic::Rectangle { start, end } => {
+        KicadCanvasGraphic::Rectangle {
+            start,
+            end,
+            stroke: graphic_stroke,
+            fill: graphic_fill,
+        } => {
             let left_top = viewport.project(KicadPoint {
                 x: start.x.min(end.x),
                 y: start.y.min(end.y),
@@ -634,42 +657,86 @@ fn render_graphic(
                 x: start.x.max(end.x),
                 y: start.y.max(end.y),
             });
+            let stroke = svg_stroke_color(graphic_stroke.as_ref(), stroke);
+            let stroke_width = svg_stroke_width(graphic_stroke.as_ref(), viewport, 1.8);
+            let dash_array = svg_stroke_dasharray(graphic_stroke.as_ref());
+            let fill = svg_fill_color(graphic_fill.as_ref(), fill);
+            let fill_opacity = if fill == "none" { "1" } else { "0.25" };
             output.push_str(&format!(
-                "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"{}\" stroke-width=\"1.8\" fill=\"{}\" fill-opacity=\"0.25\"/>\n",
+                "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"{}\" stroke-width=\"{}\"{} fill=\"{}\" fill-opacity=\"{}\"/>\n",
                 fmt(left_top.x),
                 fmt(left_top.y),
                 fmt((right_bottom.x - left_top.x).abs()),
                 fmt((right_bottom.y - left_top.y).abs()),
                 stroke,
-                fill
+                fmt(stroke_width),
+                dash_array,
+                fill,
+                fill_opacity
             ));
         }
-        KicadCanvasGraphic::Circle { center, radius } => {
+        KicadCanvasGraphic::Circle {
+            center,
+            radius,
+            stroke: graphic_stroke,
+            fill: graphic_fill,
+        } => {
             let center = viewport.project(*center);
+            let stroke = svg_stroke_color(graphic_stroke.as_ref(), stroke);
+            let stroke_width = svg_stroke_width(graphic_stroke.as_ref(), viewport, 1.8);
+            let dash_array = svg_stroke_dasharray(graphic_stroke.as_ref());
+            let fill = svg_fill_color(graphic_fill.as_ref(), "none");
             output.push_str(&format!(
-                "      <circle cx=\"{}\" cy=\"{}\" r=\"{}\" stroke=\"{}\" stroke-width=\"1.8\" fill=\"none\"/>\n",
+                "      <circle cx=\"{}\" cy=\"{}\" r=\"{}\" stroke=\"{}\" stroke-width=\"{}\"{} fill=\"{}\"/>\n",
                 fmt(center.x),
                 fmt(center.y),
                 fmt(radius * viewport.scale),
-                stroke
+                stroke,
+                fmt(stroke_width),
+                dash_array,
+                fill
             ));
         }
-        KicadCanvasGraphic::Arc { start, mid, end } => {
+        KicadCanvasGraphic::Arc {
+            start,
+            mid,
+            end,
+            stroke: graphic_stroke,
+            ..
+        } => {
             let mut points = vec![*start];
             if let Some(mid) = mid {
                 points.push(*mid);
             }
             points.push(*end);
-            render_polyline(output, viewport, &points, stroke, 1.8);
+            render_stroked_polyline(
+                output,
+                viewport,
+                &points,
+                graphic_stroke.as_ref(),
+                stroke,
+                1.8,
+            );
         }
-        KicadCanvasGraphic::Text { text, at } => {
+        KicadCanvasGraphic::Text {
+            text,
+            at,
+            stroke: graphic_stroke,
+            fill: graphic_fill,
+        } => {
             if let Some(at) = at {
                 let point = viewport.project(at_point(*at));
+                let text_fill = svg_fill_color(graphic_fill.as_ref(), stroke);
+                let text_fill = if text_fill == "none" {
+                    svg_stroke_color(graphic_stroke.as_ref(), stroke)
+                } else {
+                    text_fill
+                };
                 output.push_str(&format!(
                     "      <text x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\">{}</text>\n",
                     fmt(point.x),
                     fmt(point.y),
-                    stroke,
+                    text_fill,
                     html_escape(text)
                 ));
             }
@@ -683,9 +750,10 @@ fn render_bezier(
     points: &[KicadPoint],
     color: &str,
     stroke_width: f64,
+    dash_array: &str,
 ) {
     if points.len() != 4 {
-        render_polyline(output, viewport, points, color, stroke_width);
+        render_polyline_with_dash(output, viewport, points, color, stroke_width, dash_array);
         return;
     }
 
@@ -694,7 +762,7 @@ fn render_bezier(
     let control_2 = viewport.project(points[2]);
     let end = viewport.project(points[3]);
     output.push_str(&format!(
-        "      <path data-bezier=\"true\" d=\"M {} {} C {} {}, {} {}, {} {}\" stroke=\"{}\" stroke-width=\"{}\" fill=\"none\"/>\n",
+        "      <path data-bezier=\"true\" d=\"M {} {} C {} {}, {} {}, {} {}\" stroke=\"{}\" stroke-width=\"{}\"{} fill=\"none\"/>\n",
         fmt(start.x),
         fmt(start.y),
         fmt(control_1.x),
@@ -704,18 +772,9 @@ fn render_bezier(
         fmt(end.x),
         fmt(end.y),
         color,
-        fmt(stroke_width)
+        fmt(stroke_width),
+        dash_array
     ));
-}
-
-fn render_polyline(
-    output: &mut String,
-    viewport: &SvgViewport,
-    points: &[KicadPoint],
-    color: &str,
-    stroke_width: f64,
-) {
-    render_polyline_with_dash(output, viewport, points, color, stroke_width, "");
 }
 
 fn render_stroked_polyline(
@@ -1050,6 +1109,53 @@ mod tests {
         assert!(svg.contains("<rect"));
         assert!(svg.contains("<circle"));
         assert!(svg.contains("stroke=\"#64748b\""));
+    }
+
+    #[test]
+    fn renders_styled_schematic_and_symbol_graphics_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:Styled"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "Styled" (at 0 -2.54 0))
+      (symbol "Styled_0_1"
+        (polyline
+          (pts (xy -2.54 -1.27) (xy 0 1.27) (xy 2.54 -1.27))
+          (stroke (width 0.0254) (type dash_dot) (color 58 104 255 0.5))
+          (fill (type outline))
+        )
+      )
+    )
+  )
+  (rectangle
+    (start 25 10)
+    (end 35 20)
+    (stroke (width 0.127) (type dash) (color 255 89 101 1))
+    (fill (type color) (color 255 176 0 0.35))
+    (uuid "22222222-2222-4222-8222-222222222222")
+  )
+  (symbol
+    (lib_id "NekoSpice:Styled")
+    (at 10 10 0)
+    (property "Reference" "U1" (at 10 7 0))
+    (property "Value" "Styled" (at 10 13 0))
+  )
+)"#,
+            "styled_graphics.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("stroke=\"rgba(255,89,101,1)\""));
+        assert!(svg.contains("fill=\"rgba(255,176,0,0.35)\""));
+        assert!(svg.contains("stroke-dasharray=\"8 5\""));
+        assert!(svg.contains("stroke=\"rgba(58,104,255,0.5)\""));
+        assert!(svg.contains("stroke-dasharray=\"8 4 2 4\""));
     }
 
     #[test]
