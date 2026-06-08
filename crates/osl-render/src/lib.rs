@@ -88,10 +88,21 @@ pub fn render_kicad_scene_svg_with_options(
     }
     for junction in &scene.junctions {
         let point = viewport.project(junction.at);
+        let radius = junction
+            .diameter
+            .filter(|diameter| diameter.is_finite() && *diameter > 0.0)
+            .map(|diameter| diameter * viewport.scale / 2.0)
+            .unwrap_or(3.0);
+        let fill = junction
+            .color
+            .map(svg_color)
+            .unwrap_or_else(|| "#0f172a".to_string());
         output.push_str(&format!(
-            "    <circle cx=\"{}\" cy=\"{}\" r=\"3\" fill=\"#0f172a\" stroke=\"none\"/>\n",
+            "    <circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"{}\" stroke=\"none\"/>\n",
             fmt(point.x),
-            fmt(point.y)
+            fmt(point.y),
+            fmt(radius),
+            fill
         ));
     }
     for marker in &scene.no_connects {
@@ -718,6 +729,26 @@ mod tests {
         assert!(svg.contains("<polyline"));
         assert!(svg.contains("stroke=\"#2563eb\""));
         assert!(svg.contains("data-bus-entry=\"true\""));
+    }
+
+    #[test]
+    fn renders_styled_junctions_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (junction (at 10 10) (diameter 0.8128) (color 255 0 239 1))
+)"#,
+            "junction.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("<circle"));
+        assert!(svg.contains("r=\"7.315\""));
+        assert!(svg.contains("fill=\"rgba(255,0,239,1)\""));
     }
 
     #[test]

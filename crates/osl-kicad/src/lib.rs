@@ -794,7 +794,12 @@ impl KicadSchematic {
 
         let payload = format!("{},{}", at.x, at.y);
         let uuid = Some(self.edit_uuid(uuid, "junction", &payload)?);
-        self.junctions.push(KicadJunction { at, uuid });
+        self.junctions.push(KicadJunction {
+            at,
+            diameter: None,
+            color: None,
+            uuid,
+        });
 
         Ok(KicadEditSummary {
             operation: "add-junction".to_string(),
@@ -2089,6 +2094,7 @@ impl KicadSchematic {
                 "  \"group_member_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
+                "  \"styled_junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
                 "  \"sheet_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
@@ -2149,6 +2155,7 @@ impl KicadSchematic {
                 .sum::<usize>(),
             self.labels.len(),
             self.junctions.len(),
+            self.styled_junction_count(),
             self.no_connects.len(),
             self.sheets.len(),
             self.sheets
@@ -2279,6 +2286,13 @@ impl KicadSchematic {
             .iter()
             .flat_map(|table| &table.cells)
             .filter(|cell| cell.locked == Some(true))
+            .count()
+    }
+
+    fn styled_junction_count(&self) -> usize {
+        self.junctions
+            .iter()
+            .filter(|junction| junction.diameter.is_some() || junction.color.is_some())
             .count()
     }
 
@@ -2979,7 +2993,11 @@ impl KicadCanvasScene {
             .iter()
             .map(|junction| {
                 bounds.include(junction.at);
-                KicadCanvasJunction { at: junction.at }
+                KicadCanvasJunction {
+                    at: junction.at,
+                    diameter: junction.diameter,
+                    color: junction.color,
+                }
             })
             .collect::<Vec<_>>();
 
@@ -3286,6 +3304,8 @@ pub struct KicadCanvasTextBox {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasJunction {
     pub at: KicadPoint,
+    pub diameter: Option<f64>,
+    pub color: Option<KicadColor>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -5221,6 +5241,8 @@ pub struct KicadMargins {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadJunction {
     pub at: KicadPoint,
+    pub diameter: Option<f64>,
+    pub color: Option<KicadColor>,
     pub uuid: Option<String>,
 }
 
@@ -5228,14 +5250,24 @@ impl KicadJunction {
     fn write_junction_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
-            "{}(junction\n{}  (at {} {})\n{}  (diameter 0)\n{}  (color 0 0 0 0)\n",
+            "{}(junction\n{}  (at {} {})\n{}  (diameter {})\n{} ",
             pad,
             pad,
             format_number(self.at.x),
             format_number(self.at.y),
             pad,
+            format_number(self.diameter.unwrap_or(0.0)),
             pad
         ));
+        self.color
+            .unwrap_or(KicadColor {
+                red: 0.0,
+                green: 0.0,
+                blue: 0.0,
+                alpha: 0.0,
+            })
+            .write_inline_color_sexpr(output);
+        output.push('\n');
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
         }
@@ -6172,6 +6204,8 @@ fn parse_junction(node: &Sexp) -> Option<KicadJunction> {
     let at = child(items, "at").and_then(parse_at)?;
     Some(KicadJunction {
         at: KicadPoint { x: at.x, y: at.y },
+        diameter: child_value(items, "diameter").and_then(|value| value.parse().ok()),
+        color: child(items, "color").and_then(parse_color),
         uuid: child_value(items, "uuid"),
     })
 }
@@ -7508,6 +7542,68 @@ mod tests {
         let reparsed = parse_kicad_schematic(&roundtrip, "roundtrip.kicad_sch").unwrap();
         assert_eq!(reparsed.no_connects.len(), 1);
         assert_eq!(reparsed.canvas_scene().no_connects.len(), 1);
+    }
+
+    #[test]
+    fn parses_schematic_junction_styles_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (junction
+    (at 58.42 19.05)
+    (diameter 0.8128)
+    (color 255 0 239 1)
+    (uuid "8fabedd0-c306-4e64-a286-1d33eb9a2adf")
+  )
+)"#,
+            "junction.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.junctions.len(), 1);
+        assert_close(schematic.junctions[0].diameter.unwrap(), 0.8128);
+        assert_eq!(
+            schematic.junctions[0].color,
+            Some(KicadColor {
+                red: 255.0,
+                green: 0.0,
+                blue: 239.0,
+                alpha: 1.0,
+            })
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_junction_count\": 1")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.junctions.len(), 1);
+        assert_close(scene.junctions[0].diameter.unwrap(), 0.8128);
+        assert_eq!(
+            scene.junctions[0].color,
+            Some(KicadColor {
+                red: 255.0,
+                green: 0.0,
+                blue: 239.0,
+                alpha: 1.0,
+            })
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(junction"));
+        assert!(roundtrip.contains("(diameter 0.8128)"));
+        assert!(roundtrip.contains("(color 255 0 239 1)"));
+        let reparsed = parse_kicad_schematic(&roundtrip, "junction_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.junctions.len(), 1);
+        assert_close(reparsed.junctions[0].diameter.unwrap(), 0.8128);
+        assert_eq!(
+            reparsed.junctions[0].uuid.as_deref(),
+            Some("8fabedd0-c306-4e64-a286-1d33eb9a2adf")
+        );
     }
 
     #[test]
