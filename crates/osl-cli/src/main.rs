@@ -1,6 +1,6 @@
 use osl_core::{
-    OslError, OslResult, RunMetadata, RunStatus, html_escape, json_escape, make_run_id, read_text,
-    write_text,
+    OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape, json_escape,
+    make_run_id, parameters_json, read_text, write_text,
 };
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
 use osl_waveform::{MeasurementKind, measure, read_ngspice_ascii_raw};
@@ -106,17 +106,21 @@ fn verify_command(args: &[String]) -> OslResult<i32> {
     let backend = NgspiceCliBackend::new(ngspice);
     let mut results = Vec::new();
     for item in &config.runs {
-        let run_dir = output_dir.join("runs").join(sanitize_name(&item.name));
-        let metadata = backend.run(&item.netlist, &run_dir)?;
-        let checks = evaluate_checks(&run_dir, &item.checks);
-        write_single_run_report(&run_dir, &metadata)?;
-        results.push(VerifyRunResult {
-            name: item.name.clone(),
-            netlist: item.netlist.display().to_string(),
-            run_dir: run_dir.display().to_string(),
-            metadata,
-            checks,
-        });
+        for case in item.expand_cases()? {
+            let run_dir = output_dir.join("runs").join(sanitize_name(&case.name));
+            let metadata =
+                backend.run_with_parameters(&item.netlist, &run_dir, &case.parameters)?;
+            let checks = evaluate_checks(&run_dir, &item.checks);
+            write_single_run_report(&run_dir, &metadata)?;
+            results.push(VerifyRunResult {
+                name: case.name,
+                netlist: item.netlist.display().to_string(),
+                run_dir: run_dir.display().to_string(),
+                metadata,
+                parameters: case.parameters,
+                checks,
+            });
+        }
     }
 
     let report = VerifyReport {
@@ -170,6 +174,7 @@ fn bench_command(args: &[String]) -> OslResult<i32> {
             netlist: circuit.display().to_string(),
             run_dir: run_dir.display().to_string(),
             metadata,
+            parameters: Vec::new(),
             checks: Vec::new(),
         });
     }
@@ -250,7 +255,65 @@ struct VerifyConfig {
 struct VerifyRun {
     name: String,
     netlist: PathBuf,
+    sweep: Vec<SweepDimension>,
     checks: Vec<VerifyCheck>,
+}
+
+impl VerifyRun {
+    fn expand_cases(&self) -> OslResult<Vec<RunCase>> {
+        if self.sweep.is_empty() {
+            return Ok(vec![RunCase {
+                name: self.name.clone(),
+                parameters: Vec::new(),
+            }]);
+        }
+
+        let mut cases = vec![RunCase {
+            name: self.name.clone(),
+            parameters: Vec::new(),
+        }];
+
+        for dimension in &self.sweep {
+            if dimension.values.is_empty() {
+                return Err(OslError::InvalidInput(format!(
+                    "sweep '{}' in run '{}' has no values",
+                    dimension.name, self.name
+                )));
+            }
+
+            let mut expanded = Vec::new();
+            for case in &cases {
+                for value in &dimension.values {
+                    let mut parameters = case.parameters.clone();
+                    parameters.push(ParameterOverride::new(&dimension.name, *value));
+                    expanded.push(RunCase {
+                        name: format!(
+                            "{}__{}={}",
+                            case.name,
+                            dimension.name,
+                            format_parameter_value(*value)
+                        ),
+                        parameters,
+                    });
+                }
+            }
+            cases = expanded;
+        }
+
+        Ok(cases)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SweepDimension {
+    name: String,
+    values: Vec<f64>,
+}
+
+#[derive(Debug, Clone)]
+struct RunCase {
+    name: String,
+    parameters: Vec<ParameterOverride>,
 }
 
 #[derive(Debug, Clone)]
@@ -275,6 +338,7 @@ impl VerifyConfig {
         let mut current: Option<VerifyRun> = None;
         let mut current_check: Option<VerifyCheck> = None;
         let mut in_runs = false;
+        let mut in_sweep = false;
         let mut in_checks = false;
 
         for raw_line in content.lines() {
@@ -313,8 +377,10 @@ impl VerifyConfig {
                 current = Some(VerifyRun {
                     name: unquote(value),
                     netlist: PathBuf::new(),
+                    sweep: Vec::new(),
                     checks: Vec::new(),
                 });
+                in_sweep = false;
                 in_checks = false;
                 continue;
             }
@@ -335,6 +401,18 @@ impl VerifyConfig {
                 continue;
             }
 
+            if line == "sweep:" {
+                if current.is_none() {
+                    return Err(OslError::InvalidInput(format!(
+                        "{} has sweep before run name",
+                        path.display()
+                    )));
+                }
+                in_sweep = true;
+                in_checks = false;
+                continue;
+            }
+
             if line == "checks:" {
                 if current.is_none() {
                     return Err(OslError::InvalidInput(format!(
@@ -342,7 +420,18 @@ impl VerifyConfig {
                         path.display()
                     )));
                 }
+                in_sweep = false;
                 in_checks = true;
+                continue;
+            }
+
+            if in_sweep && let Some((name, values)) = parse_sweep_line(line, path)? {
+                let Some(run) = current.as_mut() else {
+                    return Err(OslError::InvalidInput(
+                        "sweep entry appears before a verify run".to_string(),
+                    ));
+                };
+                run.sweep.push(SweepDimension { name, values });
                 continue;
             }
 
@@ -414,6 +503,41 @@ fn validate_run(run: VerifyRun) -> OslResult<VerifyRun> {
         )));
     }
     Ok(run)
+}
+
+fn parse_sweep_line(line: &str, path: &Path) -> OslResult<Option<(String, Vec<f64>)>> {
+    let Some((name, raw_values)) = line.split_once(':') else {
+        return Ok(None);
+    };
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(OslError::InvalidInput(format!(
+            "{} has sweep entry with empty parameter name",
+            path.display()
+        )));
+    }
+    Ok(Some((
+        name.to_string(),
+        parse_f64_list(raw_values, "sweep values")?,
+    )))
+}
+
+fn parse_f64_list(value: &str, context: &str) -> OslResult<Vec<f64>> {
+    let value = value.trim();
+    if !value.starts_with('[') || !value.ends_with(']') {
+        return Err(OslError::InvalidInput(format!(
+            "{context} must use [a, b, c] syntax"
+        )));
+    }
+    let inner = &value[1..value.len() - 1];
+    if inner.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    inner
+        .split(',')
+        .map(|part| parse_f64(part.trim(), context))
+        .collect()
 }
 
 fn push_check(current: &mut Option<VerifyRun>, check: VerifyCheck) -> OslResult<()> {
@@ -545,6 +669,7 @@ struct VerifyRunResult {
     netlist: String,
     run_dir: String,
     metadata: RunMetadata,
+    parameters: Vec<ParameterOverride>,
     checks: Vec<CheckResult>,
 }
 
@@ -594,6 +719,7 @@ impl VerifyReport {
             .results
             .iter()
             .map(|result| {
+                let parameters = parameters_json(&result.parameters, 8);
                 let checks = result
                     .checks
                     .iter()
@@ -625,6 +751,9 @@ impl VerifyReport {
                         "      \"simulation_status\": \"{}\",\n",
                         "      \"exit_code\": {},\n",
                         "      \"duration_ms\": {},\n",
+                        "      \"parameters\": [\n",
+                        "{}\n",
+                        "      ],\n",
                         "      \"checks\": [\n",
                         "{}\n",
                         "      ]\n",
@@ -641,6 +770,7 @@ impl VerifyReport {
                         .map(|value| value.to_string())
                         .unwrap_or_else(|| "null".to_string()),
                     result.metadata.duration_ms,
+                    parameters,
                     checks
                 )
             })
@@ -672,6 +802,16 @@ impl VerifyReport {
             .iter()
             .map(|result| {
                 let status = result.status().as_str();
+                let parameters = if result.parameters.is_empty() {
+                    "none".to_string()
+                } else {
+                    result
+                        .parameters
+                        .iter()
+                        .map(|parameter| format!("{}={}", parameter.name, parameter.value))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
                 let checks = if result.checks.is_empty() {
                     "no checks".to_string()
                 } else {
@@ -692,12 +832,13 @@ impl VerifyReport {
                 format!(
                     concat!(
                         "<tr class=\"{}\"><td>{}</td><td>{}</td><td>{}</td>",
-                        "<td>{}</td><td>{}</td><td>{}</td></tr>"
+                        "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>"
                     ),
                     status,
                     html_escape(status),
                     html_escape(&result.name),
                     html_escape(&result.netlist),
+                    html_escape(&parameters),
                     result.metadata.duration_ms,
                     html_escape(&result.run_dir),
                     html_escape(&checks)
@@ -711,7 +852,7 @@ impl VerifyReport {
                 "<title>NekoSpice Verification Report</title>{}</head><body>",
                 "<main><h1>{}</h1>",
                 "<section class=\"summary\"><strong>{}</strong> passed, <strong>{}</strong> failed</section>",
-                "<table><thead><tr><th>Status</th><th>Run</th><th>Netlist</th><th>ms</th><th>Output</th><th>Checks</th></tr></thead>",
+                "<table><thead><tr><th>Status</th><th>Run</th><th>Netlist</th><th>Parameters</th><th>ms</th><th>Output</th><th>Checks</th></tr></thead>",
                 "<tbody>{}</tbody></table>",
                 "</main></body></html>\n"
             ),
@@ -831,6 +972,14 @@ fn option_f64_text(value: Option<f64>) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
+fn format_parameter_value(value: f64) -> String {
+    let mut text = value.to_string();
+    text = text.replace('-', "m");
+    text = text.replace('.', "p");
+    text = text.replace('+', "");
+    text
+}
+
 fn unquote(value: &str) -> String {
     let value = value.trim();
     if value.len() >= 2 {
@@ -896,4 +1045,38 @@ fn find_circuits_inner(path: &Path, circuits: &mut Vec<PathBuf>) -> OslResult<()
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SweepDimension, VerifyRun};
+    use std::path::PathBuf;
+
+    #[test]
+    fn expands_sweep_cartesian_product() {
+        let run = VerifyRun {
+            name: "case".to_string(),
+            netlist: PathBuf::from("demo.cir"),
+            sweep: vec![
+                SweepDimension {
+                    name: "vin".to_string(),
+                    values: vec![9.0, 12.0],
+                },
+                SweepDimension {
+                    name: "load".to_string(),
+                    values: vec![1.0, 2.0],
+                },
+            ],
+            checks: Vec::new(),
+        };
+
+        let cases = run.expand_cases().unwrap();
+
+        assert_eq!(cases.len(), 4);
+        assert_eq!(cases[0].name, "case__vin=9__load=1");
+        assert_eq!(cases[3].parameters[0].name, "vin");
+        assert_eq!(cases[3].parameters[0].value, 12.0);
+        assert_eq!(cases[3].parameters[1].name, "load");
+        assert_eq!(cases[3].parameters[1].value, 2.0);
+    }
 }

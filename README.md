@@ -32,6 +32,8 @@ project: basic_validation
 runs:
   - name: rc_filter
     netlist: rc_filter/rc.cir
+    sweep:
+      rload: [500, 1000, 2000]
     checks:
       - name: average_output
         kind: avg
@@ -39,6 +41,8 @@ runs:
         min: 0.45
         max: 0.50
 ```
+
+Each sweep dimension expands into a Cartesian product of ngspice runs. Parameters are injected as `.param` overrides in the working netlist and recorded in `run.json` and `verify.json`.
 
 The ngspice runner automatically injects an ASCII raw export into the working netlist:
 

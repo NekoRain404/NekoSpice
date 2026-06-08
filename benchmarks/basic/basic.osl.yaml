@@ -19,6 +19,16 @@ runs:
         signal: i(v1)
         min: 0.0004
         max: 0.0007
+  - name: rc_load_sweep
+    netlist: ../../examples/rc_sweep/rc_sweep.cir
+    sweep:
+      rload: [500, 1000, 2000]
+    checks:
+      - name: output_average_windowless
+        kind: avg
+        signal: v(out)
+        min: 0.35
+        max: 0.60
   - name: diode_rectifier
     netlist: ../../examples/diode_rectifier/rectifier.cir
     checks:

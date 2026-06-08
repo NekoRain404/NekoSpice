@@ -1,6 +1,6 @@
 use osl_core::{
-    Artifact, OslError, OslResult, RunMetadata, RunStatus, make_run_id, now_unix_ms, read_text,
-    write_text,
+    Artifact, OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, make_run_id,
+    now_unix_ms, read_text, write_text,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,6 +18,12 @@ pub trait SimulatorBackend {
     fn name(&self) -> &'static str;
     fn capabilities(&self) -> BackendCapabilities;
     fn run(&self, source_netlist: &Path, output_dir: &Path) -> OslResult<RunMetadata>;
+    fn run_with_parameters(
+        &self,
+        source_netlist: &Path,
+        output_dir: &Path,
+        parameters: &[ParameterOverride],
+    ) -> OslResult<RunMetadata>;
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +63,15 @@ impl SimulatorBackend for NgspiceCliBackend {
     }
 
     fn run(&self, source_netlist: &Path, output_dir: &Path) -> OslResult<RunMetadata> {
+        self.run_with_parameters(source_netlist, output_dir, &[])
+    }
+
+    fn run_with_parameters(
+        &self,
+        source_netlist: &Path,
+        output_dir: &Path,
+        parameters: &[ParameterOverride],
+    ) -> OslResult<RunMetadata> {
         if !source_netlist.is_file() {
             return Err(OslError::InvalidInput(format!(
                 "netlist does not exist: {}",
@@ -75,7 +90,8 @@ impl SimulatorBackend for NgspiceCliBackend {
         let working_netlist = output_abs.join("input.cir");
 
         let source = read_text(&source_abs)?;
-        let working_source = ensure_ngspice_control_exports(&source);
+        let working_source =
+            apply_parameter_overrides(&ensure_ngspice_control_exports(&source), parameters);
         write_text(&working_netlist, &working_source)?;
 
         let started_unix_ms = now_unix_ms();
@@ -122,6 +138,7 @@ impl SimulatorBackend for NgspiceCliBackend {
             exit_code: output.status.code(),
             duration_ms,
             started_unix_ms,
+            parameters: parameters.to_vec(),
             artifacts: collect_artifacts(&output_abs)?,
         };
 
@@ -216,9 +233,69 @@ fn ensure_ngspice_control_exports(source: &str) -> String {
     }
 }
 
+fn apply_parameter_overrides(source: &str, parameters: &[ParameterOverride]) -> String {
+    if parameters.is_empty() {
+        return source.to_string();
+    }
+
+    let parameter_names = parameters
+        .iter()
+        .map(|parameter| parameter.name.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    let mut output = String::new();
+    output.push_str("* NekoSpice parameter overrides\n");
+    for parameter in parameters {
+        output.push_str(".param ");
+        output.push_str(&parameter.name);
+        output.push('=');
+        output.push_str(&parameter.value.to_string());
+        output.push('\n');
+    }
+    output.push('\n');
+
+    for line in source.lines() {
+        if defines_overridden_parameter(line, &parameter_names) {
+            output.push_str("* NekoSpice removed overridden parameter: ");
+            output.push_str(line);
+            output.push('\n');
+        } else {
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+    output
+}
+
+fn defines_overridden_parameter(line: &str, parameter_names: &[String]) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.to_ascii_lowercase().starts_with(".param") {
+        return false;
+    }
+
+    let body = trimmed[6..].trim();
+    if body.is_empty() {
+        return false;
+    }
+
+    for definition in body.split_whitespace() {
+        let name = definition
+            .split_once('=')
+            .map(|(name, _)| name)
+            .unwrap_or(definition)
+            .trim()
+            .to_ascii_lowercase();
+        if parameter_names.iter().any(|parameter| parameter == &name) {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ensure_ngspice_control_exports;
+    use super::{apply_parameter_overrides, ensure_ngspice_control_exports};
+    use osl_core::ParameterOverride;
 
     #[test]
     fn injects_raw_export_before_endc() {
@@ -238,5 +315,28 @@ mod tests {
             output
                 .contains(".control\nset filetype=ascii\nrun\nwrite waveform.raw all\n.endc\n.end")
         );
+    }
+
+    #[test]
+    fn prepends_parameter_overrides() {
+        let output = apply_parameter_overrides(
+            "R1 in out {rload}\n.end\n",
+            &[ParameterOverride::new("rload", 2000.0)],
+        );
+
+        assert!(output.starts_with("* NekoSpice parameter overrides\n.param rload=2000"));
+        assert!(output.contains("R1 in out {rload}"));
+    }
+
+    #[test]
+    fn removes_overridden_param_definition() {
+        let output = apply_parameter_overrides(
+            ".param rload=1000\nR1 in out {rload}\n.end\n",
+            &[ParameterOverride::new("rload", 2000.0)],
+        );
+
+        assert!(output.contains(".param rload=2000"));
+        assert!(output.contains("* NekoSpice removed overridden parameter: .param rload=1000"));
+        assert!(!output.contains("\n.param rload=1000\n"));
     }
 }

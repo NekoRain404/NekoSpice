@@ -63,6 +63,21 @@ pub struct Artifact {
     pub kind: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParameterOverride {
+    pub name: String,
+    pub value: f64,
+}
+
+impl ParameterOverride {
+    pub fn new(name: impl Into<String>, value: f64) -> Self {
+        Self {
+            name: name.into(),
+            value,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RunMetadata {
     pub schema_version: u32,
@@ -76,6 +91,7 @@ pub struct RunMetadata {
     pub exit_code: Option<i32>,
     pub duration_ms: u128,
     pub started_unix_ms: u128,
+    pub parameters: Vec<ParameterOverride>,
     pub artifacts: Vec<Artifact>,
 }
 
@@ -108,6 +124,9 @@ impl RunMetadata {
                 "  \"exit_code\": {},\n",
                 "  \"duration_ms\": {},\n",
                 "  \"started_unix_ms\": {},\n",
+                "  \"parameters\": [\n",
+                "{}\n",
+                "  ],\n",
                 "  \"artifacts\": [\n",
                 "{}\n",
                 "  ]\n",
@@ -124,6 +143,7 @@ impl RunMetadata {
             option_i32_json(self.exit_code),
             self.duration_ms,
             self.started_unix_ms,
+            parameters_json(&self.parameters, 4),
             artifacts
         )
     }
@@ -192,4 +212,20 @@ fn option_i32_json(value: Option<i32>) -> String {
         Some(value) => value.to_string(),
         None => "null".to_string(),
     }
+}
+
+pub fn parameters_json(parameters: &[ParameterOverride], indent: usize) -> String {
+    let pad = " ".repeat(indent);
+    parameters
+        .iter()
+        .map(|parameter| {
+            format!(
+                "{}{{ \"name\": \"{}\", \"value\": {} }}",
+                pad,
+                json_escape(&parameter.name),
+                parameter.value
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n")
 }
