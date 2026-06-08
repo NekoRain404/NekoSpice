@@ -140,7 +140,7 @@ cargo run -p osl-cli -- kicad-export examples/kicad_schematic/neko_spice.kicad_s
 
 Symbol graphic text items now preserve KiCad text effects through Rust IR, `.kicad_sym` / `.kicad_sch` roundtrips, canvas scene generation, and the SVG baseline renderer, including font size, thickness, bold/italic, color, justification, hide flags, and href metadata.
 
-Multi-unit and body-style symbol data is tracked from KiCad nested symbol names and instance `(unit ...)` / `(body_style ...)` metadata. Canvas scenes, schematic-to-SPICE pin selection, placement pin UUID generation, and KiCad writers use that scope so a placed unit does not render or connect pins from other units. `osl kicad-edit ... place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]` preserves the same scope selected by the symbol-library index and preview path.
+Multi-unit and body-style symbol data is tracked from KiCad nested symbol names and instance `(unit ...)` / `(body_style ...)` metadata. Canvas scenes, schematic-to-SPICE pin selection, placement pin UUID generation, and KiCad writers use that scope so a placed unit does not render or connect pins from other units. `osl kicad-edit ... place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]` preserves the same scope and selected pin alternates chosen by the symbol-library index and preview path.
 
 KiCad symbol unit display names from nested `(unit_name ...)` records are preserved in the Rust IR, schematic and symbol-library summaries, canvas symbol metadata, and `.kicad_sch` / `.kicad_sym` writers so multi-unit parts keep their user-facing unit labels for later library browser and placement UI work.
 

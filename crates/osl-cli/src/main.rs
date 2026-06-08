@@ -17,6 +17,7 @@ use osl_waveform::{
     MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
 };
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -86,7 +87,7 @@ Usage:
   osl kicad-check <file.kicad_sch> [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
-      place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]
+      place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]
   osl kicad-render <file.kicad_sch-or-file.kicad_sym> [--symbol <name>] [--unit <n>] [--body-style <n>] --output <file.svg>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
@@ -1843,22 +1844,22 @@ fn parse_kicad_place_symbol_edit(
     symbol_definitions: &[KicadSymbolDef],
 ) -> OslResult<KicadSchematicEdit> {
     let (payload, uuid) = split_payload_uuid(payload);
-    let (payload, unit, body_style) = split_kicad_place_symbol_options(payload)?;
-    let (rest, at) = payload.rsplit_once(':').ok_or_else(|| {
+    let options = split_kicad_place_symbol_options(payload)?;
+    let (rest, at) = options.payload.rsplit_once(':').ok_or_else(|| {
         OslError::InvalidInput(
-            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]"
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]"
                 .to_string(),
         )
     })?;
     let (rest, value) = rest.rsplit_once(':').ok_or_else(|| {
         OslError::InvalidInput(
-            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]"
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]"
                 .to_string(),
         )
     })?;
     let (lib_id, reference) = rest.rsplit_once(':').ok_or_else(|| {
         OslError::InvalidInput(
-            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>]"
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]"
                 .to_string(),
         )
     })?;
@@ -1877,8 +1878,9 @@ fn parse_kicad_place_symbol_edit(
         reference: reference.to_string(),
         value: value.to_string(),
         at: parse_kicad_at(at, "symbol placement")?,
-        unit: Some(unit.unwrap_or(1)),
-        body_style,
+        unit: Some(options.unit.unwrap_or(1)),
+        body_style: options.body_style,
+        pin_alternates: options.pin_alternates,
         uuid,
     })
 }
@@ -2039,11 +2041,17 @@ fn split_payload_uuid(payload: &str) -> (&str, Option<String>) {
     }
 }
 
-fn split_kicad_place_symbol_options(
-    mut payload: &str,
-) -> OslResult<(&str, Option<u32>, Option<u32>)> {
+struct KicadPlaceSymbolOptions<'a> {
+    payload: &'a str,
+    unit: Option<u32>,
+    body_style: Option<u32>,
+    pin_alternates: BTreeMap<String, String>,
+}
+
+fn split_kicad_place_symbol_options(mut payload: &str) -> OslResult<KicadPlaceSymbolOptions<'_>> {
     let mut unit = None;
     let mut body_style = None;
+    let mut pin_alternates = BTreeMap::new();
 
     while let Some((rest, suffix)) = payload.rsplit_once(':') {
         if let Some(value) = suffix.strip_prefix("unit=") {
@@ -2062,12 +2070,57 @@ fn split_kicad_place_symbol_options(
             }
             body_style = Some(parse_positive_u32(value, "symbol body style")?);
             payload = rest;
+        } else if let Some(value) = suffix.strip_prefix("alt=") {
+            if !pin_alternates.is_empty() {
+                return Err(OslError::InvalidInput(
+                    "place-symbol alt option was provided more than once".to_string(),
+                ));
+            }
+            pin_alternates = parse_kicad_pin_alternates(value)?;
+            payload = rest;
         } else {
             break;
         }
     }
 
-    Ok((payload, unit, body_style))
+    Ok(KicadPlaceSymbolOptions {
+        payload,
+        unit,
+        body_style,
+        pin_alternates,
+    })
+}
+
+fn parse_kicad_pin_alternates(value: &str) -> OslResult<BTreeMap<String, String>> {
+    if value.trim().is_empty() {
+        return Err(OslError::InvalidInput(
+            "place-symbol alt expects <pin>=<alternate>[,<pin>=<alternate>...]".to_string(),
+        ));
+    }
+
+    let mut alternates = BTreeMap::new();
+    for entry in value.split(',') {
+        let (pin, alternate) = entry.split_once('=').ok_or_else(|| {
+            OslError::InvalidInput(
+                "place-symbol alt expects <pin>=<alternate>[,<pin>=<alternate>...]".to_string(),
+            )
+        })?;
+        if pin.trim().is_empty() || alternate.trim().is_empty() {
+            return Err(OslError::InvalidInput(
+                "place-symbol alt pin and alternate names must not be empty".to_string(),
+            ));
+        }
+        if alternates
+            .insert(pin.to_string(), alternate.to_string())
+            .is_some()
+        {
+            return Err(OslError::InvalidInput(format!(
+                "place-symbol alt pin '{pin}' was provided more than once"
+            )));
+        }
+    }
+
+    Ok(alternates)
 }
 
 fn parse_kicad_point(value: &str, context: &str) -> OslResult<KicadPoint> {
@@ -2561,7 +2614,7 @@ mod tests {
             "placed.kicad_sch",
             "--library",
             "neko_spice.kicad_sym",
-            "place-symbol:NekoSpice:C:C2:47n:101.6,53.34:unit=2:body-style=1",
+            "place-symbol:NekoSpice:C:C2:47n:101.6,53.34:unit=2:body-style=1:alt=6=SDA",
         ]
         .iter()
         .map(|value| value.to_string())
@@ -2571,7 +2624,7 @@ mod tests {
             positionals(&args),
             vec![
                 "input.kicad_sch",
-                "place-symbol:NekoSpice:C:C2:47n:101.6,53.34:unit=2:body-style=1",
+                "place-symbol:NekoSpice:C:C2:47n:101.6,53.34:unit=2:body-style=1:alt=6=SDA",
             ]
         );
 
@@ -2585,6 +2638,7 @@ mod tests {
                 at,
                 unit,
                 body_style,
+                pin_alternates,
                 ..
             } => {
                 assert_eq!(definition.name, "NekoSpice:C");
@@ -2594,6 +2648,7 @@ mod tests {
                 assert_close(at.y, 53.34);
                 assert_eq!(*unit, Some(2));
                 assert_eq!(*body_style, Some(1));
+                assert_eq!(pin_alternates.get("6").map(String::as_str), Some("SDA"));
             }
             edit => panic!("expected place-symbol edit, got {edit:?}"),
         }

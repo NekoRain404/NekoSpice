@@ -343,6 +343,7 @@ pub enum KicadSchematicEdit {
         at: KicadAt,
         unit: Option<u32>,
         body_style: Option<u32>,
+        pin_alternates: BTreeMap<String, String>,
         uuid: Option<String>,
     },
     AddWire {
@@ -401,6 +402,7 @@ pub struct KicadSymbolPlacement {
     pub at: KicadAt,
     pub unit: Option<u32>,
     pub body_style: Option<u32>,
+    pub pin_alternates: BTreeMap<String, String>,
     pub uuid: Option<String>,
 }
 
@@ -525,6 +527,7 @@ impl KicadSchematic {
                 at,
                 unit,
                 body_style,
+                pin_alternates,
                 uuid,
             } => self.place_symbol(KicadSymbolPlacement {
                 definition: *definition,
@@ -533,6 +536,7 @@ impl KicadSchematic {
                 at,
                 unit,
                 body_style,
+                pin_alternates,
                 uuid,
             }),
             KicadSchematicEdit::AddWire { points, uuid } => self.add_wire(points, uuid),
@@ -649,6 +653,7 @@ impl KicadSchematic {
             at,
             unit,
             body_style,
+            pin_alternates,
             uuid,
         } = placement;
         validate_at(at, "symbol placement")?;
@@ -705,20 +710,43 @@ impl KicadSchematic {
             .scoped_pins(Some(unit), body_style)
             .collect::<Vec<_>>();
         sorted_pins.sort_by(compare_pin_numbers);
+        for pin_number in pin_alternates.keys() {
+            let Some(pin) = sorted_pins
+                .iter()
+                .find(|pin| pin.number() == pin_number.as_str())
+            else {
+                return Err(OslError::InvalidInput(format!(
+                    "KiCad symbol placement pin '{pin_number}' is not present in selected unit/body style"
+                )));
+            };
+            let alternate = pin_alternates
+                .get(pin_number)
+                .expect("pin alternate was just looked up");
+            if !pin
+                .alternates
+                .iter()
+                .any(|candidate| candidate.name == *alternate)
+            {
+                return Err(OslError::InvalidInput(format!(
+                    "KiCad symbol placement pin '{pin_number}' has no alternate '{alternate}'"
+                )));
+            }
+        }
         let mut generated_pin_uuids = BTreeSet::new();
         let mut pins = Vec::new();
         for (index, pin) in sorted_pins.into_iter().enumerate() {
+            let pin_number = pin.number().to_string();
             let pin_uuid = self.edit_uuid_excluding(
                 None,
                 "symbol-pin",
-                &format!("{instance_uuid}:{}:{index}", pin.number()),
+                &format!("{instance_uuid}:{pin_number}:{index}"),
                 &generated_pin_uuids,
             )?;
             generated_pin_uuids.insert(pin_uuid.clone());
             pins.push(KicadSymbolPinRef {
-                number: Some(pin.number().to_string()),
+                number: Some(pin_number.clone()),
                 uuid: Some(pin_uuid),
-                alternate: None,
+                alternate: pin_alternates.get(&pin_number).cloned(),
             });
         }
 
@@ -9999,6 +10027,7 @@ mod tests {
         read_kicad_schematic_with_libraries, read_kicad_symbol_library,
         read_kicad_symbol_library_index, read_kicad_symbol_library_table,
     };
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::Path;
 
@@ -13095,6 +13124,7 @@ mod tests {
                 },
                 unit: Some(1),
                 body_style: None,
+                pin_alternates: BTreeMap::new(),
                 uuid: Some("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee".to_string()),
             })
             .unwrap();
@@ -13153,7 +13183,13 @@ mod tests {
     (symbol "Scoped_2_2"
       (unit_name "Analog")
       (pin passive line (at -2.54 0 0) (length 2.54) (name "A2") (number "3"))
-      (pin passive line (at 2.54 0 180) (length 2.54) (name "B2") (number "4"))
+      (pin passive line
+        (at 2.54 0 180)
+        (length 2.54)
+        (name "B2")
+        (number "4")
+        (alternate "ALT4" output line)
+      )
     )
   )
 )"#,
@@ -13174,6 +13210,7 @@ mod tests {
                 },
                 unit: Some(2),
                 body_style: Some(2),
+                pin_alternates: BTreeMap::from([("4".to_string(), "ALT4".to_string())]),
                 uuid: Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".to_string()),
             })
             .unwrap();
@@ -13185,6 +13222,7 @@ mod tests {
             .unwrap();
         assert_eq!(placed.unit, Some(2));
         assert_eq!(placed.body_style, Some(2));
+        assert_eq!(placed.pins[1].alternate.as_deref(), Some("ALT4"));
         assert_eq!(
             placed
                 .pins
@@ -13209,11 +13247,38 @@ mod tests {
         assert!(exported.contains("(unit 2)"));
         assert!(exported.contains("(body_style 2)"));
         assert!(exported.contains("(pin \"3\""));
+        assert!(exported.contains("(alternate \"ALT4\")"));
         assert!(!exported.contains("(pin \"1\""));
         let reparsed = parse_kicad_schematic(&exported, "placed_scoped.kicad_sch").unwrap();
         assert_eq!(reparsed.symbols[0].unit, Some(2));
         assert_eq!(reparsed.symbols[0].body_style, Some(2));
+        assert_eq!(
+            reparsed.symbols[0].pins[1].alternate.as_deref(),
+            Some("ALT4")
+        );
         assert_eq!(reparsed.canvas_scene().symbols[0].pins.len(), 2);
+
+        let definition = schematic
+            .symbol_definition("NekoSpice:Scoped")
+            .unwrap()
+            .clone();
+        let error = schematic
+            .apply_edit(KicadSchematicEdit::PlaceSymbol {
+                definition: Box::new(definition),
+                reference: "U3".to_string(),
+                value: "Scoped".to_string(),
+                at: KicadAt {
+                    x: 30.0,
+                    y: 10.0,
+                    rotation: 0.0,
+                },
+                unit: Some(2),
+                body_style: Some(2),
+                pin_alternates: BTreeMap::from([("4".to_string(), "MISSING".to_string())]),
+                uuid: None,
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("has no alternate 'MISSING'"));
     }
 
     #[test]
@@ -13923,6 +13988,7 @@ mod tests {
                 },
                 unit: Some(1),
                 body_style: None,
+                pin_alternates: BTreeMap::new(),
                 uuid: None,
             })
             .unwrap();
