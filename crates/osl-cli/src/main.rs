@@ -256,21 +256,35 @@ fn import_command(args: &[String]) -> OslResult<i32> {
     fs::create_dir_all(&output_dir)
         .map_err(|err| OslError::io(format!("create {}", output_dir.display()), err))?;
 
-    let report = ImportReport::parse(Path::new(input))?;
+    let input_path = Path::new(input);
+    let source_netlist = read_text(input_path)?;
+    let report = ImportReport::parse(input_path)?;
     write_text(&output_dir.join("import.json"), &report.to_json())?;
     write_text(
         &output_dir.join("report.html"),
         &report.to_html(report_css()),
     )?;
+    let project = report.normalized_project(&source_netlist);
+    let project_dir = output_dir.join("project");
+    write_text(&project_dir.join(&project.netlist_path), &project.netlist)?;
+    write_text(
+        &project_dir.join(&project.validation_path),
+        &project.validation_yaml,
+    )?;
+    write_text(
+        &project_dir.join(&project.manifest_path),
+        &project.manifest_json,
+    )?;
 
     println!(
-        "import: flavor={}, components={}, symbols={}, directives={}, score={} -> {}",
+        "import: flavor={}, components={}, symbols={}, directives={}, score={} -> {} (project: {})",
         report.flavor.as_str(),
         report.component_count(),
         report.symbol_count(),
         report.directive_count(),
         report.compatibility_score(),
-        output_dir.display()
+        output_dir.display(),
+        project_dir.join(&project.validation_path).display()
     );
 
     Ok(if report.error_count() == 0 { 0 } else { 2 })

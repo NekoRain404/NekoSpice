@@ -184,6 +184,10 @@ impl ImportReport {
                 "<section class=\"summary\"><strong>Score:</strong> {} <strong>Flavor:</strong> {} ",
                 "<strong>Components:</strong> {} <strong>Symbols:</strong> {} ",
                 "<strong>Directives:</strong> {} <strong>Warnings:</strong> {}</section>",
+                "<h2>Normalized Project</h2>",
+                "<ul><li><a href=\"project/project.osl.yaml\">project.osl.yaml</a></li>",
+                "<li><a href=\"project/input.cir\">input.cir</a></li>",
+                "<li><a href=\"project/manifest.json\">manifest.json</a></li></ul>",
                 "<h2>Diagnostics</h2>",
                 "<table><thead><tr><th>Severity</th><th>Line</th><th>Code</th><th>Message</th><th>Suggestion</th></tr></thead><tbody>{}</tbody></table>",
                 "<h2>Components</h2>",
@@ -204,6 +208,81 @@ impl ImportReport {
             directive_rows
         )
     }
+
+    pub fn normalized_project(&self, source_netlist: &str) -> NormalizedImportProject {
+        let project_name = normalized_project_name(&self.source);
+        let netlist_path = "input.cir".to_string();
+        let validation_path = "project.osl.yaml".to_string();
+        let manifest_path = "manifest.json".to_string();
+        let run_name = sanitize_identifier(&project_name);
+        let normalized_netlist = normalize_imported_netlist(source_netlist);
+        let validation_yaml = format!(
+            concat!(
+                "project: {}\n",
+                "\n",
+                "runs:\n",
+                "  - name: {}\n",
+                "    netlist: {}\n",
+                "    checks: []\n"
+            ),
+            yaml_scalar(&project_name),
+            yaml_scalar(&run_name),
+            yaml_scalar(&netlist_path)
+        );
+        let manifest_json = format!(
+            concat!(
+                "{{\n",
+                "  \"schema_version\": 1,\n",
+                "  \"project\": \"{}\",\n",
+                "  \"source\": \"{}\",\n",
+                "  \"flavor\": \"{}\",\n",
+                "  \"compatibility_score\": {},\n",
+                "  \"netlist\": \"{}\",\n",
+                "  \"validation\": \"{}\",\n",
+                "  \"import_report\": \"../import.json\",\n",
+                "  \"component_count\": {},\n",
+                "  \"symbol_count\": {},\n",
+                "  \"directive_count\": {},\n",
+                "  \"include_count\": {},\n",
+                "  \"errors\": {},\n",
+                "  \"warnings\": {}\n",
+                "}}\n"
+            ),
+            json_escape(&project_name),
+            json_escape(&self.source),
+            self.flavor.as_str(),
+            self.compatibility_score(),
+            json_escape(&netlist_path),
+            json_escape(&validation_path),
+            self.component_count(),
+            self.symbol_count(),
+            self.directive_count(),
+            self.includes.len(),
+            self.error_count(),
+            self.warning_count()
+        );
+
+        NormalizedImportProject {
+            project_name,
+            netlist_path,
+            validation_path,
+            manifest_path,
+            netlist: normalized_netlist,
+            validation_yaml,
+            manifest_json,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NormalizedImportProject {
+    pub project_name: String,
+    pub netlist_path: String,
+    pub validation_path: String,
+    pub manifest_path: String,
+    pub netlist: String,
+    pub validation_yaml: String,
+    pub manifest_json: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -649,6 +728,48 @@ fn option_string_json(value: Option<&str>) -> String {
         .unwrap_or_else(|| "null".to_string())
 }
 
+fn normalized_project_name(source: &str) -> String {
+    Path::new(source)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .map(sanitize_identifier)
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "imported_project".to_string())
+}
+
+fn sanitize_identifier(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    for character in input.chars() {
+        if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+            output.push(character);
+        } else {
+            output.push('_');
+        }
+    }
+    if output.is_empty() {
+        "imported_project".to_string()
+    } else {
+        output
+    }
+}
+
+fn normalize_imported_netlist(source: &str) -> String {
+    let mut output = source.trim_end().to_string();
+    output.push('\n');
+    output
+}
+
+fn yaml_scalar(value: &str) -> String {
+    if value.chars().all(|character| {
+        character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.' | '/')
+    }) && !value.is_empty()
+    {
+        value.to_string()
+    } else {
+        format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ComponentKind, NetlistFlavor, parse_netlist};
@@ -684,5 +805,25 @@ XU1 in out vcc vee GOODAMP
 
         assert_eq!(report.warning_count(), 1);
         assert_eq!(report.diagnostics[0].code, "missing_analysis");
+    }
+
+    #[test]
+    fn builds_normalized_import_project() {
+        let source = "* KiCad netlist\nV1 in 0 DC 5\nR1 in out 1k\n.tran 1u 1m\n.end\n";
+        let report = parse_netlist(source, "examples/kicad_import/kicad_rc.cir").unwrap();
+
+        let project = report.normalized_project(source);
+
+        assert_eq!(project.project_name, "kicad_rc");
+        assert_eq!(project.netlist_path, "input.cir");
+        assert!(project.netlist.ends_with('\n'));
+        assert!(project.validation_yaml.contains("project: kicad_rc"));
+        assert!(project.validation_yaml.contains("netlist: input.cir"));
+        assert!(project.manifest_json.contains("\"flavor\": \"kicad\""));
+        assert!(
+            project
+                .manifest_json
+                .contains("\"validation\": \"project.osl.yaml\"")
+        );
     }
 }
