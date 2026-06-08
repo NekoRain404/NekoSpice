@@ -3483,23 +3483,36 @@ impl KicadCanvasScene {
             "sheet_count": self.sheets.len(),
             "graphic_count": symbol_graphic_count + self.graphics.len(),
             "schematic_graphic_count": self.graphics.len(),
+            "image_count": self.images.len(),
+            "table_count": self.tables.len(),
+            "table_cell_count": self.tables.iter().map(|table| table.cells.len()).sum::<usize>(),
+            "rule_area_count": self.rule_areas.len(),
             "pin_count": pin_count,
+            "sheet_pin_count": self.sheets.iter().map(|sheet| sheet.pins.len()).sum::<usize>(),
             "wire_count": self.wires.len(),
             "bus_count": self.buses.len(),
             "bus_entry_count": self.bus_entries.len(),
+            "directive_label_count": self.directive_labels.len(),
             "label_count": self.labels.len(),
             "text_count": self.text_items.len(),
+            "text_box_count": self.text_boxes.len(),
             "spice_directive_count": self.text_items.iter().filter(|item| item.is_spice_directive).count(),
             "junction_count": self.junctions.len(),
             "no_connect_count": self.no_connects.len(),
             "bounds": self.bounds.map(kicad_bounding_box_value),
             "symbols": self.symbols.iter().map(KicadCanvasSymbol::to_json_value).collect::<Vec<_>>(),
+            "sheets": self.sheets.iter().map(KicadCanvasSheet::to_json_value).collect::<Vec<_>>(),
             "graphics": self.graphics.iter().map(KicadCanvasGraphic::to_json_value).collect::<Vec<_>>(),
+            "images": self.images.iter().map(KicadCanvasImage::to_json_value).collect::<Vec<_>>(),
+            "tables": self.tables.iter().map(KicadCanvasTable::to_json_value).collect::<Vec<_>>(),
+            "rule_areas": self.rule_areas.iter().map(KicadCanvasRuleArea::to_json_value).collect::<Vec<_>>(),
             "wires": self.wires.iter().map(KicadCanvasWire::to_json_value).collect::<Vec<_>>(),
             "buses": self.buses.iter().map(KicadCanvasBus::to_json_value).collect::<Vec<_>>(),
             "bus_entries": self.bus_entries.iter().map(KicadCanvasBusEntry::to_json_value).collect::<Vec<_>>(),
+            "directive_labels": self.directive_labels.iter().map(KicadCanvasDirectiveLabel::to_json_value).collect::<Vec<_>>(),
             "labels": self.labels.iter().map(KicadCanvasLabel::to_json_value).collect::<Vec<_>>(),
             "text_items": self.text_items.iter().map(KicadCanvasText::to_json_value).collect::<Vec<_>>(),
+            "text_boxes": self.text_boxes.iter().map(KicadCanvasTextBox::to_json_value).collect::<Vec<_>>(),
             "junctions": self.junctions.iter().map(KicadCanvasJunction::to_json_value).collect::<Vec<_>>(),
             "no_connects": self.no_connects.iter().map(KicadCanvasNoConnect::to_json_value).collect::<Vec<_>>(),
         })
@@ -3549,6 +3562,22 @@ pub struct KicadCanvasSheet {
     pub bounds: Option<KicadBoundingBox>,
 }
 
+impl KicadCanvasSheet {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "name": self.name,
+            "file": self.file,
+            "at": self.at.map(kicad_at_value),
+            "size": self.size.map(kicad_size_value),
+            "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+            "fill": self.fill.as_ref().map(kicad_fill_value),
+            "pin_count": self.pins.len(),
+            "pins": self.pins.iter().map(KicadCanvasSheetPin::to_json_value).collect::<Vec<_>>(),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasSheetPin {
     pub name: String,
@@ -3557,11 +3586,32 @@ pub struct KicadCanvasSheetPin {
     pub effects: Option<KicadTextEffects>,
 }
 
+impl KicadCanvasSheetPin {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "name": self.name,
+            "pin_type": self.pin_type,
+            "at": self.at.map(kicad_at_value),
+            "effects": self.effects.as_ref().map(kicad_text_effects_value),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasRuleArea {
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
     pub fill: Option<KicadFill>,
+}
+
+impl KicadCanvasRuleArea {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "points": kicad_points_value(&self.points),
+            "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+            "fill": self.fill.as_ref().map(kicad_fill_value),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3572,6 +3622,19 @@ pub struct KicadCanvasDirectiveLabel {
     pub shape: Option<String>,
     pub effects: Option<KicadTextEffects>,
     pub properties: Vec<KicadProperty>,
+}
+
+impl KicadCanvasDirectiveLabel {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "text": self.text,
+            "at": self.at.map(kicad_at_value),
+            "length": self.length,
+            "shape": self.shape,
+            "effects": self.effects.as_ref().map(kicad_text_effects_value),
+            "properties": self.properties.iter().map(kicad_property_value).collect::<Vec<_>>(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3678,13 +3741,14 @@ impl KicadCanvasGraphic {
             Self::Text {
                 text,
                 at,
+                effects,
                 stroke,
                 fill,
-                ..
             } => serde_json::json!({
                 "kind": "text",
                 "text": text,
                 "at": at.map(kicad_at_value),
+                "effects": effects.as_ref().map(kicad_text_effects_value),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
             }),
@@ -3783,12 +3847,36 @@ pub struct KicadCanvasImage {
     pub image_size: Option<KicadSize>,
 }
 
+impl KicadCanvasImage {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "at": self.at.map(kicad_point_value),
+            "scale": self.scale,
+            "mime_type": self.mime_type,
+            "image_size": self.image_size.map(kicad_size_value),
+            "data_base64": self.data_base64,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasTable {
     pub column_count: usize,
     pub column_widths: Vec<f64>,
     pub row_heights: Vec<f64>,
     pub cells: Vec<KicadCanvasTableCell>,
+}
+
+impl KicadCanvasTable {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "column_count": self.column_count,
+            "column_widths": self.column_widths,
+            "row_heights": self.row_heights,
+            "cell_count": self.cells.len(),
+            "cells": self.cells.iter().map(KicadCanvasTableCell::to_json_value).collect::<Vec<_>>(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3801,6 +3889,21 @@ pub struct KicadCanvasTableCell {
     pub row_span: usize,
     pub fill: Option<KicadFill>,
     pub effects: Option<KicadTextEffects>,
+}
+
+impl KicadCanvasTableCell {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "text": self.text,
+            "at": self.at.map(kicad_at_value),
+            "size": self.size.map(kicad_size_value),
+            "margins": self.margins.map(kicad_margins_value),
+            "column_span": self.column_span,
+            "row_span": self.row_span,
+            "fill": self.fill.as_ref().map(kicad_fill_value),
+            "effects": self.effects.as_ref().map(kicad_text_effects_value),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3824,6 +3927,8 @@ impl KicadCanvasPin {
             "start": kicad_point_value(self.start),
             "end": kicad_point_value(self.end),
             "alternate_count": self.alternates.len(),
+            "name_effects": self.name_effects.as_ref().map(kicad_text_effects_value),
+            "number_effects": self.number_effects.as_ref().map(kicad_text_effects_value),
             "alternates": self.alternates.iter().map(|alternate| {
                 serde_json::json!({
                     "name": alternate.name,
@@ -3921,6 +4026,7 @@ impl KicadCanvasLabel {
             "text": self.text,
             "kind": self.kind.as_str(),
             "at": self.at.map(kicad_at_value),
+            "effects": self.effects.as_ref().map(kicad_text_effects_value),
         })
     }
 }
@@ -3939,6 +4045,7 @@ impl KicadCanvasText {
             "text": self.text,
             "at": self.at.map(kicad_at_value),
             "is_spice_directive": self.is_spice_directive,
+            "effects": self.effects.as_ref().map(kicad_text_effects_value),
         })
     }
 }
@@ -3952,6 +4059,20 @@ pub struct KicadCanvasTextBox {
     pub stroke: Option<KicadStroke>,
     pub fill: Option<KicadFill>,
     pub effects: Option<KicadTextEffects>,
+}
+
+impl KicadCanvasTextBox {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "text": self.text,
+            "at": self.at.map(kicad_at_value),
+            "size": self.size.map(kicad_size_value),
+            "margins": self.margins.map(kicad_margins_value),
+            "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+            "fill": self.fill.as_ref().map(kicad_fill_value),
+            "effects": self.effects.as_ref().map(kicad_text_effects_value),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -9055,6 +9176,15 @@ fn kicad_size_value(size: KicadSize) -> serde_json::Value {
     })
 }
 
+fn kicad_margins_value(margins: KicadMargins) -> serde_json::Value {
+    serde_json::json!({
+        "left": margins.left,
+        "top": margins.top,
+        "right": margins.right,
+        "bottom": margins.bottom,
+    })
+}
+
 fn kicad_at_value(at: KicadAt) -> serde_json::Value {
     serde_json::json!({
         "x": at.x,
@@ -9084,6 +9214,32 @@ fn kicad_fill_value(fill: &KicadFill) -> serde_json::Value {
     serde_json::json!({
         "type": fill.fill_type,
         "color": fill.color.map(kicad_color_value),
+    })
+}
+
+fn kicad_text_effects_value(effects: &KicadTextEffects) -> serde_json::Value {
+    serde_json::json!({
+        "font_size": effects.font_size.map(kicad_size_value),
+        "font_thickness": effects.font_thickness,
+        "font_bold": effects.font_bold,
+        "font_italic": effects.font_italic,
+        "font_color": effects.font_color.map(kicad_color_value),
+        "justify": effects.justify,
+        "hide": effects.hide,
+        "href": effects.href,
+    })
+}
+
+fn kicad_property_value(property: &KicadProperty) -> serde_json::Value {
+    serde_json::json!({
+        "name": property.name,
+        "value": property.value,
+        "id": property.id,
+        "at": property.at.map(kicad_at_value),
+        "hide": property.hide,
+        "show_name": property.show_name,
+        "do_not_autoplace": property.do_not_autoplace,
+        "effects": property.effects.as_ref().map(kicad_text_effects_value),
     })
 }
 
@@ -10596,6 +10752,11 @@ mod tests {
         assert_eq!(scene.rule_areas.len(), 1);
         assert_eq!(scene.rule_areas[0].points.len(), 4);
         assert!(scene.to_summary_json().contains("\"rule_area_count\": 1"));
+        let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(scene_json["rule_area_count"], 1);
+        assert_eq!(scene_json["rule_areas"][0]["points"][0]["x"], 120.65);
+        assert_eq!(scene_json["rule_areas"][0]["stroke"]["type"], "dash");
+        assert_eq!(scene_json["rule_areas"][0]["fill"]["color"]["alpha"], 0.25);
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(rule_area"));
@@ -10723,6 +10884,18 @@ mod tests {
         );
         assert!(scene.bounds.unwrap().width() >= 17.78);
         assert!(scene.to_summary_json().contains("\"text_box_count\": 1"));
+        let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(scene_json["text_box_count"], 1);
+        assert_eq!(
+            scene_json["text_boxes"][0]["text"],
+            "Bigger\nMultiline\nText"
+        );
+        assert_eq!(scene_json["text_boxes"][0]["margins"]["left"], 0.9525);
+        assert_eq!(scene_json["text_boxes"][0]["stroke"]["type"], "dash_dot");
+        assert_eq!(
+            scene_json["text_boxes"][0]["effects"]["font_color"]["blue"],
+            37.0
+        );
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(text_box \"Bigger\\nMultiline\\nText\""));
@@ -10787,6 +10960,14 @@ mod tests {
         assert_close(bounds.width(), 6.096);
         assert_close(bounds.height(), 6.096);
         assert!(scene.to_summary_json().contains("\"image_count\": 1"));
+        let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(scene_json["image_count"], 1);
+        assert_eq!(scene_json["images"][0]["mime_type"], "image/png");
+        assert_eq!(scene_json["images"][0]["scale"], 1.5);
+        assert_eq!(
+            scene_json["images"][0]["data_base64"],
+            "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"
+        );
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(image (at 36.83 39.37) (scale 1.5)"));
@@ -10928,6 +11109,16 @@ mod tests {
         assert!(scene.to_summary_json().contains("\"table_count\": 1"));
         assert!(scene.to_summary_json().contains("\"table_cell_count\": 2"));
         assert_close(scene.bounds.unwrap().width(), 48.26);
+        let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(scene_json["table_count"], 1);
+        assert_eq!(scene_json["table_cell_count"], 2);
+        assert_eq!(scene_json["tables"][0]["column_count"], 2);
+        assert_eq!(scene_json["tables"][0]["cell_count"], 2);
+        assert_eq!(scene_json["tables"][0]["cells"][0]["text"], "LED pin");
+        assert_eq!(
+            scene_json["tables"][0]["cells"][0]["effects"]["justify"][1],
+            "top"
+        );
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(table"));
@@ -11587,6 +11778,22 @@ mod tests {
             scene.sheets[0].pins[0].effects.as_ref().unwrap().justify,
             vec!["right".to_string()]
         );
+        let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(scene_json["sheet_count"], 1);
+        assert_eq!(scene_json["sheet_pin_count"], 1);
+        assert_eq!(scene_json["label_count"], 1);
+        assert_eq!(scene_json["text_box_count"], 1);
+        assert_eq!(scene_json["sheets"][0]["name"], "Sub");
+        assert_eq!(
+            scene_json["sheets"][0]["pins"][0]["effects"]["justify"][0],
+            "right"
+        );
+        assert_eq!(scene_json["labels"][0]["effects"]["hide"], true);
+        assert_eq!(
+            scene_json["text_items"][0]["effects"]["href"],
+            "https://kicad.org"
+        );
+        assert_eq!(scene_json["text_boxes"][0]["effects"]["font_italic"], true);
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(justify left bottom) hide"));
@@ -11696,6 +11903,14 @@ mod tests {
             scene
                 .to_summary_json()
                 .contains("\"directive_label_count\": 2")
+        );
+        let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(scene_json["directive_label_count"], 2);
+        assert_eq!(scene_json["directive_labels"][0]["text"], "HV");
+        assert_eq!(scene_json["directive_labels"][0]["shape"], "dot");
+        assert_eq!(
+            scene_json["directive_labels"][0]["properties"][1]["effects"]["font_italic"],
+            true
         );
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
