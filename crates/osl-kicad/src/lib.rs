@@ -117,6 +117,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         groups: direct_children(root_list, "group")
             .filter_map(parse_group)
             .collect(),
+        directive_labels: direct_children(root_list, "netclass_flag")
+            .filter_map(parse_directive_label)
+            .collect(),
         labels: direct_children(root_list, "label")
             .filter_map(|node| parse_label(node, KicadLabelKind::Local))
             .chain(
@@ -232,6 +235,7 @@ pub struct KicadSchematic {
     pub images: Vec<KicadImage>,
     pub tables: Vec<KicadTable>,
     pub groups: Vec<KicadGroup>,
+    pub directive_labels: Vec<KicadDirectiveLabel>,
     pub labels: Vec<KicadLabel>,
     pub sheets: Vec<KicadSheet>,
     pub no_connects: Vec<KicadNoConnect>,
@@ -1231,6 +1235,9 @@ impl KicadSchematic {
         for label in &self.labels {
             label.write_label_sexpr(&mut output, 2);
         }
+        for label in &self.directive_labels {
+            label.write_directive_label_sexpr(&mut output, 2);
+        }
         for sheet in &self.sheets {
             sheet.write_sheet_sexpr(&mut output, 2);
         }
@@ -1998,6 +2005,11 @@ impl KicadSchematic {
                 uuids.insert(uuid.clone());
             }
         }
+        for label in &self.directive_labels {
+            if let Some(uuid) = &label.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
         for junction in &self.junctions {
             if let Some(uuid) = &junction.uuid {
                 uuids.insert(uuid.clone());
@@ -2111,6 +2123,8 @@ impl KicadSchematic {
                 "  \"group_count\": {},\n",
                 "  \"group_member_count\": {},\n",
                 "  \"label_count\": {},\n",
+                "  \"directive_label_count\": {},\n",
+                "  \"directive_label_property_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"styled_junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
@@ -2176,6 +2190,8 @@ impl KicadSchematic {
                 .map(|group| group.members.len())
                 .sum::<usize>(),
             self.labels.len(),
+            self.directive_labels.len(),
+            self.directive_label_property_count(),
             self.junctions.len(),
             self.styled_junction_count(),
             self.no_connects.len(),
@@ -2402,6 +2418,11 @@ impl KicadSchematic {
                 .iter()
                 .filter(|label| label.fields_autoplaced == Some(true))
                 .count()
+            + self
+                .directive_labels
+                .iter()
+                .filter(|label| label.fields_autoplaced == Some(true))
+                .count()
     }
 
     fn shaped_label_count(&self) -> usize {
@@ -2413,6 +2434,13 @@ impl KicadSchematic {
 
     fn label_property_count(&self) -> usize {
         self.labels.iter().map(|label| label.properties.len()).sum()
+    }
+
+    fn directive_label_property_count(&self) -> usize {
+        self.directive_labels
+            .iter()
+            .map(|label| label.properties.len())
+            .sum()
     }
 
     fn hidden_property_count(&self) -> usize {
@@ -2433,6 +2461,12 @@ impl KicadSchematic {
                 .flat_map(|label| &label.properties)
                 .filter(|property| property_is_hidden(property))
                 .count()
+            + self
+                .directive_labels
+                .iter()
+                .flat_map(|label| &label.properties)
+                .filter(|property| property_is_hidden(property))
+                .count()
     }
 
     fn property_effect_count(&self) -> usize {
@@ -2449,6 +2483,12 @@ impl KicadSchematic {
                 .count()
             + self
                 .labels
+                .iter()
+                .flat_map(|label| &label.properties)
+                .filter(|property| property.effects.is_some())
+                .count()
+            + self
+                .directive_labels
                 .iter()
                 .flat_map(|label| &label.properties)
                 .filter(|property| property.effects.is_some())
@@ -2795,6 +2835,7 @@ pub struct KicadCanvasScene {
     pub wires: Vec<KicadCanvasWire>,
     pub buses: Vec<KicadCanvasBus>,
     pub bus_entries: Vec<KicadCanvasBusEntry>,
+    pub directive_labels: Vec<KicadCanvasDirectiveLabel>,
     pub labels: Vec<KicadCanvasLabel>,
     pub text_items: Vec<KicadCanvasText>,
     pub text_boxes: Vec<KicadCanvasTextBox>,
@@ -3004,6 +3045,26 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let directive_labels = schematic
+            .directive_labels
+            .iter()
+            .map(|label| {
+                if let Some(at) = label.at {
+                    bounds.include(at.point());
+                    let pin_end = pin_body_end(at, label.length.unwrap_or(2.54));
+                    bounds.include(pin_end);
+                }
+                KicadCanvasDirectiveLabel {
+                    text: label.display_text().to_string(),
+                    at: label.at,
+                    length: label.length,
+                    shape: label.shape.clone(),
+                    effects: label.effects.clone(),
+                    properties: label.properties.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+
         let text_items = schematic
             .text_items
             .iter()
@@ -3073,6 +3134,7 @@ impl KicadCanvasScene {
             wires,
             buses,
             bus_entries,
+            directive_labels,
             labels,
             text_items,
             text_boxes,
@@ -3115,6 +3177,7 @@ impl KicadCanvasScene {
                 "  \"wire_count\": {},\n",
                 "  \"bus_count\": {},\n",
                 "  \"bus_entry_count\": {},\n",
+                "  \"directive_label_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"text_count\": {},\n",
                 "  \"text_box_count\": {},\n",
@@ -3143,6 +3206,7 @@ impl KicadCanvasScene {
             self.wires.len(),
             self.buses.len(),
             self.bus_entries.len(),
+            self.directive_labels.len(),
             self.labels.len(),
             self.text_items.len(),
             self.text_boxes.len(),
@@ -3186,6 +3250,16 @@ pub struct KicadCanvasSheetPin {
     pub pin_type: String,
     pub at: Option<KicadAt>,
     pub effects: Option<KicadTextEffects>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasDirectiveLabel {
+    pub text: String,
+    pub at: Option<KicadAt>,
+    pub length: Option<f64>,
+    pub shape: Option<String>,
+    pub effects: Option<KicadTextEffects>,
+    pub properties: Vec<KicadProperty>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -5041,6 +5115,76 @@ impl KicadLabel {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadDirectiveLabel {
+    pub text: String,
+    pub length: Option<f64>,
+    pub shape: Option<String>,
+    pub at: Option<KicadAt>,
+    pub fields_autoplaced: Option<bool>,
+    pub effects: Option<KicadTextEffects>,
+    pub uuid: Option<String>,
+    pub properties: Vec<KicadProperty>,
+}
+
+impl KicadDirectiveLabel {
+    pub fn property(&self, name: &str) -> Option<&str> {
+        self.properties
+            .iter()
+            .find(|property| property.name == name)
+            .map(|property| property.value.as_str())
+    }
+
+    pub fn display_text(&self) -> &str {
+        ["Netclass", "Net Class", "Component Class"]
+            .into_iter()
+            .find_map(|name| self.property(name).filter(|value| !value.is_empty()))
+            .unwrap_or(&self.text)
+    }
+
+    fn write_directive_label_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(netclass_flag {}",
+            pad,
+            sexpr_string(&self.text)
+        ));
+        if let Some(length) = self.length {
+            output.push_str(&format!(" (length {})", format_number(length)));
+        }
+        if let Some(shape) = &self.shape {
+            output.push_str(&format!(" (shape {})", sexpr_atom_or_string(shape)));
+        }
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                " (at {} {} {})",
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        if let Some(fields_autoplaced) = self.fields_autoplaced {
+            output.push_str(&format!(
+                " (fields_autoplaced {})",
+                if fields_autoplaced { "yes" } else { "no" }
+            ));
+        }
+        write_inline_text_effects(output, self.effects.as_ref());
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        if self.properties.is_empty() {
+            output.push_str(")\n");
+        } else {
+            output.push('\n');
+            for property in &self.properties {
+                property.write_property_sexpr(output, indent + 2);
+            }
+            output.push_str(&format!("{})\n", pad));
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KicadLabelKind {
     Local,
@@ -6213,6 +6357,22 @@ fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
         shape: child_value(items, "shape"),
         fields_autoplaced: parse_optional_bool_child(items, "fields_autoplaced"),
         effects: child(items, "effects").map(parse_text_effects),
+        properties: direct_children(items, "property")
+            .filter_map(parse_property)
+            .collect(),
+    })
+}
+
+fn parse_directive_label(node: &Sexp) -> Option<KicadDirectiveLabel> {
+    let items = list_items(node);
+    Some(KicadDirectiveLabel {
+        text: list_value(node, 1).unwrap_or_default(),
+        length: child_value(items, "length").and_then(|value| value.parse().ok()),
+        shape: child_value(items, "shape"),
+        at: child(items, "at").and_then(parse_at),
+        fields_autoplaced: parse_optional_bool_child(items, "fields_autoplaced"),
+        effects: child(items, "effects").map(parse_text_effects),
+        uuid: child_value(items, "uuid"),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -8916,6 +9076,111 @@ mod tests {
             reparsed.sheets[0].pins[0].effects.as_ref().unwrap().justify,
             vec!["right".to_string()]
         );
+    }
+
+    #[test]
+    fn preserves_kicad_directive_labels_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20251028)
+  (generator "eeschema")
+  (paper "A4")
+  (lib_symbols)
+  (netclass_flag ""
+    (length 3.81)
+    (shape dot)
+    (at 102.87 30.48 0)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27)
+        (color 236 104 255 1)
+      )
+      (justify left bottom)
+    )
+    (uuid "3c7ec402-4c06-4b52-9acd-ed760671ff85")
+    (property "Net Class" "HV"
+      (at 103.5685 27.94 0)
+      (show_name no)
+      (do_not_autoplace no)
+      (effects (font (size 1.27 1.27)) (justify left))
+    )
+    (property "Component Class" "Classy"
+      (at 99.822 24.892 0)
+      (show_name no)
+      (do_not_autoplace no)
+      (effects (font (size 1.27 1.27) (italic yes)) (justify left))
+    )
+  )
+  (netclass_flag ""
+    (length 2.54)
+    (shape dot)
+    (at 110 30 0)
+    (property "Net Class" "" (at 110 28 0))
+    (property "Component Class" "OnlyComponent" (at 110 26 0))
+  )
+)"#,
+            "directive_label.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.directive_labels.len(), 2);
+        let label = &schematic.directive_labels[0];
+        assert_eq!(label.display_text(), "HV");
+        assert_eq!(
+            schematic.directive_labels[1].display_text(),
+            "OnlyComponent"
+        );
+        assert_close(label.length.unwrap(), 3.81);
+        assert_eq!(label.shape.as_deref(), Some("dot"));
+        assert_eq!(label.fields_autoplaced, Some(true));
+        assert_eq!(
+            label.effects.as_ref().unwrap().font_color,
+            Some(KicadColor {
+                red: 236.0,
+                green: 104.0,
+                blue: 255.0,
+                alpha: 1.0,
+            })
+        );
+        assert_eq!(label.properties.len(), 2);
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"directive_label_count\": 2")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"directive_label_property_count\": 4")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.directive_labels.len(), 2);
+        assert_eq!(scene.directive_labels[0].text, "HV");
+        assert_eq!(scene.directive_labels[1].text, "OnlyComponent");
+        assert!(
+            scene
+                .to_summary_json()
+                .contains("\"directive_label_count\": 2")
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(netclass_flag \"\""));
+        assert!(roundtrip.contains("(length 3.81)"));
+        assert!(roundtrip.contains("(shape dot)"));
+        assert!(roundtrip.contains("(fields_autoplaced yes)"));
+        assert!(roundtrip.contains("(color 236 104 255 1)"));
+        assert!(roundtrip.contains("(property \"Net Class\" \"HV\""));
+        let reparsed =
+            parse_kicad_schematic(&roundtrip, "directive_label_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.directive_labels.len(), 2);
+        assert_eq!(
+            reparsed.directive_labels[0].uuid.as_deref(),
+            Some("3c7ec402-4c06-4b52-9acd-ed760671ff85")
+        );
+        assert_eq!(reparsed.directive_labels[0].display_text(), "HV");
+        assert_eq!(reparsed.directive_labels[1].display_text(), "OnlyComponent");
     }
 
     #[test]

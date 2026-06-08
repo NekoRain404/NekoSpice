@@ -1,8 +1,8 @@
 use osl_core::html_escape;
 use osl_kicad::{
-    KicadAt, KicadBoundingBox, KicadCanvasGraphic, KicadCanvasImage, KicadCanvasScene,
-    KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable, KicadCanvasTextBox, KicadColor,
-    KicadFill, KicadLabelKind, KicadPoint, KicadStroke,
+    KicadAt, KicadBoundingBox, KicadCanvasDirectiveLabel, KicadCanvasGraphic, KicadCanvasImage,
+    KicadCanvasScene, KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable, KicadCanvasTextBox,
+    KicadColor, KicadFill, KicadLabelKind, KicadPoint, KicadStroke,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -158,6 +158,9 @@ pub fn render_kicad_scene_svg_with_options(
             ));
         }
     }
+    for label in &scene.directive_labels {
+        render_directive_label(&mut output, &viewport, label);
+    }
     for item in &scene.text_items {
         if let Some(at) = item.at {
             let point = viewport.project(at_point(at));
@@ -281,6 +284,70 @@ fn render_sheet(output: &mut String, viewport: &SvgViewport, sheet: &KicadCanvas
                 html_escape(&pin.name)
             ));
         }
+    }
+    output.push_str("    </g>\n");
+}
+
+fn render_directive_label(
+    output: &mut String,
+    viewport: &SvgViewport,
+    label: &KicadCanvasDirectiveLabel,
+) {
+    let Some(at) = label.at else {
+        return;
+    };
+
+    let start = viewport.project(at_point(at));
+    let end = viewport.project(pin_body_end(at, label.length.unwrap_or(2.54)));
+    let text = if label.text.is_empty() {
+        label
+            .properties
+            .iter()
+            .find(|property| {
+                matches!(
+                    property.name.as_str(),
+                    "Netclass" | "Net Class" | "Component Class"
+                ) && !property.value.is_empty()
+            })
+            .map(|property| property.value.as_str())
+            .unwrap_or("")
+    } else {
+        label.text.as_str()
+    };
+    let fill = label
+        .effects
+        .as_ref()
+        .and_then(|effects| effects.font_color)
+        .map(svg_color)
+        .unwrap_or_else(|| "#0f766e".to_string());
+    let shape = label.shape.as_deref().unwrap_or("round");
+
+    output.push_str(&format!(
+        "    <g data-directive-label=\"true\" data-shape=\"{}\">\n",
+        html_escape(shape)
+    ));
+    output.push_str(&format!(
+        "      <line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{}\" stroke-width=\"1.6\"/>\n",
+        fmt(start.x),
+        fmt(start.y),
+        fmt(end.x),
+        fmt(end.y),
+        fill
+    ));
+    output.push_str(&format!(
+        "      <circle cx=\"{}\" cy=\"{}\" r=\"3.2\" fill=\"{}\" stroke=\"none\"/>\n",
+        fmt(start.x),
+        fmt(start.y),
+        fill
+    ));
+    if !text.is_empty() {
+        output.push_str(&format!(
+            "      <text x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\">{}</text>\n",
+            fmt(start.x + 4.0),
+            fmt(start.y - 4.0),
+            fill,
+            html_escape(text)
+        ));
     }
     output.push_str("    </g>\n");
 }
@@ -769,6 +836,36 @@ mod tests {
         assert!(svg.contains("fill=\"rgba(247,255,168,0.361)\""));
         assert!(svg.contains(">in</text>"));
         assert!(svg.contains(">out</text>"));
+    }
+
+    #[test]
+    fn renders_kicad_directive_labels_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (netclass_flag ""
+    (length 3.81)
+    (shape dot)
+    (at 20 10 0)
+    (effects (font (size 1.27 1.27) (color 236 104 255 1)) (justify left bottom))
+    (uuid "3c7ec402-4c06-4b52-9acd-ed760671ff85")
+    (property "Netclass" "HV" (at 20 8 0))
+  )
+)"#,
+            "directive_label.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-directive-label=\"true\""));
+        assert!(svg.contains("data-shape=\"dot\""));
+        assert!(svg.contains("stroke=\"rgba(236,104,255,1)\""));
+        assert!(svg.contains("fill=\"rgba(236,104,255,1)\""));
+        assert!(svg.contains(">HV</text>"));
     }
 
     #[test]
