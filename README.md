@@ -86,7 +86,7 @@ cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.osl.yaml --output /tmp/nekospice_import/kicad_rc_verify
 ```
 
-`import` writes `import.json`, `report.html`, and a normalized `project/` directory. The project contains `input.cir`, `project.osl.yaml`, and `manifest.json`, so imported KiCad/LTspice/generic SPICE netlists can be handed directly to `osl verify`. Relative `.include`, `.inc`, and `.lib` dependencies are copied into `project/models/` and referenced from the normalized netlist. The compatibility report counts components, symbols, directives, includes, and emits diagnostics before the netlist is handed to ngspice.
+`import` writes `import.json`, `report.html`, and a normalized `project/` directory. The project contains `input.cir`, `project.osl.yaml`, and `manifest.json`, so imported KiCad/LTspice/generic SPICE netlists can be handed directly to `osl verify`. Relative `.include`, `.inc`, and `.lib` dependencies are copied into `project/models/` and referenced from the normalized netlist. The generated validation file keeps `checks: []` for a smoke run, then adds commented check templates derived from observable node voltages and voltage-source currents. The manifest stores the same `suggested_signals` and `suggested_checks` as machine-readable JSON for future GUI/project tooling. The compatibility report counts components, symbols, directives, includes, and emits diagnostics before the netlist is handed to ngspice.
 
 ## Validation
 

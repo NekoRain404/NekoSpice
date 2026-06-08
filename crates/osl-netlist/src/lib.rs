@@ -1,4 +1,5 @@
 use osl_core::{OslResult, html_escape, json_escape, read_text};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -229,6 +230,19 @@ impl ImportReport {
             .map(NormalizedDependency::to_json)
             .collect::<Vec<_>>()
             .join(",\n");
+        let suggested_signals = self.suggested_signals();
+        let suggested_checks = self.suggested_checks_from_signals(&suggested_signals);
+        let suggested_signals_json = suggested_signals
+            .iter()
+            .map(SuggestedSignal::to_json)
+            .collect::<Vec<_>>()
+            .join(",\n");
+        let suggested_checks_json = suggested_checks
+            .iter()
+            .map(SuggestedCheck::to_json)
+            .collect::<Vec<_>>()
+            .join(",\n");
+        let suggested_checks_yaml = suggested_checks_yaml(&suggested_checks);
         let validation_yaml = format!(
             concat!(
                 "project: {}\n",
@@ -236,11 +250,13 @@ impl ImportReport {
                 "runs:\n",
                 "  - name: {}\n",
                 "    netlist: {}\n",
-                "    checks: []\n"
+                "    checks: []\n",
+                "{}"
             ),
             yaml_scalar(&project_name),
             yaml_scalar(&run_name),
-            yaml_scalar(&netlist_path)
+            yaml_scalar(&netlist_path),
+            suggested_checks_yaml
         );
         let manifest_json = format!(
             concat!(
@@ -259,6 +275,12 @@ impl ImportReport {
                 "  \"include_count\": {},\n",
                 "  \"errors\": {},\n",
                 "  \"warnings\": {},\n",
+                "  \"suggested_signals\": [\n",
+                "{}\n",
+                "  ],\n",
+                "  \"suggested_checks\": [\n",
+                "{}\n",
+                "  ],\n",
                 "  \"dependencies\": [\n",
                 "{}\n",
                 "  ]\n",
@@ -276,6 +298,8 @@ impl ImportReport {
             self.includes.len(),
             self.error_count(),
             self.warning_count(),
+            suggested_signals_json,
+            suggested_checks_json,
             dependencies_json
         );
 
@@ -289,6 +313,78 @@ impl ImportReport {
             manifest_json,
             dependencies: dependencies.to_vec(),
         }
+    }
+
+    pub fn suggested_signals(&self) -> Vec<SuggestedSignal> {
+        let mut voltage_signals = BTreeMap::new();
+        let mut source_current_signals = BTreeMap::new();
+
+        for component in &self.components {
+            for node in &component.nodes {
+                let normalized_node = normalize_signal_node(node);
+                if normalized_node.is_empty() || is_ground_node(&normalized_node) {
+                    continue;
+                }
+                voltage_signals
+                    .entry(format!("v({normalized_node})"))
+                    .or_insert_with(|| format!("node voltage {normalized_node}"));
+            }
+
+            if component.kind == ComponentKind::VoltageSource {
+                let reference = component.reference.trim().to_ascii_lowercase();
+                if !reference.is_empty() {
+                    source_current_signals
+                        .entry(format!("i({reference})"))
+                        .or_insert_with(|| format!("current through {}", component.reference));
+                }
+            }
+        }
+
+        voltage_signals
+            .into_iter()
+            .chain(source_current_signals)
+            .map(|(signal, source)| SuggestedSignal { signal, source })
+            .collect()
+    }
+
+    pub fn suggested_checks(&self) -> Vec<SuggestedCheck> {
+        let signals = self.suggested_signals();
+        self.suggested_checks_from_signals(&signals)
+    }
+
+    fn suggested_checks_from_signals(&self, signals: &[SuggestedSignal]) -> Vec<SuggestedCheck> {
+        let analysis = self.primary_analysis_kind();
+        let mut ordered_signals = signals.iter().collect::<Vec<_>>();
+        ordered_signals.sort_by(|left, right| {
+            suggested_signal_priority(&left.signal).cmp(&suggested_signal_priority(&right.signal))
+        });
+
+        let mut names = BTreeSet::new();
+        let mut checks = Vec::new();
+        for signal in ordered_signals.into_iter().take(8) {
+            let kind = suggested_check_kind(analysis, &signal.signal);
+            let name = suggested_check_name(&signal.signal, kind);
+            if !names.insert(name.clone()) {
+                continue;
+            }
+            checks.push(SuggestedCheck {
+                name,
+                kind: kind.to_string(),
+                signal: signal.signal.clone(),
+                reason: format!(
+                    "Template derived from {} import signal; set min/max after the first run.",
+                    analysis.as_str()
+                ),
+            });
+        }
+        checks
+    }
+
+    fn primary_analysis_kind(&self) -> AnalysisKind {
+        self.directives
+            .iter()
+            .find_map(|directive| AnalysisKind::from_directive(&directive.name))
+            .unwrap_or(AnalysisKind::Unknown)
     }
 }
 
@@ -304,6 +400,45 @@ impl NormalizedDependency {
             "    {{ \"source\": \"{}\", \"project_path\": \"{}\" }}",
             json_escape(&self.source),
             json_escape(&self.project_path)
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuggestedSignal {
+    pub signal: String,
+    pub source: String,
+}
+
+impl SuggestedSignal {
+    fn to_json(&self) -> String {
+        format!(
+            "    {{ \"signal\": \"{}\", \"source\": \"{}\" }}",
+            json_escape(&self.signal),
+            json_escape(&self.source)
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuggestedCheck {
+    pub name: String,
+    pub kind: String,
+    pub signal: String,
+    pub reason: String,
+}
+
+impl SuggestedCheck {
+    fn to_json(&self) -> String {
+        format!(
+            concat!(
+                "    {{ \"name\": \"{}\", \"kind\": \"{}\", \"signal\": \"{}\", ",
+                "\"min\": null, \"max\": null, \"reason\": \"{}\" }}"
+            ),
+            json_escape(&self.name),
+            json_escape(&self.kind),
+            json_escape(&self.signal),
+            json_escape(&self.reason)
         )
     }
 }
@@ -333,6 +468,37 @@ impl NetlistFlavor {
             Self::KiCad => "kicad",
             Self::Ltspice => "ltspice",
             Self::GenericSpice => "generic-spice",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AnalysisKind {
+    Transient,
+    OperatingPoint,
+    Ac,
+    Dc,
+    Unknown,
+}
+
+impl AnalysisKind {
+    fn from_directive(name: &str) -> Option<Self> {
+        match name {
+            ".tran" => Some(Self::Transient),
+            ".op" => Some(Self::OperatingPoint),
+            ".ac" => Some(Self::Ac),
+            ".dc" => Some(Self::Dc),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Transient => "transient",
+            Self::OperatingPoint => "operating-point",
+            Self::Ac => "ac",
+            Self::Dc => "dc",
+            Self::Unknown => "unknown-analysis",
         }
     }
 }
@@ -701,6 +867,94 @@ fn expected_pin_count(kind: ComponentKind) -> usize {
     }
 }
 
+fn normalize_signal_node(node: &str) -> String {
+    node.trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .to_ascii_lowercase()
+}
+
+fn is_ground_node(node: &str) -> bool {
+    matches!(node, "0" | "gnd" | "agnd" | "dgnd")
+}
+
+fn suggested_signal_priority(signal: &str) -> (u8, String) {
+    let lowered = signal.to_ascii_lowercase();
+    let rank = if lowered == "v(out)" {
+        0
+    } else if lowered.contains("out") {
+        1
+    } else if lowered == "v(in)" {
+        2
+    } else if lowered.starts_with("v(") {
+        3
+    } else if lowered.starts_with("i(") {
+        4
+    } else {
+        5
+    };
+    (rank, lowered)
+}
+
+fn suggested_check_kind(analysis: AnalysisKind, signal: &str) -> &'static str {
+    let is_current = signal.to_ascii_lowercase().starts_with("i(");
+    match (analysis, is_current) {
+        (AnalysisKind::Transient, true) => "rms",
+        (AnalysisKind::Transient, false) => "avg",
+        (AnalysisKind::Ac, _) => "max",
+        _ => "final_value",
+    }
+}
+
+fn suggested_check_name(signal: &str, kind: &str) -> String {
+    format!("{}_{}", signal_name_slug(signal), kind)
+}
+
+fn signal_name_slug(signal: &str) -> String {
+    signal
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn suggested_checks_yaml(checks: &[SuggestedCheck]) -> String {
+    if checks.is_empty() {
+        return concat!(
+            "    # Suggested checks: no observable node or source-current signals were found.\n",
+            "    # Add checks after confirming the imported netlist produces waveform data.\n"
+        )
+        .to_string();
+    }
+
+    let mut output = concat!(
+        "    # Suggested checks to customize after the first run:\n",
+        "    #   Keep checks empty for import smoke tests, then copy entries below\n",
+        "    #   into checks with tuned min/max limits once waveform-summary.json is known.\n"
+    )
+    .to_string();
+    for check in checks {
+        output.push_str(&format!("    #   - name: {}\n", yaml_scalar(&check.name)));
+        output.push_str(&format!("    #     kind: {}\n", yaml_scalar(&check.kind)));
+        output.push_str(&format!(
+            "    #     signal: {}\n",
+            yaml_scalar(&check.signal)
+        ));
+        output.push_str("    #     min: TODO\n");
+        output.push_str("    #     max: TODO\n");
+    }
+    output
+}
+
 fn spice_logical_lines(content: &str) -> Vec<(usize, String)> {
     let mut logical_lines = Vec::new();
     let mut current = None::<(usize, String)>;
@@ -891,12 +1145,53 @@ XU1 in out vcc vee GOODAMP
         assert!(project.netlist.ends_with('\n'));
         assert!(project.validation_yaml.contains("project: kicad_rc"));
         assert!(project.validation_yaml.contains("netlist: input.cir"));
+        assert!(project.validation_yaml.contains("checks: []"));
+        assert!(
+            project
+                .validation_yaml
+                .contains("Suggested checks to customize")
+        );
+        assert!(project.validation_yaml.contains("signal: \"v(out)\""));
+        assert!(project.validation_yaml.contains("signal: \"v(in)\""));
+        assert!(project.validation_yaml.contains("signal: \"i(v1)\""));
         assert!(project.manifest_json.contains("\"flavor\": \"kicad\""));
+        assert!(project.manifest_json.contains("\"suggested_signals\""));
+        assert!(project.manifest_json.contains("\"signal\": \"v(out)\""));
+        assert!(project.manifest_json.contains("\"signal\": \"v(in)\""));
+        assert!(project.manifest_json.contains("\"signal\": \"i(v1)\""));
+        assert!(project.manifest_json.contains("\"suggested_checks\""));
         assert!(
             project
                 .manifest_json
                 .contains("\"validation\": \"project.osl.yaml\"")
         );
+    }
+
+    #[test]
+    fn suggests_import_checks_without_activating_them() {
+        let source =
+            "* imported netlist\nV1 in 0 DC 5\nR1 in out 1k\nC1 out 0 10n\n.tran 1u 1m\n.end\n";
+        let report = parse_netlist(source, "imported.cir").unwrap();
+
+        let signals = report.suggested_signals();
+        let checks = report.suggested_checks();
+        let project = report.normalized_project(source);
+
+        assert_eq!(
+            signals
+                .iter()
+                .map(|signal| signal.signal.as_str())
+                .collect::<Vec<_>>(),
+            ["v(in)", "v(out)", "i(v1)"]
+        );
+        assert_eq!(checks[0].signal, "v(out)");
+        assert_eq!(checks[0].kind, "avg");
+        assert_eq!(checks[1].signal, "v(in)");
+        assert_eq!(checks[1].kind, "avg");
+        assert_eq!(checks[2].signal, "i(v1)");
+        assert_eq!(checks[2].kind, "rms");
+        assert!(project.validation_yaml.contains("    checks: []\n"));
+        assert!(!project.validation_yaml.contains("    checks:\n"));
     }
 
     #[test]
