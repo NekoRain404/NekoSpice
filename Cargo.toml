@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "crates/osl-core",
+    "crates/osl-sim",
+    "crates/osl-cli",
+]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://example.invalid/nekospice"
+

@@ -1,0 +1,13 @@
+* NekoSpice v0.1 example: series RLC step response
+V1 in 0 PULSE(0 5 0 1n 1n 10u 20u)
+R1 in n1 10
+L1 n1 out 100u
+C1 out 0 100n
+.tran 100n 200u
+.control
+set filetype=ascii
+run
+wrdata waveform.csv time v(in) v(out)
+.endc
+.end
+

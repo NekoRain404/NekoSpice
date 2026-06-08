@@ -1,0 +1,23 @@
+# Rust
+/target/
+
+# NekoSpice generated data
+/runs/
+/reports/
+/bench-results/
+/cache/
+*.rawcache
+*.mmap
+
+# SPICE and waveform temporary files
+*.log.raw
+*.tmp.raw
+*.tmp.cir
+*.tmp.net
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
