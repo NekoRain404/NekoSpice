@@ -1,6 +1,6 @@
 use osl_core::{OslResult, html_escape, json_escape, read_text};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct ImportInput {
@@ -12,7 +12,11 @@ pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
     let content = read_text(path)?;
     let source = path.display().to_string();
     if is_ltspice_schematic(path) {
-        let imported = import_ltspice_asc(&content, &source);
+        let imported = import_ltspice_asc(
+            &content,
+            &source,
+            path.parent().unwrap_or_else(|| Path::new(".")),
+        );
         let mut report = parse_netlist(&imported.netlist, &source)?;
         report.flavor = NetlistFlavor::Ltspice;
         report.diagnostics.extend(imported.diagnostics);
@@ -786,10 +790,24 @@ struct LtspiceDirective {
     text: String,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct LtspiceBuiltinSymbol {
-    prefix: &'static str,
-    pins: &'static [AscPoint],
+#[derive(Debug, Clone)]
+struct LtspiceSymbolSpec {
+    prefix: String,
+    pins: Vec<AscPoint>,
+    source: LtspiceSymbolSpecSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LtspiceSymbolSpecSource {
+    Builtin,
+    AsyFile,
+}
+
+#[derive(Debug)]
+struct LtspiceSymbolLibrary {
+    base_dir: PathBuf,
+    cache: BTreeMap<String, Option<LtspiceSymbolSpec>>,
+    diagnostics: Vec<ImportDiagnostic>,
 }
 
 #[derive(Debug)]
@@ -827,6 +845,77 @@ impl DisjointSet {
         if left_root != right_root {
             self.parents[right_root] = left_root;
         }
+    }
+}
+
+impl LtspiceSymbolLibrary {
+    fn new(base_dir: &Path) -> Self {
+        Self {
+            base_dir: base_dir.to_path_buf(),
+            cache: BTreeMap::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn spec_for(&mut self, symbol: &LtspiceSymbol) -> Option<LtspiceSymbolSpec> {
+        let key = ltspice_symbol_basename(&symbol.name);
+        if let Some(spec) = self.cache.get(&key) {
+            return spec.clone();
+        }
+
+        let spec = self
+            .read_symbol_spec(symbol)
+            .or_else(|| ltspice_builtin_symbol(&symbol.name));
+        self.cache.insert(key, spec.clone());
+        spec
+    }
+
+    fn read_symbol_spec(&mut self, symbol: &LtspiceSymbol) -> Option<LtspiceSymbolSpec> {
+        let path = self.symbol_path(&symbol.name)?;
+        let content = match read_text(&path) {
+            Ok(content) => content,
+            Err(error) => {
+                self.diagnostics.push(import_diagnostic(
+                    symbol.line,
+                    ImportSeverity::Warning,
+                    "ltspice_symbol_read_failed",
+                    &format!("could not read LTspice symbol {}: {error}", path.display()),
+                    "Keep custom .asy files next to the imported .asc or use supported primitive symbols.",
+                ));
+                return None;
+            }
+        };
+        match parse_ltspice_asy_spec(&content) {
+            Some(spec) => Some(spec),
+            None => {
+                self.diagnostics.push(import_diagnostic(
+                    symbol.line,
+                    ImportSeverity::Warning,
+                    "ltspice_symbol_no_pins",
+                    &format!("LTspice symbol {} contains no ordered pins", path.display()),
+                    "Add PIN entries with PINATTR SpiceOrder or use a symbol with explicit pin metadata.",
+                ));
+                None
+            }
+        }
+    }
+
+    fn symbol_path(&self, symbol_name: &str) -> Option<PathBuf> {
+        let normalized = symbol_name.replace('\\', "/");
+        let raw_path = Path::new(&normalized);
+        let mut candidates = Vec::new();
+        if raw_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            == Some("asy")
+        {
+            candidates.push(self.base_dir.join(raw_path));
+        } else {
+            candidates.push(self.base_dir.join(format!("{normalized}.asy")));
+            candidates.push(self.base_dir.join(raw_path).with_extension("asy"));
+        }
+
+        candidates.into_iter().find(|candidate| candidate.is_file())
     }
 }
 
@@ -940,13 +1029,15 @@ impl AscNetGraph {
     }
 }
 
-fn import_ltspice_asc(input: &str, source: &str) -> LtspiceSchematicImport {
+fn import_ltspice_asc(input: &str, source: &str, base_dir: &Path) -> LtspiceSchematicImport {
     let mut schematic = parse_ltspice_asc(input);
+    let mut library = LtspiceSymbolLibrary::new(base_dir);
     let pin_points = schematic
         .symbols
         .iter()
-        .flat_map(ltspice_symbol_pin_points)
+        .flat_map(|symbol| ltspice_symbol_pin_points(symbol, &mut library))
         .collect::<Vec<_>>();
+    schematic.diagnostics.append(&mut library.diagnostics);
     let graph = AscNetGraph::build(&schematic.wires, &schematic.flags, &pin_points);
 
     let mut lines = vec![
@@ -954,10 +1045,13 @@ fn import_ltspice_asc(input: &str, source: &str) -> LtspiceSchematicImport {
         "* Generated by NekoSpice asc importer.".to_string(),
     ];
     for symbol in &schematic.symbols {
-        if let Some(line) = ltspice_symbol_to_netlist(symbol, &graph, &mut schematic.diagnostics) {
+        if let Some(line) =
+            ltspice_symbol_to_netlist(symbol, &graph, &mut library, &mut schematic.diagnostics)
+        {
             lines.push(line);
         }
     }
+    schematic.diagnostics.append(&mut library.diagnostics);
     for directive in &schematic.directives {
         lines.push(directive.text.clone());
     }
@@ -1116,8 +1210,68 @@ fn split_key_value(input: &str) -> Option<(&str, &str)> {
     }
 }
 
-fn ltspice_symbol_pin_points(symbol: &LtspiceSymbol) -> Vec<AscPoint> {
-    let Some(spec) = ltspice_builtin_symbol(&symbol.name) else {
+#[derive(Debug)]
+struct LtspiceAsyPin {
+    point: AscPoint,
+    spice_order: Option<usize>,
+}
+
+fn parse_ltspice_asy_spec(input: &str) -> Option<LtspiceSymbolSpec> {
+    let mut prefix = None::<String>;
+    let mut pins = Vec::new();
+
+    for raw_line in input.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let tokens = line.split_whitespace().collect::<Vec<_>>();
+        let Some(keyword) = tokens.first().copied() else {
+            continue;
+        };
+
+        match keyword {
+            "SYMATTR" if tokens.len() >= 3 && tokens[1] == "Prefix" => {
+                prefix = Some(tokens[2].to_string());
+            }
+            "PIN" => {
+                let Some(x) = tokens.get(1).and_then(|value| value.parse::<i32>().ok()) else {
+                    continue;
+                };
+                let Some(y) = tokens.get(2).and_then(|value| value.parse::<i32>().ok()) else {
+                    continue;
+                };
+                pins.push(LtspiceAsyPin {
+                    point: AscPoint::new(x, y),
+                    spice_order: None,
+                });
+            }
+            "PINATTR" if tokens.len() >= 3 && tokens[1] == "SpiceOrder" => {
+                if let Some(pin) = pins.last_mut() {
+                    pin.spice_order = tokens[2].parse::<usize>().ok();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if pins.is_empty() {
+        return None;
+    }
+
+    pins.sort_by_key(|pin| pin.spice_order.unwrap_or(usize::MAX));
+    Some(LtspiceSymbolSpec {
+        prefix: prefix.unwrap_or_else(|| "X".to_string()),
+        pins: pins.into_iter().map(|pin| pin.point).collect(),
+        source: LtspiceSymbolSpecSource::AsyFile,
+    })
+}
+
+fn ltspice_symbol_pin_points(
+    symbol: &LtspiceSymbol,
+    library: &mut LtspiceSymbolLibrary,
+) -> Vec<AscPoint> {
+    let Some(spec) = library.spec_for(symbol) else {
         return Vec::new();
     };
     spec.pins
@@ -1129,9 +1283,10 @@ fn ltspice_symbol_pin_points(symbol: &LtspiceSymbol) -> Vec<AscPoint> {
 fn ltspice_symbol_to_netlist(
     symbol: &LtspiceSymbol,
     graph: &AscNetGraph,
+    library: &mut LtspiceSymbolLibrary,
     diagnostics: &mut Vec<ImportDiagnostic>,
 ) -> Option<String> {
-    let Some(spec) = ltspice_builtin_symbol(&symbol.name) else {
+    let Some(spec) = library.spec_for(symbol) else {
         diagnostics.push(import_diagnostic(
             symbol.line,
             ImportSeverity::Error,
@@ -1144,7 +1299,7 @@ fn ltspice_symbol_to_netlist(
         ));
         return None;
     };
-    let pins = ltspice_symbol_pin_points(symbol);
+    let pins = ltspice_symbol_pin_points(symbol, library);
     if pins.len() != spec.pins.len() {
         diagnostics.push(import_diagnostic(
             symbol.line,
@@ -1177,17 +1332,17 @@ fn ltspice_symbol_to_netlist(
         nodes.push(node.to_string());
     }
 
-    let instance = symbol_instance_name(symbol, spec, diagnostics);
-    let value = symbol_value(symbol, spec, diagnostics)?;
+    let instance = symbol_instance_name(symbol, &spec, diagnostics);
+    let value = symbol_value(symbol, &spec, diagnostics)?;
     Some(format!("{} {} {}", instance, nodes.join(" "), value))
 }
 
 fn symbol_instance_name(
     symbol: &LtspiceSymbol,
-    spec: LtspiceBuiltinSymbol,
+    spec: &LtspiceSymbolSpec,
     diagnostics: &mut Vec<ImportDiagnostic>,
 ) -> String {
-    symbol
+    let raw_name = symbol
         .attrs
         .get("InstName")
         .filter(|name| !name.trim().is_empty())
@@ -1201,12 +1356,13 @@ fn symbol_instance_name(
                 "Assign a stable reference designator before importing.",
             ));
             format!("{}{}", spec.prefix, symbol.line)
-        })
+        });
+    normalize_instance_prefix(&raw_name, &spec.prefix)
 }
 
 fn symbol_value(
     symbol: &LtspiceSymbol,
-    spec: LtspiceBuiltinSymbol,
+    spec: &LtspiceSymbolSpec,
     diagnostics: &mut Vec<ImportDiagnostic>,
 ) -> Option<String> {
     let mut parts = Vec::new();
@@ -1226,6 +1382,9 @@ fn symbol_value(
             parts.push(value.trim().to_string());
         }
     }
+    if parts.is_empty() && spec.source == LtspiceSymbolSpecSource::AsyFile {
+        parts.push(ltspice_symbol_basename(&symbol.name));
+    }
     if parts.is_empty() {
         diagnostics.push(import_diagnostic(
             symbol.line,
@@ -1243,7 +1402,7 @@ fn symbol_value(
     }
 }
 
-fn ltspice_builtin_symbol(name: &str) -> Option<LtspiceBuiltinSymbol> {
+fn ltspice_builtin_symbol(name: &str) -> Option<LtspiceSymbolSpec> {
     const RES_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 16 }, AscPoint { x: 16, y: 96 }];
     const CAP_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 0 }, AscPoint { x: 16, y: 64 }];
     const SOURCE_PINS: &[AscPoint] = &[AscPoint { x: 0, y: 16 }, AscPoint { x: 0, y: 96 }];
@@ -1251,33 +1410,54 @@ fn ltspice_builtin_symbol(name: &str) -> Option<LtspiceBuiltinSymbol> {
     const DIODE_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 0 }, AscPoint { x: 16, y: 64 }];
 
     match ltspice_symbol_basename(name).as_str() {
-        "res" | "res2" => Some(LtspiceBuiltinSymbol {
-            prefix: "R",
-            pins: RES_PINS,
+        "res" | "res2" => Some(LtspiceSymbolSpec {
+            prefix: "R".to_string(),
+            pins: RES_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
         }),
-        "cap" | "polcap" => Some(LtspiceBuiltinSymbol {
-            prefix: "C",
-            pins: CAP_PINS,
+        "cap" | "polcap" => Some(LtspiceSymbolSpec {
+            prefix: "C".to_string(),
+            pins: CAP_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
         }),
-        "ind" | "ind2" => Some(LtspiceBuiltinSymbol {
-            prefix: "L",
-            pins: RES_PINS,
+        "ind" | "ind2" => Some(LtspiceSymbolSpec {
+            prefix: "L".to_string(),
+            pins: RES_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
         }),
-        "voltage" => Some(LtspiceBuiltinSymbol {
-            prefix: "V",
-            pins: SOURCE_PINS,
+        "voltage" => Some(LtspiceSymbolSpec {
+            prefix: "V".to_string(),
+            pins: SOURCE_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
         }),
-        "current" => Some(LtspiceBuiltinSymbol {
-            prefix: "I",
-            pins: CURRENT_PINS,
+        "current" => Some(LtspiceSymbolSpec {
+            prefix: "I".to_string(),
+            pins: CURRENT_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
         }),
         "diode" | "led" | "schottky" | "tvsdiode" | "varactor" | "zener" => {
-            Some(LtspiceBuiltinSymbol {
-                prefix: "D",
-                pins: DIODE_PINS,
+            Some(LtspiceSymbolSpec {
+                prefix: "D".to_string(),
+                pins: DIODE_PINS.to_vec(),
+                source: LtspiceSymbolSpecSource::Builtin,
             })
         }
         _ => None,
+    }
+}
+
+fn normalize_instance_prefix(instance: &str, prefix: &str) -> String {
+    let instance = instance.trim();
+    let prefix = prefix.trim();
+    if instance.is_empty() || prefix.is_empty() {
+        return instance.to_string();
+    }
+    let first = instance.chars().next().unwrap_or_default();
+    let prefix_first = prefix.chars().next().unwrap_or_default();
+    if first.eq_ignore_ascii_case(&prefix_first) {
+        instance.to_string()
+    } else {
+        format!("{prefix}{instance}")
     }
 }
 
@@ -1901,6 +2081,27 @@ XU1 in out vcc vee GOODAMP
     }
 
     #[test]
+    fn imports_ltspice_asc_with_local_asy_symbol() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let input =
+            read_import_input(&workspace_root.join("examples/ltspice_import/ltspice_subckt.asc"))
+                .unwrap();
+
+        assert_eq!(input.report.flavor, NetlistFlavor::Ltspice);
+        assert_eq!(input.report.error_count(), 0);
+        assert!(input.source_netlist.contains("V1 n001 0 DC 1"));
+        assert!(input.source_netlist.contains("XU1 n001 out 0 gain_block"));
+        assert!(input.source_netlist.contains(".include \"gain_block.lib\""));
+
+        let project = input.report.normalized_project(&input.source_netlist);
+        assert!(project.validation_yaml.contains("signal: \"v(out)\""));
+        assert!(project.validation_yaml.contains("signal: \"i(v1)\""));
+    }
+
+    #[test]
     fn reports_unsupported_ltspice_asc_symbol() {
         let input = r#"
 Version 4
@@ -1912,7 +2113,7 @@ SYMATTR Value OPAMP
 TEXT 0 96 Left 2 !.op
 "#;
 
-        let imported = import_ltspice_asc(input, "unsupported.asc");
+        let imported = import_ltspice_asc(input, "unsupported.asc", Path::new("."));
 
         assert!(imported.netlist.contains(".op"));
         assert!(

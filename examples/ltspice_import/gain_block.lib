@@ -1,0 +1,3 @@
+.subckt gain_block IN OUT COM
+EGAIN OUT COM IN COM 2
+.ends gain_block
