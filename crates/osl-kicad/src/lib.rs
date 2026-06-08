@@ -138,7 +138,225 @@ pub struct KicadSchematic {
     pub junctions: Vec<KicadJunction>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum KicadSchematicEdit {
+    MoveSymbol {
+        reference: String,
+        to: KicadPoint,
+        rotation: Option<f64>,
+    },
+    SetSymbolProperty {
+        reference: String,
+        name: String,
+        value: String,
+        at: Option<KicadAt>,
+    },
+    AddWire {
+        points: Vec<KicadPoint>,
+        uuid: Option<String>,
+    },
+    AddLabel {
+        text: String,
+        kind: KicadLabelKind,
+        at: KicadAt,
+        uuid: Option<String>,
+    },
+    AddText {
+        text: String,
+        at: KicadAt,
+        uuid: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadEditSummary {
+    pub operation: String,
+    pub target: String,
+}
+
 impl KicadSchematic {
+    pub fn apply_edit(&mut self, edit: KicadSchematicEdit) -> OslResult<KicadEditSummary> {
+        match edit {
+            KicadSchematicEdit::MoveSymbol {
+                reference,
+                to,
+                rotation,
+            } => self.move_symbol(&reference, to, rotation),
+            KicadSchematicEdit::SetSymbolProperty {
+                reference,
+                name,
+                value,
+                at,
+            } => self.set_symbol_property(&reference, &name, &value, at),
+            KicadSchematicEdit::AddWire { points, uuid } => self.add_wire(points, uuid),
+            KicadSchematicEdit::AddLabel {
+                text,
+                kind,
+                at,
+                uuid,
+            } => self.add_label(text, kind, at, uuid),
+            KicadSchematicEdit::AddText { text, at, uuid } => self.add_text(text, at, uuid),
+        }
+    }
+
+    pub fn move_symbol(
+        &mut self,
+        reference: &str,
+        to: KicadPoint,
+        rotation: Option<f64>,
+    ) -> OslResult<KicadEditSummary> {
+        validate_point(to, "symbol target")?;
+        let index = self.symbol_index_by_reference(reference)?;
+        let symbol = &mut self.symbols[index];
+        let old_at = symbol.at.unwrap_or(KicadAt {
+            x: 0.0,
+            y: 0.0,
+            rotation: 0.0,
+        });
+        let dx = to.x - old_at.x;
+        let dy = to.y - old_at.y;
+        symbol.at = Some(KicadAt {
+            x: to.x,
+            y: to.y,
+            rotation: rotation.unwrap_or(old_at.rotation),
+        });
+
+        for property in &mut symbol.properties {
+            if let Some(at) = &mut property.at {
+                at.x += dx;
+                at.y += dy;
+            }
+        }
+
+        Ok(KicadEditSummary {
+            operation: "move-symbol".to_string(),
+            target: reference.to_string(),
+        })
+    }
+
+    pub fn set_symbol_property(
+        &mut self,
+        reference: &str,
+        name: &str,
+        value: &str,
+        at: Option<KicadAt>,
+    ) -> OslResult<KicadEditSummary> {
+        if name.trim().is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad symbol property name must not be empty".to_string(),
+            ));
+        }
+        if let Some(at) = at {
+            validate_at(at, "symbol property")?;
+        }
+
+        let index = self.symbol_index_by_reference(reference)?;
+        let symbol = &mut self.symbols[index];
+        if let Some(property) = symbol
+            .properties
+            .iter_mut()
+            .find(|property| property.name == name)
+        {
+            property.value = value.to_string();
+            if let Some(at) = at {
+                property.at = Some(at);
+            }
+        } else {
+            symbol.properties.push(KicadProperty {
+                name: name.to_string(),
+                value: value.to_string(),
+                at,
+            });
+        }
+
+        Ok(KicadEditSummary {
+            operation: "set-property".to_string(),
+            target: format!("{reference}.{name}"),
+        })
+    }
+
+    pub fn add_wire(
+        &mut self,
+        points: Vec<KicadPoint>,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        if points.len() < 2 {
+            return Err(OslError::InvalidInput(
+                "KiCad wire edit requires at least two points".to_string(),
+            ));
+        }
+        for point in &points {
+            validate_point(*point, "wire point")?;
+        }
+
+        let payload = points_payload(&points);
+        let uuid = Some(self.edit_uuid(uuid, "wire", &payload)?);
+        self.wires.push(KicadWire { points, uuid });
+
+        Ok(KicadEditSummary {
+            operation: "add-wire".to_string(),
+            target: payload,
+        })
+    }
+
+    pub fn add_label(
+        &mut self,
+        text: impl Into<String>,
+        kind: KicadLabelKind,
+        at: KicadAt,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        validate_at(at, "label")?;
+        let text = text.into();
+        if text.trim().is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad label text must not be empty".to_string(),
+            ));
+        }
+
+        let payload = format!("{}@{},{},{}", text, at.x, at.y, at.rotation);
+        let uuid = Some(self.edit_uuid(uuid, kind.sexpr_name(), &payload)?);
+        self.labels.push(KicadLabel {
+            text: text.clone(),
+            kind,
+            at: Some(at),
+            uuid,
+        });
+
+        Ok(KicadEditSummary {
+            operation: "add-label".to_string(),
+            target: text,
+        })
+    }
+
+    pub fn add_text(
+        &mut self,
+        text: impl Into<String>,
+        at: KicadAt,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        validate_at(at, "text")?;
+        let text = text.into();
+        if text.trim().is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad text item must not be empty".to_string(),
+            ));
+        }
+
+        let payload = format!("{}@{},{},{}", text, at.x, at.y, at.rotation);
+        let uuid = Some(self.edit_uuid(uuid, "text", &payload)?);
+        self.text_items.push(KicadTextItem {
+            text: text.clone(),
+            at: Some(at),
+            uuid,
+        });
+
+        Ok(KicadEditSummary {
+            operation: "add-text".to_string(),
+            target: text,
+        })
+    }
+
     pub fn connectivity_graph(&self) -> KicadNetGraph {
         KicadNetGraph::build(self)
     }
@@ -285,6 +503,82 @@ impl KicadSchematic {
         self.library_symbols
             .iter()
             .find(|symbol| symbol.name == lib_id)
+    }
+
+    fn symbol_index_by_reference(&self, reference: &str) -> OslResult<usize> {
+        if reference.trim().is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad symbol reference must not be empty".to_string(),
+            ));
+        }
+        self.symbols
+            .iter()
+            .position(|symbol| symbol.reference() == Some(reference))
+            .ok_or_else(|| {
+                OslError::InvalidInput(format!(
+                    "KiCad symbol reference '{reference}' was not found"
+                ))
+            })
+    }
+
+    fn edit_uuid(&self, uuid: Option<String>, namespace: &str, payload: &str) -> OslResult<String> {
+        let used = self.used_uuids();
+        if let Some(uuid) = uuid.filter(|uuid| !uuid.trim().is_empty()) {
+            if used.contains(&uuid) {
+                return Err(OslError::InvalidInput(format!(
+                    "KiCad UUID '{uuid}' is already used in this schematic"
+                )));
+            }
+            return Ok(uuid);
+        }
+
+        for counter in 0.. {
+            let seed = format!(
+                "{}:{namespace}:{payload}:{}:{}:{}:{counter}",
+                self.source,
+                self.symbols.len(),
+                self.wires.len(),
+                self.labels.len()
+            );
+            let candidate = uuid_from_hashes(fnv1a64(&seed), fnv1a64(&format!("{seed}:b")));
+            if !used.contains(&candidate) {
+                return Ok(candidate);
+            }
+        }
+        unreachable!("unbounded UUID search should always find a free candidate")
+    }
+
+    fn used_uuids(&self) -> BTreeSet<String> {
+        let mut uuids = BTreeSet::new();
+        if let Some(uuid) = &self.uuid {
+            uuids.insert(uuid.clone());
+        }
+        for wire in &self.wires {
+            if let Some(uuid) = &wire.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
+        for label in &self.labels {
+            if let Some(uuid) = &label.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
+        for text in &self.text_items {
+            if let Some(uuid) = &text.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
+        for symbol in &self.symbols {
+            if let Some(uuid) = &symbol.uuid {
+                uuids.insert(uuid.clone());
+            }
+            for pin in &symbol.pins {
+                if let Some(uuid) = &pin.uuid {
+                    uuids.insert(uuid.clone());
+                }
+            }
+        }
+        uuids
     }
 
     fn symbol_pin_points(&self) -> Vec<KicadPoint> {
@@ -2206,12 +2500,78 @@ fn preferred_net_label(labels: Option<&BTreeSet<String>>) -> Option<String> {
         .or_else(|| labels.iter().find(|label| !label.is_empty()).cloned())
 }
 
+fn validate_point(point: KicadPoint, context: &str) -> OslResult<()> {
+    if point.x.is_finite() && point.y.is_finite() {
+        Ok(())
+    } else {
+        Err(OslError::InvalidInput(format!(
+            "{context} coordinates must be finite"
+        )))
+    }
+}
+
+fn validate_at(at: KicadAt, context: &str) -> OslResult<()> {
+    validate_point(KicadPoint { x: at.x, y: at.y }, context)?;
+    if at.rotation.is_finite() {
+        Ok(())
+    } else {
+        Err(OslError::InvalidInput(format!(
+            "{context} rotation must be finite"
+        )))
+    }
+}
+
+fn points_payload(points: &[KicadPoint]) -> String {
+    points
+        .iter()
+        .map(|point| format!("{},{}", format_number(point.x), format_number(point.y)))
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+fn fnv1a64(input: &str) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in input.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+fn uuid_from_hashes(left: u64, right: u64) -> String {
+    let mut bytes = [0_u8; 16];
+    bytes[..8].copy_from_slice(&left.to_be_bytes());
+    bytes[8..].copy_from_slice(&right.to_be_bytes());
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0],
+        bytes[1],
+        bytes[2],
+        bytes[3],
+        bytes[4],
+        bytes[5],
+        bytes[6],
+        bytes[7],
+        bytes[8],
+        bytes[9],
+        bytes[10],
+        bytes[11],
+        bytes[12],
+        bytes[13],
+        bytes[14],
+        bytes[15]
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        KicadLabelKind, parse_kicad_schematic, parse_kicad_symbol_library,
-        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_schematic,
-        read_kicad_symbol_library, read_kicad_symbol_library_index,
+        KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, parse_kicad_schematic,
+        parse_kicad_symbol_library, parse_kicad_symbol_library_table, parse_sexpr,
+        read_kicad_schematic, read_kicad_symbol_library, read_kicad_symbol_library_index,
         read_kicad_symbol_library_table,
     };
     use std::path::Path;
@@ -2398,6 +2758,140 @@ mod tests {
         let netlist = reparsed.to_spice_netlist().unwrap();
         assert!(netlist.contains("R1 in out 1k"));
         assert!(netlist.contains("C1 out 0 100n"));
+    }
+
+    #[test]
+    fn edits_kicad_schematic_in_rust_ir_and_roundtrips() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let mut schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::MoveSymbol {
+                reference: "R1".to_string(),
+                to: KicadPoint { x: 73.66, y: 50.8 },
+                rotation: Some(0.0),
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::SetSymbolProperty {
+                reference: "R1".to_string(),
+                name: "Value".to_string(),
+                value: "2k".to_string(),
+                at: None,
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::AddWire {
+                points: vec![
+                    KicadPoint { x: 73.66, y: 45.72 },
+                    KicadPoint { x: 88.9, y: 45.72 },
+                ],
+                uuid: Some("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee".to_string()),
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::AddLabel {
+                text: "sense".to_string(),
+                kind: KicadLabelKind::Global,
+                at: KicadAt {
+                    x: 88.9,
+                    y: 45.72,
+                    rotation: 0.0,
+                },
+                uuid: Some("ffffffff-ffff-ffff-ffff-ffffffffffff".to_string()),
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::AddText {
+                text: ".save v(sense)".to_string(),
+                at: KicadAt {
+                    x: 45.72,
+                    y: 35.56,
+                    rotation: 0.0,
+                },
+                uuid: Some("abababab-abab-abab-abab-abababababab".to_string()),
+            })
+            .unwrap();
+
+        let resistor = schematic
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference() == Some("R1"))
+            .unwrap();
+        assert_close(resistor.at.unwrap().x, 73.66);
+        assert_close(
+            resistor
+                .properties
+                .iter()
+                .find(|property| property.name == "Reference")
+                .unwrap()
+                .at
+                .unwrap()
+                .x,
+            73.66,
+        );
+        assert_eq!(resistor.value(), Some("2k"));
+        assert_eq!(schematic.wires.len(), 4);
+        assert!(schematic.labels.iter().any(|label| {
+            label.text == "sense"
+                && label.kind == KicadLabelKind::Global
+                && label.uuid.as_deref() == Some("ffffffff-ffff-ffff-ffff-ffffffffffff")
+        }));
+        assert!(
+            schematic
+                .spice_directives()
+                .iter()
+                .any(|directive| directive.text == ".save v(sense)")
+        );
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(global_label \"sense\""));
+        assert!(exported.contains("(text \".save v(sense)\""));
+        let reparsed = parse_kicad_schematic(&exported, "edited.kicad_sch").unwrap();
+        assert_eq!(reparsed.wires.len(), 4);
+        assert_eq!(
+            reparsed
+                .symbols
+                .iter()
+                .find(|symbol| symbol.reference() == Some("R1"))
+                .unwrap()
+                .value(),
+            Some("2k")
+        );
+        assert!(
+            reparsed
+                .spice_directives()
+                .iter()
+                .any(|directive| directive.text == ".save v(sense)")
+        );
+    }
+
+    #[test]
+    fn rejects_edit_that_reuses_existing_kicad_uuid() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let mut schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        let error = schematic
+            .apply_edit(KicadSchematicEdit::AddWire {
+                points: vec![
+                    KicadPoint { x: 10.0, y: 10.0 },
+                    KicadPoint { x: 20.0, y: 10.0 },
+                ],
+                uuid: Some("22222222-2222-2222-2222-222222222222".to_string()),
+            })
+            .unwrap_err();
+
+        assert!(error.to_string().contains("already used"));
     }
 
     #[test]

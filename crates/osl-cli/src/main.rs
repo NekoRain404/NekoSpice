@@ -3,8 +3,9 @@ use osl_core::{
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_kicad::{
-    read_kicad_schematic, read_kicad_symbol_library, read_kicad_symbol_library_index,
-    read_kicad_symbol_library_table, write_kicad_schematic, write_kicad_symbol_library,
+    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, read_kicad_schematic,
+    read_kicad_symbol_library, read_kicad_symbol_library_index, read_kicad_symbol_library_table,
+    write_kicad_schematic, write_kicad_symbol_library,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
@@ -57,6 +58,7 @@ fn run_cli() -> OslResult<i32> {
         "import" => import_command(&args),
         "kicad-inspect" => kicad_inspect_command(&args),
         "kicad-export" => kicad_export_command(&args),
+        "kicad-edit" => kicad_edit_command(&args),
         "kicad-render" => kicad_render_command(&args),
         "waveform" => waveform_command(&args),
         "report" => report_command(&args),
@@ -79,6 +81,7 @@ Usage:
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
   osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
+  osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> <ops...>
   osl kicad-render <file.kicad_sch> --output <file.svg>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
@@ -415,6 +418,45 @@ fn kicad_export_command(args: &[String]) -> OslResult<i32> {
     }
 
     println!("kicad-export -> {output}");
+    Ok(0)
+}
+
+fn kicad_edit_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing KiCad path for 'osl kicad-edit'")?;
+    let output = flag_value(args, "--output").ok_or_else(|| {
+        OslError::InvalidInput("missing --output <file.kicad_sch> for 'osl kicad-edit'".to_string())
+    })?;
+    let input_path = Path::new(input);
+    let extension = input_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if extension != "kicad_sch" {
+        return Err(OslError::InvalidInput(format!(
+            "{} is not a supported KiCad edit input (.kicad_sch)",
+            input_path.display()
+        )));
+    }
+
+    let edits = parse_kicad_edit_ops(args)?;
+    if edits.is_empty() {
+        return Err(OslError::InvalidInput(
+            "kicad-edit requires at least one edit op".to_string(),
+        ));
+    }
+
+    let mut schematic = read_kicad_schematic(input_path)?;
+    let mut summaries = Vec::new();
+    for edit in edits {
+        summaries.push(schematic.apply_edit(edit)?);
+    }
+    write_kicad_schematic(Path::new(&output), &schematic)?;
+
+    println!("kicad-edit -> {output} ({} edits)", summaries.len());
+    for summary in summaries {
+        println!("  {} {}", summary.operation, summary.target);
+    }
     Ok(0)
 }
 
@@ -1511,10 +1553,9 @@ fn report_css() -> &'static str {
 }
 
 fn positional<'a>(args: &'a [String], index: usize, missing: &str) -> OslResult<&'a str> {
-    args.iter()
-        .filter(|arg| !arg.starts_with("--"))
+    positionals(args)
+        .into_iter()
         .nth(index)
-        .map(String::as_str)
         .ok_or_else(|| OslError::InvalidInput(missing.to_string()))
 }
 
@@ -1531,6 +1572,38 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 
 fn has_flag(args: &[String], flag: &str) -> bool {
     args.iter().any(|arg| arg == flag)
+}
+
+fn positionals(args: &[String]) -> Vec<&str> {
+    let mut values = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        if args[index].starts_with("--") {
+            index += if flag_takes_value(&args[index]) { 2 } else { 1 };
+        } else {
+            values.push(args[index].as_str());
+            index += 1;
+        }
+    }
+    values
+}
+
+fn flag_takes_value(flag: &str) -> bool {
+    matches!(
+        flag,
+        "--from"
+            | "--jobs"
+            | "--ngspice"
+            | "--output"
+            | "--points"
+            | "--signal"
+            | "--symbol"
+            | "--to"
+    )
+}
+
+fn trailing_positionals(args: &[String], skip: usize) -> Vec<&str> {
+    positionals(args).into_iter().skip(skip).collect()
 }
 
 fn parse_jobs(value: &str) -> OslResult<usize> {
@@ -1550,6 +1623,181 @@ fn parse_positive_usize(value: &str, flag: &str) -> OslResult<usize> {
         )));
     }
     Ok(jobs)
+}
+
+fn parse_kicad_edit_ops(args: &[String]) -> OslResult<Vec<KicadSchematicEdit>> {
+    trailing_positionals(args, 1)
+        .into_iter()
+        .map(parse_kicad_edit_op)
+        .collect()
+}
+
+fn parse_kicad_edit_op(op: &str) -> OslResult<KicadSchematicEdit> {
+    let (name, payload) = op.split_once(':').ok_or_else(|| {
+        OslError::InvalidInput(format!(
+            "invalid kicad-edit op '{op}', expected <op>:<payload>"
+        ))
+    })?;
+    match name {
+        "move-symbol" => parse_kicad_move_symbol_edit(payload),
+        "set-property" => parse_kicad_set_property_edit(payload),
+        "add-wire" => parse_kicad_add_wire_edit(payload),
+        "add-label" => parse_kicad_add_label_edit(payload),
+        "add-global-label" => parse_kicad_add_label_edit_with_kind(payload, KicadLabelKind::Global),
+        "add-hierarchical-label" => {
+            parse_kicad_add_label_edit_with_kind(payload, KicadLabelKind::Hierarchical)
+        }
+        "add-text" => parse_kicad_add_text_edit(payload),
+        _ => Err(OslError::InvalidInput(format!(
+            "unsupported kicad-edit op '{name}'"
+        ))),
+    }
+}
+
+fn parse_kicad_move_symbol_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let parts = payload.split(':').collect::<Vec<_>>();
+    if parts.len() < 2 || parts.len() > 3 {
+        return Err(OslError::InvalidInput(
+            "move-symbol expects move-symbol:<reference>:<x,y>[:rotation]".to_string(),
+        ));
+    }
+    let reference = parts[0].to_string();
+    let to = parse_kicad_point(parts[1], "move-symbol target")?;
+    let rotation = parts
+        .get(2)
+        .map(|value| parse_number(value, "move-symbol rotation"))
+        .transpose()?;
+
+    Ok(KicadSchematicEdit::MoveSymbol {
+        reference,
+        to,
+        rotation,
+    })
+}
+
+fn parse_kicad_set_property_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let (reference, rest) = payload.split_once(':').ok_or_else(|| {
+        OslError::InvalidInput(
+            "set-property expects set-property:<reference>:<name>=<value>[:x,y[,rotation]]"
+                .to_string(),
+        )
+    })?;
+    let (assignment, at) = match rest.split_once(':') {
+        Some((assignment, at)) => (assignment, Some(parse_kicad_at(at, "property position")?)),
+        None => (rest, None),
+    };
+    let (name, value) = assignment.split_once('=').ok_or_else(|| {
+        OslError::InvalidInput(
+            "set-property expects set-property:<reference>:<name>=<value>[:x,y[,rotation]]"
+                .to_string(),
+        )
+    })?;
+
+    Ok(KicadSchematicEdit::SetSymbolProperty {
+        reference: reference.to_string(),
+        name: name.to_string(),
+        value: value.to_string(),
+        at,
+    })
+}
+
+fn parse_kicad_add_wire_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let (points, uuid) = split_payload_uuid(payload);
+    let points = points
+        .split(';')
+        .map(|point| parse_kicad_point(point, "wire point"))
+        .collect::<OslResult<Vec<_>>>()?;
+    Ok(KicadSchematicEdit::AddWire { points, uuid })
+}
+
+fn parse_kicad_add_label_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    parse_kicad_add_label_edit_with_kind(payload, KicadLabelKind::Local)
+}
+
+fn parse_kicad_add_label_edit_with_kind(
+    payload: &str,
+    default_kind: KicadLabelKind,
+) -> OslResult<KicadSchematicEdit> {
+    let (payload, uuid) = split_payload_uuid(payload);
+    let parts = payload.split(':').collect::<Vec<_>>();
+    if parts.len() < 2 || parts.len() > 3 {
+        return Err(OslError::InvalidInput(
+            "add-label expects add-label:<text>:<x,y[,rotation]>[:local|global|hierarchical]"
+                .to_string(),
+        ));
+    }
+    let kind = parts
+        .get(2)
+        .map(|kind| parse_kicad_label_kind(kind))
+        .transpose()?
+        .unwrap_or(default_kind);
+    Ok(KicadSchematicEdit::AddLabel {
+        text: parts[0].to_string(),
+        kind,
+        at: parse_kicad_at(parts[1], "label position")?,
+        uuid,
+    })
+}
+
+fn parse_kicad_add_text_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let (payload, uuid) = split_payload_uuid(payload);
+    let (text, at) = payload.split_once(':').ok_or_else(|| {
+        OslError::InvalidInput("add-text expects add-text:<text>:<x,y[,rotation]>".to_string())
+    })?;
+    Ok(KicadSchematicEdit::AddText {
+        text: text.to_string(),
+        at: parse_kicad_at(at, "text position")?,
+        uuid,
+    })
+}
+
+fn split_payload_uuid(payload: &str) -> (&str, Option<String>) {
+    match payload.rsplit_once(":uuid=") {
+        Some((payload, uuid)) => (payload, Some(uuid.to_string())),
+        None => (payload, None),
+    }
+}
+
+fn parse_kicad_point(value: &str, context: &str) -> OslResult<KicadPoint> {
+    let parts = value.split(',').collect::<Vec<_>>();
+    if parts.len() != 2 {
+        return Err(OslError::InvalidInput(format!(
+            "{context} expects x,y coordinates"
+        )));
+    }
+    Ok(KicadPoint {
+        x: parse_number(parts[0], context)?,
+        y: parse_number(parts[1], context)?,
+    })
+}
+
+fn parse_kicad_at(value: &str, context: &str) -> OslResult<KicadAt> {
+    let parts = value.split(',').collect::<Vec<_>>();
+    if !(2..=3).contains(&parts.len()) {
+        return Err(OslError::InvalidInput(format!(
+            "{context} expects x,y or x,y,rotation"
+        )));
+    }
+    Ok(KicadAt {
+        x: parse_number(parts[0], context)?,
+        y: parse_number(parts[1], context)?,
+        rotation: parts
+            .get(2)
+            .map(|value| parse_number(value, context))
+            .transpose()?
+            .unwrap_or(0.0),
+    })
+}
+
+fn parse_kicad_label_kind(value: &str) -> OslResult<KicadLabelKind> {
+    match value {
+        "local" => Ok(KicadLabelKind::Local),
+        "global" => Ok(KicadLabelKind::Global),
+        "hierarchical" => Ok(KicadLabelKind::Hierarchical),
+        _ => Err(OslError::InvalidInput(format!(
+            "unsupported KiCad label kind '{value}'"
+        ))),
+    }
 }
 
 fn parse_number(value: &str, context: &str) -> OslResult<f64> {
@@ -1768,7 +2016,10 @@ fn find_circuits_inner(path: &Path, circuits: &mut Vec<PathBuf>) -> OslResult<()
 
 #[cfg(test)]
 mod tests {
-    use super::{SweepDimension, VerifyConfig, VerifyRun, parse_number};
+    use super::{
+        SweepDimension, VerifyConfig, VerifyRun, parse_kicad_edit_ops, parse_number, positionals,
+    };
+    use osl_kicad::{KicadLabelKind, KicadSchematicEdit};
     use std::path::PathBuf;
 
     #[test]
@@ -1805,6 +2056,48 @@ mod tests {
         assert_close(parse_number("50us", "test").unwrap(), 0.00005);
         assert_close(parse_number("1k", "test").unwrap(), 1000.0);
         assert_close(parse_number("2Meg", "test").unwrap(), 2_000_000.0);
+    }
+
+    #[test]
+    fn parses_kicad_edit_positionals_after_output_flag() {
+        let args = [
+            "input.kicad_sch",
+            "--output",
+            "edited.kicad_sch",
+            "move-symbol:R1:73.66,50.8",
+            "set-property:R1:Value=2k",
+            "add-global-label:sense:88.9,45.72",
+        ]
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>();
+
+        assert_eq!(
+            positionals(&args),
+            vec![
+                "input.kicad_sch",
+                "move-symbol:R1:73.66,50.8",
+                "set-property:R1:Value=2k",
+                "add-global-label:sense:88.9,45.72",
+            ]
+        );
+
+        let edits = parse_kicad_edit_ops(&args).unwrap();
+        assert_eq!(edits.len(), 3);
+        match &edits[0] {
+            KicadSchematicEdit::MoveSymbol { reference, to, .. } => {
+                assert_eq!(reference, "R1");
+                assert_close(to.x, 73.66);
+            }
+            edit => panic!("expected move-symbol edit, got {edit:?}"),
+        }
+        match &edits[2] {
+            KicadSchematicEdit::AddLabel { text, kind, .. } => {
+                assert_eq!(text, "sense");
+                assert_eq!(*kind, KicadLabelKind::Global);
+            }
+            edit => panic!("expected add-label edit, got {edit:?}"),
+        }
     }
 
     #[test]
