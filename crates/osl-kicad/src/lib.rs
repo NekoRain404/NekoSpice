@@ -4196,37 +4196,30 @@ impl KicadSymbolLibraryIndex {
         self.symbols.iter().find(|symbol| symbol.id == lib_id)
     }
 
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(&self.to_json_value())
+            .expect("KiCad symbol library index JSON should serialize")
+    }
+
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "source": self.source,
+            "library_count": self.libraries.len(),
+            "symbol_count": self.symbols.len(),
+            "unit_count": self.unit_count(),
+            "extended_symbol_count": self.extended_symbol_count(),
+            "power_symbol_count": self.power_symbol_count(),
+            "described_symbol_count": self.described_symbol_count(),
+            "keyword_symbol_count": self.keyword_symbol_count(),
+            "footprint_filter_count": self.footprint_filter_count(),
+            "diagnostic_count": self.diagnostics.len(),
+            "libraries": self.libraries.iter().map(KicadIndexedLibrary::to_json_value).collect::<Vec<_>>(),
+            "symbols": self.symbols.iter().map(KicadIndexedSymbol::to_json_value).collect::<Vec<_>>(),
+            "diagnostics": self.diagnostics.iter().map(KicadLibraryDiagnostic::to_json_value).collect::<Vec<_>>(),
+        })
+    }
+
     pub fn to_summary_json(&self) -> String {
-        let unit_count = self
-            .symbols
-            .iter()
-            .map(|symbol| symbol.unit_count)
-            .sum::<usize>();
-        let extended_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.extends.is_some())
-            .count();
-        let power_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.power.is_some())
-            .count();
-        let described_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.description.is_some())
-            .count();
-        let keyword_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.keywords.is_some())
-            .count();
-        let footprint_filter_count = self
-            .symbols
-            .iter()
-            .map(|symbol| symbol.footprint_filters.len())
-            .sum::<usize>();
         let diagnostics = self
             .diagnostics
             .iter()
@@ -4262,15 +4255,57 @@ impl KicadSymbolLibraryIndex {
             json_escape(&self.source),
             self.libraries.len(),
             self.symbols.len(),
-            unit_count,
-            extended_symbol_count,
-            power_symbol_count,
-            described_symbol_count,
-            keyword_symbol_count,
-            footprint_filter_count,
+            self.unit_count(),
+            self.extended_symbol_count(),
+            self.power_symbol_count(),
+            self.described_symbol_count(),
+            self.keyword_symbol_count(),
+            self.footprint_filter_count(),
             self.diagnostics.len(),
             diagnostics
         )
+    }
+
+    fn unit_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .map(|symbol| symbol.unit_count)
+            .sum::<usize>()
+    }
+
+    fn extended_symbol_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.extends.is_some())
+            .count()
+    }
+
+    fn power_symbol_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.power.is_some())
+            .count()
+    }
+
+    fn described_symbol_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.description.is_some())
+            .count()
+    }
+
+    fn keyword_symbol_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.keywords.is_some())
+            .count()
+    }
+
+    fn footprint_filter_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .map(|symbol| symbol.footprint_filters.len())
+            .sum::<usize>()
     }
 }
 
@@ -4279,6 +4314,16 @@ pub struct KicadIndexedLibrary {
     pub name: String,
     pub source: String,
     pub symbol_count: usize,
+}
+
+impl KicadIndexedLibrary {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "name": self.name,
+            "source": self.source,
+            "symbol_count": self.symbol_count,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4299,10 +4344,40 @@ pub struct KicadIndexedSymbol {
     pub bounding_box: Option<KicadBoundingBox>,
 }
 
+impl KicadIndexedSymbol {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "id": self.id,
+            "library": self.library,
+            "name": self.name,
+            "source": self.source,
+            "description": self.description,
+            "keywords": self.keywords,
+            "footprint_filters": self.footprint_filters,
+            "pin_count": self.pin_count,
+            "graphic_count": self.graphic_count,
+            "unit_count": self.unit_count,
+            "units": self.units.iter().map(KicadIndexedSymbolUnit::to_json_value).collect::<Vec<_>>(),
+            "extends": self.extends,
+            "power": self.power,
+            "bounding_box": self.bounding_box.map(kicad_bounding_box_value),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KicadIndexedSymbolUnit {
     pub unit: u32,
     pub name: Option<String>,
+}
+
+impl KicadIndexedSymbolUnit {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "unit": self.unit,
+            "name": self.name,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4310,6 +4385,16 @@ pub struct KicadLibraryDiagnostic {
     pub library: String,
     pub severity: KicadDiagnosticSeverity,
     pub message: String,
+}
+
+impl KicadLibraryDiagnostic {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "severity": self.severity.as_str(),
+            "library": self.library,
+            "message": self.message,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -8486,6 +8571,21 @@ fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
         bounds.width(),
         bounds.height()
     )
+}
+
+fn kicad_bounding_box_value(bounds: KicadBoundingBox) -> serde_json::Value {
+    serde_json::json!({
+        "min": {
+            "x": bounds.min.x,
+            "y": bounds.min.y,
+        },
+        "max": {
+            "x": bounds.max.x,
+            "y": bounds.max.y,
+        },
+        "width": bounds.width(),
+        "height": bounds.height(),
+    })
 }
 
 fn resolve_kicad_uri(uri: &str, base_dir: &Path) -> PathBuf {
@@ -13414,6 +13514,23 @@ mod tests {
                 .to_summary_json()
                 .contains("\"power_symbol_count\": 1")
         );
+        let index_json: serde_json::Value = serde_json::from_str(&index.to_json()).unwrap();
+        assert_eq!(index_json["library_count"], 1);
+        assert_eq!(index_json["symbol_count"], 3);
+        assert_eq!(index_json["libraries"][0]["name"], "Browser");
+        assert_eq!(index_json["symbols"][1]["id"], "Browser:Derived");
+        assert_eq!(
+            index_json["symbols"][1]["description"],
+            "Parent analog switch"
+        );
+        assert_eq!(
+            index_json["symbols"][1]["footprint_filters"][1],
+            "Connector Foo:*"
+        );
+        assert_eq!(index_json["symbols"][1]["units"][0]["name"], "Logic");
+        assert_eq!(index_json["symbols"][1]["bounding_box"]["min"]["x"], -2.54);
+        assert_eq!(index_json["diagnostic_count"], 0);
+        assert!(index_json["diagnostics"].as_array().unwrap().is_empty());
 
         let library = read_kicad_symbol_library(&project_dir.join("browser.kicad_sym")).unwrap();
         let parent = library.symbol("Parent").unwrap();

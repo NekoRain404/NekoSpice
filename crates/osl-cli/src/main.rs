@@ -371,7 +371,7 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
         ("kicad_pro", _) => read_kicad_project(path)?.to_summary_json(),
         ("kicad_sym", _) => read_kicad_symbol_library(path)?.to_summary_json(),
         (_, Some("sym-lib-table")) if should_index => {
-            read_kicad_symbol_library_index(path)?.to_summary_json()
+            read_kicad_symbol_library_index(path)?.to_json()
         }
         (_, Some("sym-lib-table")) => read_kicad_symbol_library_table(path)?.to_summary_json(),
         _ => {
@@ -2255,7 +2255,8 @@ fn find_circuits_inner(path: &Path, circuits: &mut Vec<PathBuf>) -> OslResult<()
 #[cfg(test)]
 mod tests {
     use super::{
-        SweepDimension, VerifyConfig, VerifyRun, parse_kicad_edit_ops, parse_number, positionals,
+        SweepDimension, VerifyConfig, VerifyRun, flag_value, has_flag, parse_kicad_edit_ops,
+        parse_number, positionals,
     };
     use osl_kicad::{KicadLabelKind, KicadSchematicEdit, parse_kicad_symbol_library};
     use std::path::PathBuf;
@@ -2375,6 +2376,23 @@ mod tests {
             }
             edit => panic!("expected add-label edit, got {edit:?}"),
         }
+    }
+
+    #[test]
+    fn parses_kicad_inspect_index_flag_without_extra_positionals() {
+        let args = [
+            "sym-lib-table".to_string(),
+            "--index".to_string(),
+            "--output".to_string(),
+            "symbol_index.json".to_string(),
+        ];
+
+        assert!(has_flag(&args, "--index"));
+        assert_eq!(positionals(&args), vec!["sym-lib-table"]);
+        assert_eq!(
+            flag_value(&args, "--output"),
+            Some("symbol_index.json".to_string())
+        );
     }
 
     #[test]
