@@ -284,6 +284,10 @@ pub enum KicadSchematicEdit {
         points: Vec<KicadPoint>,
         uuid: Option<String>,
     },
+    AddJunction {
+        at: KicadPoint,
+        uuid: Option<String>,
+    },
     AddLabel {
         text: String,
         kind: KicadLabelKind,
@@ -434,6 +438,7 @@ impl KicadSchematic {
                 uuid,
             } => self.place_symbol(definition, &reference, &value, at, unit, uuid),
             KicadSchematicEdit::AddWire { points, uuid } => self.add_wire(points, uuid),
+            KicadSchematicEdit::AddJunction { at, uuid } => self.add_junction(at, uuid),
             KicadSchematicEdit::AddLabel {
                 text,
                 kind,
@@ -628,6 +633,32 @@ impl KicadSchematic {
 
         Ok(KicadEditSummary {
             operation: "add-wire".to_string(),
+            target: payload,
+        })
+    }
+
+    pub fn add_junction(
+        &mut self,
+        at: KicadPoint,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        validate_point(at, "junction")?;
+        if self.junctions.iter().any(|junction| {
+            coordinate_key(junction.at.x) == coordinate_key(at.x)
+                && coordinate_key(junction.at.y) == coordinate_key(at.y)
+        }) {
+            return Err(OslError::InvalidInput(format!(
+                "KiCad junction already exists at {},{}",
+                at.x, at.y
+            )));
+        }
+
+        let payload = format!("{},{}", at.x, at.y);
+        let uuid = Some(self.edit_uuid(uuid, "junction", &payload)?);
+        self.junctions.push(KicadJunction { at, uuid });
+
+        Ok(KicadEditSummary {
+            operation: "add-junction".to_string(),
             target: payload,
         })
     }
@@ -962,6 +993,9 @@ impl KicadSchematic {
         output.push_str("  )\n");
         for wire in &self.wires {
             wire.write_wire_sexpr(&mut output, 2);
+        }
+        for junction in &self.junctions {
+            junction.write_junction_sexpr(&mut output, 2);
         }
         for label in &self.labels {
             label.write_label_sexpr(&mut output, 2);
@@ -1631,6 +1665,11 @@ impl KicadSchematic {
                 uuids.insert(uuid.clone());
             }
         }
+        for junction in &self.junctions {
+            if let Some(uuid) = &junction.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
         for sheet in &self.sheets {
             if let Some(uuid) = &sheet.uuid {
                 uuids.insert(uuid.clone());
@@ -1703,6 +1742,7 @@ impl KicadSchematic {
                 "  \"library_symbol_count\": {},\n",
                 "  \"wire_count\": {},\n",
                 "  \"label_count\": {},\n",
+                "  \"junction_count\": {},\n",
                 "  \"sheet_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"text_count\": {},\n",
@@ -1717,6 +1757,7 @@ impl KicadSchematic {
             self.library_symbols.len(),
             self.wires.len(),
             self.labels.len(),
+            self.junctions.len(),
             self.sheets.len(),
             self.sheets
                 .iter()
@@ -3477,6 +3518,26 @@ impl KicadTextItem {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadJunction {
     pub at: KicadPoint,
+    pub uuid: Option<String>,
+}
+
+impl KicadJunction {
+    fn write_junction_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(junction\n{}  (at {} {})\n{}  (diameter 0)\n{}  (color 0 0 0 0)\n",
+            pad,
+            pad,
+            format_number(self.at.x),
+            format_number(self.at.y),
+            pad,
+            pad
+        ));
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -3812,7 +3873,12 @@ fn parse_text_item(node: &Sexp) -> Option<KicadTextItem> {
 }
 
 fn parse_junction(node: &Sexp) -> Option<KicadJunction> {
-    child(list_items(node), "at").and_then(parse_point_at)
+    let items = list_items(node);
+    let at = child(items, "at").and_then(parse_at)?;
+    Some(KicadJunction {
+        at: KicadPoint { x: at.x, y: at.y },
+        uuid: child_value(items, "uuid"),
+    })
 }
 
 fn parse_points(node: &Sexp) -> Vec<KicadPoint> {
@@ -3834,13 +3900,6 @@ fn parse_size(node: &Sexp) -> Option<KicadSize> {
     Some(KicadSize {
         width: atom_text(items.get(1)?)?.parse().ok()?,
         height: atom_text(items.get(2)?)?.parse().ok()?,
-    })
-}
-
-fn parse_point_at(node: &Sexp) -> Option<KicadJunction> {
-    let at = parse_at(node)?;
-    Some(KicadJunction {
-        at: KicadPoint { x: at.x, y: at.y },
     })
 }
 
@@ -5319,6 +5378,12 @@ mod tests {
             })
             .unwrap();
         schematic
+            .apply_edit(KicadSchematicEdit::AddJunction {
+                at: KicadPoint { x: 88.9, y: 45.72 },
+                uuid: Some("11111111-aaaa-bbbb-cccc-111111111111".to_string()),
+            })
+            .unwrap();
+        schematic
             .apply_edit(KicadSchematicEdit::AddLabel {
                 text: "sense".to_string(),
                 kind: KicadLabelKind::Global,
@@ -5399,6 +5464,7 @@ mod tests {
         );
         assert_eq!(resistor.value(), Some("2k"));
         assert_eq!(schematic.wires.len(), 4);
+        assert_eq!(schematic.junctions.len(), 1);
         assert_eq!(schematic.sheets.len(), 1);
         assert_eq!(schematic.sheets[0].sheet_name(), Some("gain_stage"));
         assert_eq!(schematic.sheets[0].pins.len(), 2);
@@ -5415,6 +5481,8 @@ mod tests {
         );
 
         let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(junction"));
+        assert!(exported.contains("(uuid \"11111111-aaaa-bbbb-cccc-111111111111\")"));
         assert!(exported.contains("(global_label \"sense\""));
         assert!(exported.contains("(sheet"));
         assert!(exported.contains("(property \"Sheetname\" \"gain_stage\""));
@@ -5422,8 +5490,14 @@ mod tests {
         assert!(exported.contains("(text \".save v(sense)\""));
         let reparsed = parse_kicad_schematic(&exported, "edited.kicad_sch").unwrap();
         assert_eq!(reparsed.wires.len(), 4);
+        assert_eq!(reparsed.junctions.len(), 1);
+        assert_eq!(
+            reparsed.junctions[0].uuid.as_deref(),
+            Some("11111111-aaaa-bbbb-cccc-111111111111")
+        );
         assert_eq!(reparsed.sheets.len(), 1);
         assert_eq!(reparsed.sheets[0].pins.len(), 2);
+        assert_eq!(reparsed.canvas_scene().junctions.len(), 1);
         assert_eq!(
             reparsed
                 .symbols

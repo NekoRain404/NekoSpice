@@ -1712,6 +1712,7 @@ fn parse_kicad_edit_op(
         "set-property" => parse_kicad_set_property_edit(payload),
         "place-symbol" => parse_kicad_place_symbol_edit(payload, symbol_definitions),
         "add-wire" => parse_kicad_add_wire_edit(payload),
+        "add-junction" => parse_kicad_add_junction_edit(payload),
         "add-label" => parse_kicad_add_label_edit(payload),
         "add-global-label" => parse_kicad_add_label_edit_with_kind(payload, KicadLabelKind::Global),
         "add-hierarchical-label" => {
@@ -1822,6 +1823,14 @@ fn parse_kicad_add_wire_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
         .map(|point| parse_kicad_point(point, "wire point"))
         .collect::<OslResult<Vec<_>>>()?;
     Ok(KicadSchematicEdit::AddWire { points, uuid })
+}
+
+fn parse_kicad_add_junction_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let (payload, uuid) = split_payload_uuid(payload);
+    Ok(KicadSchematicEdit::AddJunction {
+        at: parse_kicad_point(payload, "junction position")?,
+        uuid,
+    })
 }
 
 fn parse_kicad_add_label_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
@@ -2262,6 +2271,7 @@ mod tests {
             "edited.kicad_sch",
             "move-symbol:R1:73.66,50.8",
             "set-property:R1:Value=2k",
+            "add-junction:88.9,45.72",
             "add-global-label:sense:88.9,45.72",
         ]
         .iter()
@@ -2274,12 +2284,13 @@ mod tests {
                 "input.kicad_sch",
                 "move-symbol:R1:73.66,50.8",
                 "set-property:R1:Value=2k",
+                "add-junction:88.9,45.72",
                 "add-global-label:sense:88.9,45.72",
             ]
         );
 
         let edits = parse_kicad_edit_ops(&args, &[]).unwrap();
-        assert_eq!(edits.len(), 3);
+        assert_eq!(edits.len(), 4);
         match &edits[0] {
             KicadSchematicEdit::MoveSymbol { reference, to, .. } => {
                 assert_eq!(reference, "R1");
@@ -2288,6 +2299,13 @@ mod tests {
             edit => panic!("expected move-symbol edit, got {edit:?}"),
         }
         match &edits[2] {
+            KicadSchematicEdit::AddJunction { at, .. } => {
+                assert_close(at.x, 88.9);
+                assert_close(at.y, 45.72);
+            }
+            edit => panic!("expected add-junction edit, got {edit:?}"),
+        }
+        match &edits[3] {
             KicadSchematicEdit::AddLabel { text, kind, .. } => {
                 assert_eq!(text, "sense");
                 assert_eq!(*kind, KicadLabelKind::Global);
