@@ -112,6 +112,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         tables: direct_children(root_list, "table")
             .filter_map(parse_table)
             .collect(),
+        groups: direct_children(root_list, "group")
+            .filter_map(parse_group)
+            .collect(),
         labels: direct_children(root_list, "label")
             .filter_map(|node| parse_label(node, KicadLabelKind::Local))
             .chain(
@@ -217,6 +220,7 @@ pub struct KicadSchematic {
     pub graphics: Vec<KicadSchematicGraphic>,
     pub images: Vec<KicadImage>,
     pub tables: Vec<KicadTable>,
+    pub groups: Vec<KicadGroup>,
     pub labels: Vec<KicadLabel>,
     pub sheets: Vec<KicadSheet>,
     pub no_connects: Vec<KicadNoConnect>,
@@ -1150,6 +1154,9 @@ impl KicadSchematic {
         for table in &self.tables {
             table.write_table_sexpr(&mut output, 2);
         }
+        for group in &self.groups {
+            group.write_group_sexpr(&mut output, 2);
+        }
         for junction in &self.junctions {
             junction.write_junction_sexpr(&mut output, 2);
         }
@@ -1904,6 +1911,11 @@ impl KicadSchematic {
                 }
             }
         }
+        for group in &self.groups {
+            if let Some(uuid) = &group.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
         for label in &self.labels {
             if let Some(uuid) = &label.uuid {
                 uuids.insert(uuid.clone());
@@ -2008,6 +2020,8 @@ impl KicadSchematic {
                 "  \"image_count\": {},\n",
                 "  \"table_count\": {},\n",
                 "  \"table_cell_count\": {},\n",
+                "  \"group_count\": {},\n",
+                "  \"group_member_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
@@ -2034,6 +2048,11 @@ impl KicadSchematic {
             self.tables
                 .iter()
                 .map(|table| table.cells.len())
+                .sum::<usize>(),
+            self.groups.len(),
+            self.groups
+                .iter()
+                .map(|group| group.members.len())
                 .sum::<usize>(),
             self.labels.len(),
             self.junctions.len(),
@@ -4032,6 +4051,33 @@ impl KicadTableCell {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadGroup {
+    pub name: String,
+    pub uuid: Option<String>,
+    pub locked: Option<bool>,
+    pub members: Vec<String>,
+}
+
+impl KicadGroup {
+    fn write_group_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(group {}\n", pad, sexpr_string(&self.name)));
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        if self.locked == Some(true) {
+            output.push_str(&format!("{}  (locked yes)\n", pad));
+        }
+        output.push_str(&format!("{}  (members", pad));
+        for member in &self.members {
+            output.push_str(&format!(" {}", sexpr_string(member)));
+        }
+        output.push_str(")\n");
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KicadBoundingBox {
     pub min: KicadPoint,
@@ -4950,6 +4996,25 @@ fn parse_table_cell(node: &Sexp) -> Option<KicadTableCell> {
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
         uuid: child_value(items, "uuid"),
         locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
+    })
+}
+
+fn parse_group(node: &Sexp) -> Option<KicadGroup> {
+    let items = list_items(node);
+    Some(KicadGroup {
+        name: list_value(node, 1)?,
+        uuid: child_value(items, "uuid"),
+        locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
+        members: child(items, "members")
+            .map(|members| {
+                list_items(members)
+                    .iter()
+                    .skip(1)
+                    .filter_map(atom_text)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 
@@ -6641,6 +6706,62 @@ mod tests {
         assert_eq!(reparsed.tables.len(), 1);
         assert_eq!(reparsed.tables[0].cells.len(), 2);
         assert_eq!(reparsed.canvas_scene().tables.len(), 1);
+    }
+
+    #[test]
+    fn parses_schematic_groups_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (wire (pts (xy 5 5) (xy 10 5)) (uuid "7e1da7e2-473f-48bf-b7bf-2eb79e1b1372"))
+  (label "OUT" (at 10 5 0) (uuid "d26fc350-11e5-4917-ba78-4e25070d7aa8"))
+  (group "GroupName"
+    (uuid "7267eac2-0eb2-494a-bc81-61295bcdf08c")
+    (locked yes)
+    (members "7e1da7e2-473f-48bf-b7bf-2eb79e1b1372" "d26fc350-11e5-4917-ba78-4e25070d7aa8")
+  )
+)"#,
+            "group.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.groups.len(), 1);
+        assert_eq!(schematic.groups[0].name, "GroupName");
+        assert_eq!(
+            schematic.groups[0].uuid.as_deref(),
+            Some("7267eac2-0eb2-494a-bc81-61295bcdf08c")
+        );
+        assert_eq!(schematic.groups[0].locked, Some(true));
+        assert_eq!(schematic.groups[0].members.len(), 2);
+        assert_eq!(
+            schematic.groups[0].members[0],
+            "7e1da7e2-473f-48bf-b7bf-2eb79e1b1372"
+        );
+        assert!(schematic.to_summary_json().contains("\"group_count\": 1"));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"group_member_count\": 2")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.wires.len(), 1);
+        assert!(scene.to_summary_json().contains("\"wire_count\": 1"));
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(group \"GroupName\""));
+        assert!(roundtrip.contains("(uuid \"7267eac2-0eb2-494a-bc81-61295bcdf08c\")"));
+        assert!(roundtrip.contains("(locked yes)"));
+        assert!(roundtrip.contains(
+            "(members \"7e1da7e2-473f-48bf-b7bf-2eb79e1b1372\" \"d26fc350-11e5-4917-ba78-4e25070d7aa8\")"
+        ));
+        let reparsed = parse_kicad_schematic(&roundtrip, "group_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.groups.len(), 1);
+        assert_eq!(reparsed.groups[0].members.len(), 2);
+        assert_eq!(reparsed.groups[0].locked, Some(true));
     }
 
     #[test]
