@@ -2332,6 +2332,7 @@ pub struct KicadCanvasScene {
     pub buses: Vec<KicadCanvasBus>,
     pub bus_entries: Vec<KicadCanvasBusEntry>,
     pub labels: Vec<KicadCanvasLabel>,
+    pub text_items: Vec<KicadCanvasText>,
     pub junctions: Vec<KicadCanvasJunction>,
     pub no_connects: Vec<KicadCanvasNoConnect>,
     pub bounds: Option<KicadBoundingBox>,
@@ -2477,6 +2478,21 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let text_items = schematic
+            .text_items
+            .iter()
+            .map(|text| {
+                if let Some(at) = text.at {
+                    bounds.include(at.point());
+                }
+                KicadCanvasText {
+                    text: text.text.clone(),
+                    at: text.at,
+                    is_spice_directive: text.text.trim_start().starts_with('.'),
+                }
+            })
+            .collect::<Vec<_>>();
+
         let junctions = schematic
             .junctions
             .iter()
@@ -2504,6 +2520,7 @@ impl KicadCanvasScene {
             buses,
             bus_entries,
             labels,
+            text_items,
             junctions,
             no_connects,
             bounds: bounds.finish(),
@@ -2541,6 +2558,8 @@ impl KicadCanvasScene {
                 "  \"bus_count\": {},\n",
                 "  \"bus_entry_count\": {},\n",
                 "  \"label_count\": {},\n",
+                "  \"text_count\": {},\n",
+                "  \"spice_directive_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
                 "  \"bounds\": {}\n",
@@ -2560,6 +2579,11 @@ impl KicadCanvasScene {
             self.buses.len(),
             self.bus_entries.len(),
             self.labels.len(),
+            self.text_items.len(),
+            self.text_items
+                .iter()
+                .filter(|item| item.is_spice_directive)
+                .count(),
             self.junctions.len(),
             self.no_connects.len(),
             bounds
@@ -2712,6 +2736,13 @@ pub struct KicadCanvasLabel {
     pub text: String,
     pub kind: KicadLabelKind,
     pub at: Option<KicadAt>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasText {
+    pub text: String,
+    pub at: Option<KicadAt>,
+    pub is_spice_directive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -5398,6 +5429,7 @@ mod tests {
             6
         );
         assert_eq!(schematic.wires.len(), 3);
+        assert_eq!(schematic.text_items.len(), 1);
         assert_eq!(
             schematic.wires[0].uuid.as_deref(),
             Some("22222222-2222-2222-2222-222222222222")
@@ -6114,6 +6146,8 @@ mod tests {
         );
         assert_eq!(scene.wires.len(), 3);
         assert_eq!(scene.labels.len(), 3);
+        assert_eq!(scene.text_items.len(), 1);
+        assert!(scene.text_items[0].is_spice_directive);
         assert!(scene.bounds.unwrap().width() > 20.0);
 
         let resistor = scene
@@ -6127,6 +6161,12 @@ mod tests {
         assert_close(resistor.pins[0].end.x, 69.85);
         assert!(scene.to_summary_json().contains("\"graphic_count\": 6"));
         assert!(scene.to_summary_json().contains("\"pin_count\": 6"));
+        assert!(scene.to_summary_json().contains("\"text_count\": 1"));
+        assert!(
+            scene
+                .to_summary_json()
+                .contains("\"spice_directive_count\": 1")
+        );
     }
 
     #[test]

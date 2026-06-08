@@ -120,6 +120,37 @@ pub fn render_kicad_scene_svg_with_options(
             ));
         }
     }
+    for item in &scene.text_items {
+        if let Some(at) = item.at {
+            let point = viewport.project(at_point(at));
+            let fill = if item.is_spice_directive {
+                "#b91c1c"
+            } else {
+                "#475569"
+            };
+            output.push_str(&format!(
+                "    <text data-schematic-text=\"true\" x=\"{}\" y=\"{}\" fill=\"{}\">",
+                fmt(point.x),
+                fmt(point.y),
+                fill
+            ));
+            for (index, line) in item.text.lines().enumerate() {
+                if index == 0 {
+                    output.push_str(&html_escape(line));
+                } else {
+                    output.push_str(&format!(
+                        "<tspan x=\"{}\" dy=\"13\">{}</tspan>",
+                        fmt(point.x),
+                        html_escape(line)
+                    ));
+                }
+            }
+            if item.text.ends_with('\n') {
+                output.push_str(&format!("<tspan x=\"{}\" dy=\"13\"></tspan>", fmt(point.x)));
+            }
+            output.push_str("</text>\n");
+        }
+    }
     for symbol in &scene.symbols {
         if !symbol.reference.is_empty() {
             let point = viewport.project(at_point(symbol.at));
@@ -498,5 +529,30 @@ mod tests {
         assert!(svg.contains("<rect"));
         assert!(svg.contains("<circle"));
         assert!(svg.contains("stroke=\"#64748b\""));
+    }
+
+    #[test]
+    fn renders_schematic_text_items_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (text ".tran 1u 1m\n.save v(out)" (at 10 10 0) (uuid "11111111-1111-4111-8111-111111111111"))
+  (text "Output note" (at 20 20 0) (uuid "22222222-2222-4222-8222-222222222222"))
+)"#,
+            "text.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-schematic-text=\"true\""));
+        assert!(svg.contains(".tran 1u 1m"));
+        assert!(svg.contains(".save v(out)"));
+        assert!(svg.contains("Output note"));
+        assert!(svg.contains("fill=\"#b91c1c\""));
+        assert!(svg.contains("fill=\"#475569\""));
     }
 }
