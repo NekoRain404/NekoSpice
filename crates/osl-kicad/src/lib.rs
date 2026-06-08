@@ -673,12 +673,12 @@ impl KicadSchematic {
             let pin_uuid = self.edit_uuid_excluding(
                 None,
                 "symbol-pin",
-                &format!("{instance_uuid}:{}:{index}", pin.number),
+                &format!("{instance_uuid}:{}:{index}", pin.number()),
                 &generated_pin_uuids,
             )?;
             generated_pin_uuids.insert(pin_uuid.clone());
             pins.push(KicadSymbolPinRef {
-                number: Some(pin.number.clone()),
+                number: Some(pin.number().to_string()),
                 uuid: Some(pin_uuid),
             });
         }
@@ -1680,7 +1680,7 @@ impl KicadSchematic {
                 if !definition
                     .pins
                     .iter()
-                    .any(|pin| pin.number == *pin_number || pin.name == *pin_number)
+                    .any(|pin| pin.number() == pin_number || pin.name() == pin_number)
                 {
                     diagnostics.push(kicad_schematic_diagnostic(
                         KicadDiagnosticSeverity::Error,
@@ -1695,15 +1695,18 @@ impl KicadSchematic {
                 }
             }
             for pin in definition_pins {
-                let pin_label = format!("{}:{}", reference, pin.number);
+                let pin_label = format!("{}:{}", reference, pin.number());
                 let Some(pin_at) = pin.at else {
                     diagnostics.push(kicad_schematic_diagnostic(
                         KicadDiagnosticSeverity::Warning,
                         "missing-pin-position",
-                        &format!("symbol '{reference}' pin '{}' has no position", pin.number),
+                        &format!(
+                            "symbol '{reference}' pin '{}' has no position",
+                            pin.number()
+                        ),
                         Some(reference.clone()),
                         None,
-                        Some(pin.number.clone()),
+                        Some(pin.number().to_string()),
                     ));
                     continue;
                 };
@@ -1718,7 +1721,7 @@ impl KicadSchematic {
                         &format!("symbol pin '{pin_label}' is not connected to a named net"),
                         Some(reference.clone()),
                         None,
-                        Some(pin.number.clone()),
+                        Some(pin.number().to_string()),
                     )),
                     Some(net) if net.starts_with('n') => {
                         diagnostics.push(kicad_schematic_diagnostic(
@@ -1727,7 +1730,7 @@ impl KicadSchematic {
                             &format!("symbol pin '{pin_label}' is on generated net '{net}'"),
                             Some(reference.clone()),
                             Some(net.to_string()),
-                            Some(pin.number.clone()),
+                            Some(pin.number().to_string()),
                         ))
                     }
                     Some(_) => {}
@@ -2946,6 +2949,8 @@ impl KicadCanvasScene {
                     at,
                     graphics,
                     pins,
+                    pin_names: definition.pin_names.clone(),
+                    pin_numbers: definition.pin_numbers.clone(),
                     bounds: symbol_bounds,
                 })
             })
@@ -3313,6 +3318,8 @@ pub struct KicadCanvasSymbol {
     pub at: KicadAt,
     pub graphics: Vec<KicadCanvasGraphic>,
     pub pins: Vec<KicadCanvasPin>,
+    pub pin_names: Option<KicadPinDisplay>,
+    pub pin_numbers: Option<KicadPinDisplay>,
     pub bounds: Option<KicadBoundingBox>,
 }
 
@@ -3512,6 +3519,8 @@ pub struct KicadCanvasPin {
     pub electrical_type: String,
     pub start: KicadPoint,
     pub end: KicadPoint,
+    pub name_effects: Option<KicadTextEffects>,
+    pub number_effects: Option<KicadTextEffects>,
 }
 
 impl KicadCanvasPin {
@@ -3521,11 +3530,13 @@ impl KicadCanvasPin {
         let local_end = pin_body_end(pin_at, pin.length.unwrap_or(0.0));
 
         Some(Self {
-            number: pin.number.clone(),
-            name: pin.name.clone(),
+            number: pin.number().to_string(),
+            name: pin.name().to_string(),
             electrical_type: pin.electrical_type.clone(),
             start: transform_local_point(local_start, symbol_at),
             end: transform_local_point(local_end, symbol_at),
+            name_effects: pin.name_effects().cloned(),
+            number_effects: pin.number_effects().cloned(),
         })
     }
 }
@@ -3766,6 +3777,28 @@ impl KicadSymbolLibrary {
     }
 
     pub fn to_summary_json(&self) -> String {
+        let pin_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.pins.len())
+            .sum::<usize>();
+        let pin_display_setting_count = self
+            .symbols
+            .iter()
+            .map(|symbol| {
+                usize::from(symbol.pin_names.is_some()) + usize::from(symbol.pin_numbers.is_some())
+            })
+            .sum::<usize>();
+        let pin_text_effect_count = self
+            .symbols
+            .iter()
+            .flat_map(|symbol| &symbol.pins)
+            .map(|pin| {
+                usize::from(pin.name_effects().is_some())
+                    + usize::from(pin.number_effects().is_some())
+            })
+            .sum::<usize>();
+
         format!(
             concat!(
                 "{{\n",
@@ -3773,7 +3806,10 @@ impl KicadSymbolLibrary {
                 "  \"version\": {},\n",
                 "  \"generator\": {},\n",
                 "  \"symbol_count\": {},\n",
-                "  \"graphic_count\": {}\n",
+                "  \"graphic_count\": {},\n",
+                "  \"pin_count\": {},\n",
+                "  \"pin_display_setting_count\": {},\n",
+                "  \"pin_text_effect_count\": {}\n",
                 "}}"
             ),
             json_escape(&self.source),
@@ -3783,7 +3819,10 @@ impl KicadSymbolLibrary {
             self.symbols
                 .iter()
                 .map(|symbol| symbol.graphics.len())
-                .sum::<usize>()
+                .sum::<usize>(),
+            pin_count,
+            pin_display_setting_count,
+            pin_text_effect_count
         )
     }
 }
@@ -4178,6 +4217,8 @@ impl KicadSymbolPinRef {
 pub struct KicadSymbolDef {
     pub name: String,
     pub exclude_from_sim: Option<bool>,
+    pub pin_names: Option<KicadPinDisplay>,
+    pub pin_numbers: Option<KicadPinDisplay>,
     pub properties: Vec<KicadProperty>,
     pub graphics: Vec<KicadSymbolGraphic>,
     pub pins: Vec<KicadPinDef>,
@@ -4224,6 +4265,12 @@ impl KicadSymbolDef {
                 if exclude_from_sim { "yes" } else { "no" }
             ));
         }
+        if let Some(pin_numbers) = &self.pin_numbers {
+            pin_numbers.write_pin_numbers_sexpr(output, indent + 2);
+        }
+        if let Some(pin_names) = &self.pin_names {
+            pin_names.write_pin_names_sexpr(output, indent + 2);
+        }
         for property in &self.properties {
             property.write_property_sexpr(output, indent + 2);
         }
@@ -4239,6 +4286,38 @@ impl KicadSymbolDef {
             pin.write_pin_sexpr(output, indent + 4);
         }
         output.push_str(&format!("{}  )\n", pad));
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadPinDisplay {
+    pub offset: Option<f64>,
+    pub hide: Option<bool>,
+}
+
+impl KicadPinDisplay {
+    fn write_pin_names_sexpr(&self, output: &mut String, indent: usize) {
+        self.write_pin_display_sexpr(output, indent, "pin_names", true);
+    }
+
+    fn write_pin_numbers_sexpr(&self, output: &mut String, indent: usize) {
+        self.write_pin_display_sexpr(output, indent, "pin_numbers", false);
+    }
+
+    fn write_pin_display_sexpr(
+        &self,
+        output: &mut String,
+        indent: usize,
+        name: &str,
+        include_offset: bool,
+    ) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}({}\n", pad, name));
+        if include_offset && let Some(offset) = self.offset {
+            output.push_str(&format!("{}  (offset {})\n", pad, format_number(offset)));
+        }
+        write_optional_bool_sexpr(output, indent + 2, "hide", self.hide);
         output.push_str(&format!("{})\n", pad));
     }
 }
@@ -5034,8 +5113,8 @@ impl KicadBoundingBoxBuilder {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadPinDef {
-    pub number: String,
-    pub name: String,
+    pub number: KicadPinText,
+    pub name: KicadPinText,
     pub electrical_type: String,
     pub shape: String,
     pub at: Option<KicadAt>,
@@ -5043,6 +5122,22 @@ pub struct KicadPinDef {
 }
 
 impl KicadPinDef {
+    pub fn number(&self) -> &str {
+        &self.number.text
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name.text
+    }
+
+    pub fn number_effects(&self) -> Option<&KicadTextEffects> {
+        self.number.effects.as_ref()
+    }
+
+    pub fn name_effects(&self) -> Option<&KicadTextEffects> {
+        self.name.effects.as_ref()
+    }
+
     fn write_pin_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -5062,15 +5157,30 @@ impl KicadPinDef {
         if let Some(length) = self.length {
             output.push_str(&format!(" (length {})", format_number(length)));
         }
-        output.push_str(&format!(
-            " (name {} (effects (font (size 1.27 1.27))))",
-            sexpr_string(&self.name)
-        ));
-        output.push_str(&format!(
-            " (number {} (effects (font (size 1.27 1.27))))",
-            sexpr_string(&self.number)
-        ));
+        self.name.write_inline_pin_text_sexpr(output, "name");
+        self.number.write_inline_pin_text_sexpr(output, "number");
         output.push_str(")\n");
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadPinText {
+    pub text: String,
+    pub effects: Option<KicadTextEffects>,
+}
+
+impl KicadPinText {
+    fn new(text: String, effects: Option<KicadTextEffects>) -> Self {
+        Self { text, effects }
+    }
+
+    fn write_inline_pin_text_sexpr(&self, output: &mut String, name: &str) {
+        output.push_str(&format!(" ({} {}", name, sexpr_string(&self.text)));
+        match &self.effects {
+            Some(effects) => effects.write_inline_effects_sexpr(output),
+            None => output.push_str(" (effects (font (size 1.27 1.27)))"),
+        }
+        output.push(')');
     }
 }
 
@@ -6494,6 +6604,8 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     Some(KicadSymbolDef {
         name: list_value(node, 1)?,
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
+        pin_names: child(items, "pin_names").map(parse_pin_display),
+        pin_numbers: child(items, "pin_numbers").map(parse_pin_display),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -6518,13 +6630,37 @@ fn parse_symbol_library_table_row(node: &Sexp) -> Option<KicadSymbolLibraryTable
 fn parse_pin_def(node: &Sexp) -> Option<KicadPinDef> {
     let items = list_items(node);
     Some(KicadPinDef {
-        number: child_value(items, "number")?,
-        name: child_value(items, "name").unwrap_or_else(|| "~".to_string()),
+        number: child(items, "number").and_then(parse_pin_text)?,
+        name: child(items, "name")
+            .and_then(parse_pin_text)
+            .unwrap_or_else(|| KicadPinText::new("~".to_string(), None)),
         electrical_type: list_value(node, 1).unwrap_or_else(|| "unspecified".to_string()),
         shape: list_value(node, 2).unwrap_or_else(|| "line".to_string()),
         at: child(items, "at").and_then(parse_at),
         length: child_value(items, "length").and_then(|value| value.parse().ok()),
     })
+}
+
+fn parse_pin_display(node: &Sexp) -> KicadPinDisplay {
+    let items = list_items(node);
+    KicadPinDisplay {
+        offset: child_value(items, "offset").and_then(|value| value.parse().ok()),
+        hide: parse_optional_bool_child(items, "hide").or_else(|| {
+            items
+                .iter()
+                .skip(1)
+                .any(|item| atom_text(item) == Some("hide"))
+                .then_some(true)
+        }),
+    }
+}
+
+fn parse_pin_text(node: &Sexp) -> Option<KicadPinText> {
+    let items = list_items(node);
+    Some(KicadPinText::new(
+        list_value(node, 1)?,
+        child(items, "effects").map(parse_text_effects),
+    ))
 }
 
 fn parse_property(node: &Sexp) -> Option<KicadProperty> {
@@ -7530,9 +7666,9 @@ fn normalized_rotation(rotation: f64) -> f64 {
 }
 
 fn compare_pin_numbers(left: &&KicadPinDef, right: &&KicadPinDef) -> Ordering {
-    match (left.number.parse::<u32>(), right.number.parse::<u32>()) {
+    match (left.number().parse::<u32>(), right.number().parse::<u32>()) {
         (Ok(left), Ok(right)) => left.cmp(&right),
-        _ => left.number.cmp(&right.number),
+        _ => left.number().cmp(right.number()),
     }
 }
 
@@ -7664,12 +7800,12 @@ fn symbol_ordered_pins<'a>(
     let mut by_number = definition
         .pins
         .iter()
-        .map(|pin| (pin.number.as_str(), pin))
+        .map(|pin| (pin.number(), pin))
         .collect::<BTreeMap<_, _>>();
     let by_name = definition
         .pins
         .iter()
-        .map(|pin| (pin.name.as_str(), pin))
+        .map(|pin| (pin.name(), pin))
         .collect::<BTreeMap<_, _>>();
     let mut ordered = Vec::new();
 
@@ -10816,7 +10952,7 @@ mod tests {
         assert_eq!(resistor.property("Reference"), Some("R"));
         assert_eq!(resistor.graphics.len(), 1);
         assert_eq!(resistor.pins.len(), 2);
-        assert_eq!(resistor.pins[0].number, "1");
+        assert_eq!(resistor.pins[0].number(), "1");
         assert_eq!(resistor.pins[0].electrical_type, "passive");
         let bounds = resistor.bounding_box().unwrap();
         assert_eq!(bounds.min.x, -2.54);
@@ -10906,6 +11042,166 @@ mod tests {
             &reparsed_symbol.graphics[0].graphic,
             KicadGraphic::Bezier { points } if points.len() == 4
         ));
+    }
+
+    #[test]
+    fn preserves_kicad_symbol_pin_display_and_text_effects() {
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "NekoSpice:StyledPin"
+    (pin_numbers
+      (hide yes)
+    )
+    (pin_names
+      (offset 2.54)
+      (hide no)
+    )
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "StyledPin" (at 0 -2.54 0))
+    (symbol "StyledPin_0_1"
+      (pin input clock
+        (at -5.08 0 0)
+        (length 5.08)
+        (name "CLK"
+          (effects
+            (font (size 1.524 1.016) (thickness 0.1524) bold italic (color 58 104 255 0.5))
+            (justify left bottom)
+            (hide yes)
+          )
+        )
+        (number "1"
+          (effects
+            (font (size 1.27 1.27) (color 255 89 101 1))
+            (justify right)
+          )
+        )
+      )
+    )
+  )
+)"#,
+            "styled_pin.kicad_sym",
+        )
+        .unwrap();
+
+        let symbol = library.symbol("NekoSpice:StyledPin").unwrap();
+        assert_eq!(symbol.pin_numbers.as_ref().unwrap().hide, Some(true));
+        assert_close(symbol.pin_names.as_ref().unwrap().offset.unwrap(), 2.54);
+        assert_eq!(symbol.pin_names.as_ref().unwrap().hide, Some(false));
+        assert_eq!(symbol.pins.len(), 1);
+        let pin = &symbol.pins[0];
+        assert_eq!(pin.number(), "1");
+        assert_eq!(pin.name(), "CLK");
+        assert_eq!(pin.electrical_type, "input");
+        assert_eq!(pin.shape, "clock");
+        assert_close(pin.name_effects().unwrap().font_size.unwrap().width, 1.524);
+        assert_close(pin.name_effects().unwrap().font_size.unwrap().height, 1.016);
+        assert_eq!(pin.name_effects().unwrap().font_bold, Some(true));
+        assert_eq!(pin.name_effects().unwrap().font_italic, Some(true));
+        assert_eq!(pin.name_effects().unwrap().hide, true);
+        assert_eq!(
+            pin.number_effects().unwrap().font_color,
+            Some(KicadColor {
+                red: 255.0,
+                green: 89.0,
+                blue: 101.0,
+                alpha: 1.0,
+            })
+        );
+        let summary = library.to_summary_json();
+        assert!(summary.contains("\"pin_count\": 1"));
+        assert!(summary.contains("\"pin_display_setting_count\": 2"));
+        assert!(summary.contains("\"pin_text_effect_count\": 2"));
+
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:StyledPin"
+      (pin_numbers (hide yes))
+      (pin_names (offset 2.54) (hide no))
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "StyledPin" (at 0 -2.54 0))
+      (symbol "StyledPin_0_1"
+        (pin input clock
+          (at -5.08 0 0)
+          (length 5.08)
+          (name "CLK" (effects (font (size 1.524 1.016) bold italic) (hide yes)))
+          (number "1" (effects (font (size 1.27 1.27) (color 255 89 101 1))))
+        )
+      )
+    )
+  )
+  (symbol
+    (lib_id "NekoSpice:StyledPin")
+    (at 10 10 0)
+    (property "Reference" "U1" (at 10 7 0))
+    (property "Value" "StyledPin" (at 10 13 0))
+  )
+)"#,
+            "styled_pin_canvas.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.symbols.len(), 1);
+        assert_eq!(
+            scene.symbols[0].pin_numbers.as_ref().unwrap().hide,
+            Some(true)
+        );
+        assert_close(
+            scene.symbols[0].pin_names.as_ref().unwrap().offset.unwrap(),
+            2.54,
+        );
+        assert_eq!(
+            scene.symbols[0].pins[0].name_effects.as_ref().unwrap().hide,
+            true
+        );
+        assert_eq!(
+            scene.symbols[0].pins[0]
+                .number_effects
+                .as_ref()
+                .unwrap()
+                .font_color,
+            Some(KicadColor {
+                red: 255.0,
+                green: 89.0,
+                blue: 101.0,
+                alpha: 1.0,
+            })
+        );
+
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(pin_numbers"));
+        assert!(exported.contains("(hide yes)"));
+        assert!(exported.contains("(pin_names"));
+        assert!(exported.contains("(offset 2.54)"));
+        assert!(exported.contains("(hide no)"));
+        assert!(exported.contains("(font (size 1.524 1.016) (thickness 0.1524) (bold yes) (italic yes) (color 58 104 255 0.5))"));
+        assert!(exported.contains("(justify left bottom)"));
+        assert!(exported.contains("(font (size 1.27 1.27) (color 255 89 101 1))"));
+
+        let reparsed =
+            parse_kicad_symbol_library(&exported, "styled_pin_roundtrip.kicad_sym").unwrap();
+        let reparsed_symbol = reparsed.symbol("NekoSpice:StyledPin").unwrap();
+        assert_eq!(
+            reparsed_symbol.pin_numbers.as_ref().unwrap().hide,
+            Some(true)
+        );
+        assert_close(
+            reparsed_symbol.pin_names.as_ref().unwrap().offset.unwrap(),
+            2.54,
+        );
+        assert_eq!(
+            reparsed_symbol.pins[0].name_effects().unwrap().font_bold,
+            Some(true)
+        );
+        assert_eq!(
+            reparsed_symbol.pins[0].number_effects().unwrap().justify,
+            vec!["right"]
+        );
     }
 
     #[test]
