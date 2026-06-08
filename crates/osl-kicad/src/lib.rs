@@ -114,6 +114,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         tables: direct_children(root_list, "table")
             .filter_map(parse_table)
             .collect(),
+        rule_areas: direct_children(root_list, "rule_area")
+            .filter_map(parse_rule_area)
+            .collect(),
         groups: direct_children(root_list, "group")
             .filter_map(parse_group)
             .collect(),
@@ -234,6 +237,7 @@ pub struct KicadSchematic {
     pub graphics: Vec<KicadSchematicGraphic>,
     pub images: Vec<KicadImage>,
     pub tables: Vec<KicadTable>,
+    pub rule_areas: Vec<KicadRuleArea>,
     pub groups: Vec<KicadGroup>,
     pub directive_labels: Vec<KicadDirectiveLabel>,
     pub labels: Vec<KicadLabel>,
@@ -1223,6 +1227,9 @@ impl KicadSchematic {
         for table in &self.tables {
             table.write_table_sexpr(&mut output, 2);
         }
+        for rule_area in &self.rule_areas {
+            rule_area.write_rule_area_sexpr(&mut output, 2);
+        }
         for group in &self.groups {
             group.write_group_sexpr(&mut output, 2);
         }
@@ -1995,6 +2002,11 @@ impl KicadSchematic {
                 }
             }
         }
+        for rule_area in &self.rule_areas {
+            if let Some(uuid) = &rule_area.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
         for group in &self.groups {
             if let Some(uuid) = &group.uuid {
                 uuids.insert(uuid.clone());
@@ -2120,6 +2132,9 @@ impl KicadSchematic {
                 "  \"table_cell_count\": {},\n",
                 "  \"styled_table_cell_count\": {},\n",
                 "  \"locked_table_cell_count\": {},\n",
+                "  \"rule_area_count\": {},\n",
+                "  \"styled_rule_area_count\": {},\n",
+                "  \"locked_rule_area_count\": {},\n",
                 "  \"group_count\": {},\n",
                 "  \"group_member_count\": {},\n",
                 "  \"label_count\": {},\n",
@@ -2184,6 +2199,9 @@ impl KicadSchematic {
                 .sum::<usize>(),
             self.styled_table_cell_count(),
             self.locked_table_cell_count(),
+            self.rule_areas.len(),
+            self.styled_rule_area_count(),
+            self.locked_rule_area_count(),
             self.groups.len(),
             self.groups
                 .iter()
@@ -2346,6 +2364,20 @@ impl KicadSchematic {
             .count()
     }
 
+    fn styled_rule_area_count(&self) -> usize {
+        self.rule_areas
+            .iter()
+            .filter(|rule_area| rule_area.stroke.is_some() || rule_area.fill.is_some())
+            .count()
+    }
+
+    fn locked_rule_area_count(&self) -> usize {
+        self.rule_areas
+            .iter()
+            .filter(|rule_area| rule_area.locked == Some(true))
+            .count()
+    }
+
     fn styled_junction_count(&self) -> usize {
         self.junctions
             .iter()
@@ -2370,6 +2402,11 @@ impl KicadSchematic {
                 .iter()
                 .filter(|sheet| sheet.dnp == Some(true))
                 .count()
+            + self
+                .rule_areas
+                .iter()
+                .filter(|rule_area| rule_area.dnp == Some(true))
+                .count()
     }
 
     fn bom_excluded_count(&self) -> usize {
@@ -2382,6 +2419,11 @@ impl KicadSchematic {
                 .iter()
                 .filter(|sheet| sheet.in_bom == Some(false))
                 .count()
+            + self
+                .rule_areas
+                .iter()
+                .filter(|rule_area| rule_area.in_bom == Some(false))
+                .count()
     }
 
     fn board_excluded_count(&self) -> usize {
@@ -2393,6 +2435,11 @@ impl KicadSchematic {
                 .sheets
                 .iter()
                 .filter(|sheet| sheet.on_board == Some(false))
+                .count()
+            + self
+                .rule_areas
+                .iter()
+                .filter(|rule_area| rule_area.on_board == Some(false))
                 .count()
     }
 
@@ -2832,6 +2879,7 @@ pub struct KicadCanvasScene {
     pub graphics: Vec<KicadCanvasGraphic>,
     pub images: Vec<KicadCanvasImage>,
     pub tables: Vec<KicadCanvasTable>,
+    pub rule_areas: Vec<KicadCanvasRuleArea>,
     pub wires: Vec<KicadCanvasWire>,
     pub buses: Vec<KicadCanvasBus>,
     pub bus_entries: Vec<KicadCanvasBusEntry>,
@@ -3001,6 +3049,21 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let rule_areas = schematic
+            .rule_areas
+            .iter()
+            .map(|rule_area| {
+                for point in &rule_area.points {
+                    bounds.include(*point);
+                }
+                KicadCanvasRuleArea {
+                    points: rule_area.points.clone(),
+                    stroke: rule_area.stroke.clone(),
+                    fill: rule_area.fill.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+
         let buses = schematic
             .buses
             .iter()
@@ -3131,6 +3194,7 @@ impl KicadCanvasScene {
             graphics,
             images,
             tables,
+            rule_areas,
             wires,
             buses,
             bus_entries,
@@ -3172,6 +3236,7 @@ impl KicadCanvasScene {
                 "  \"image_count\": {},\n",
                 "  \"table_count\": {},\n",
                 "  \"table_cell_count\": {},\n",
+                "  \"rule_area_count\": {},\n",
                 "  \"pin_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"wire_count\": {},\n",
@@ -3198,6 +3263,7 @@ impl KicadCanvasScene {
                 .iter()
                 .map(|table| table.cells.len())
                 .sum::<usize>(),
+            self.rule_areas.len(),
             pin_count,
             self.sheets
                 .iter()
@@ -3250,6 +3316,13 @@ pub struct KicadCanvasSheetPin {
     pub pin_type: String,
     pub at: Option<KicadAt>,
     pub effects: Option<KicadTextEffects>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasRuleArea {
+    pub points: Vec<KicadPoint>,
+    pub stroke: Option<KicadStroke>,
+    pub fill: Option<KicadFill>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4372,6 +4445,51 @@ impl KicadSchematicGraphic {
         if self.locked == Some(true) {
             output.push_str(" (locked yes)");
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadRuleArea {
+    pub points: Vec<KicadPoint>,
+    pub stroke: Option<KicadStroke>,
+    pub fill: Option<KicadFill>,
+    pub uuid: Option<String>,
+    pub locked: Option<bool>,
+    pub exclude_from_sim: Option<bool>,
+    pub in_bom: Option<bool>,
+    pub on_board: Option<bool>,
+    pub dnp: Option<bool>,
+}
+
+impl KicadRuleArea {
+    fn write_rule_area_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(rule_area\n", pad));
+        if let Some(locked) = self.locked {
+            output.push_str(&format!(
+                "{}  (locked {})\n",
+                pad,
+                if locked { "yes" } else { "no" }
+            ));
+        }
+        write_optional_bool_sexpr(
+            output,
+            indent + 2,
+            "exclude_from_sim",
+            self.exclude_from_sim,
+        );
+        write_optional_bool_sexpr(output, indent + 2, "in_bom", self.in_bom);
+        write_optional_bool_sexpr(output, indent + 2, "on_board", self.on_board);
+        write_optional_bool_sexpr(output, indent + 2, "dnp", self.dnp);
+        output.push_str(&format!("{}  (polyline", pad));
+        write_points_sexpr(output, &self.points);
+        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+        write_inline_fill(output, self.fill.as_ref());
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        output.push_str(")\n");
+        output.push_str(&format!("{})\n", pad));
     }
 }
 
@@ -6250,6 +6368,25 @@ fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
         }
         _ => None,
     }
+}
+
+fn parse_rule_area(node: &Sexp) -> Option<KicadRuleArea> {
+    let items = list_items(node);
+    let polyline = child(items, "polyline")?;
+    let polyline_items = list_items(polyline);
+    Some(KicadRuleArea {
+        points: child(polyline_items, "pts")
+            .map(parse_points)
+            .unwrap_or_default(),
+        stroke: child(polyline_items, "stroke").map(parse_stroke),
+        fill: child(polyline_items, "fill").map(parse_fill),
+        uuid: child_value(polyline_items, "uuid"),
+        locked: parse_optional_bool_child(items, "locked"),
+        exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
+        in_bom: child_value(items, "in_bom").and_then(parse_kicad_bool_value),
+        on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
+        dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
+    })
 }
 
 fn parse_image(node: &Sexp) -> Option<KicadImage> {
@@ -8142,6 +8279,114 @@ mod tests {
             Some("hatch")
         );
         assert_eq!(reparsed.canvas_scene().graphics.len(), 4);
+    }
+
+    #[test]
+    fn parses_rule_areas_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20251028)
+  (generator "eeschema")
+  (paper "A4")
+  (lib_symbols)
+  (rule_area
+    (locked yes)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp yes)
+    (polyline
+      (pts
+        (xy 120.65 30.48) (xy 100.33 30.48) (xy 100.33 53.34) (xy 104.14 57.15)
+      )
+      (stroke (width 0.127) (type dash) (color 10 20 30 1))
+      (fill (type color) (color 20 200 170 0.25))
+      (uuid "c41fc141-ff73-4a8e-9714-30fcb0d8076b")
+    )
+  )
+)"#,
+            "rule_area.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.rule_areas.len(), 1);
+        let rule_area = &schematic.rule_areas[0];
+        assert_eq!(rule_area.points.len(), 4);
+        assert_close(rule_area.stroke.as_ref().unwrap().width.unwrap(), 0.127);
+        assert_eq!(
+            rule_area.stroke.as_ref().unwrap().stroke_type.as_deref(),
+            Some("dash")
+        );
+        assert_eq!(
+            rule_area.fill.as_ref().unwrap().fill_type.as_deref(),
+            Some("color")
+        );
+        assert_eq!(rule_area.locked, Some(true));
+        assert_eq!(rule_area.exclude_from_sim, Some(false));
+        assert_eq!(rule_area.in_bom, Some(false));
+        assert_eq!(rule_area.on_board, Some(false));
+        assert_eq!(rule_area.dnp, Some(true));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"rule_area_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_rule_area_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"locked_rule_area_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"dnp_item_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"bom_excluded_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"board_excluded_count\": 1")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.rule_areas.len(), 1);
+        assert_eq!(scene.rule_areas[0].points.len(), 4);
+        assert!(scene.to_summary_json().contains("\"rule_area_count\": 1"));
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(rule_area"));
+        assert!(roundtrip.contains("(locked yes)"));
+        assert!(roundtrip.contains("(exclude_from_sim no)"));
+        assert!(roundtrip.contains("(in_bom no)"));
+        assert!(roundtrip.contains("(on_board no)"));
+        assert!(roundtrip.contains("(dnp yes)"));
+        assert!(roundtrip.contains("(stroke (width 0.127) (type dash) (color 10 20 30 1))"));
+        assert!(roundtrip.contains("(fill (type color) (color 20 200 170 0.25))"));
+        assert!(roundtrip.contains("(uuid \"c41fc141-ff73-4a8e-9714-30fcb0d8076b\")"));
+        let reparsed = parse_kicad_schematic(&roundtrip, "rule_area_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.rule_areas.len(), 1);
+        assert_eq!(
+            reparsed.rule_areas[0].uuid.as_deref(),
+            Some("c41fc141-ff73-4a8e-9714-30fcb0d8076b")
+        );
+        assert_eq!(
+            reparsed.rule_areas[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash")
+        );
     }
 
     #[test]

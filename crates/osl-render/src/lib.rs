@@ -1,8 +1,8 @@
 use osl_core::html_escape;
 use osl_kicad::{
     KicadAt, KicadBoundingBox, KicadCanvasDirectiveLabel, KicadCanvasGraphic, KicadCanvasImage,
-    KicadCanvasScene, KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable, KicadCanvasTextBox,
-    KicadColor, KicadFill, KicadLabelKind, KicadPoint, KicadStroke,
+    KicadCanvasRuleArea, KicadCanvasScene, KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable,
+    KicadCanvasTextBox, KicadColor, KicadFill, KicadLabelKind, KicadPoint, KicadStroke,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -62,6 +62,9 @@ pub fn render_kicad_scene_svg_with_options(
     }
     for table in &scene.tables {
         render_table(&mut output, &viewport, table);
+    }
+    for rule_area in &scene.rule_areas {
+        render_rule_area(&mut output, &viewport, rule_area);
     }
     for bus in &scene.buses {
         render_stroked_polyline(
@@ -578,6 +581,36 @@ fn render_table(output: &mut String, viewport: &SvgViewport, table: &KicadCanvas
     output.push_str("    </g>\n");
 }
 
+fn render_rule_area(output: &mut String, viewport: &SvgViewport, rule_area: &KicadCanvasRuleArea) {
+    if rule_area.points.len() < 3 {
+        return;
+    }
+
+    let points = rule_area
+        .points
+        .iter()
+        .map(|point| {
+            let point = viewport.project(*point);
+            format!("{},{}", fmt(point.x), fmt(point.y))
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let stroke = svg_stroke_color(rule_area.stroke.as_ref(), "#0f766e");
+    let stroke_width = svg_stroke_width(rule_area.stroke.as_ref(), viewport, 1.6);
+    let dash_array = svg_stroke_dasharray(rule_area.stroke.as_ref());
+    let fill = svg_fill_color(rule_area.fill.as_ref(), "#ccfbf1");
+    let fill_opacity = if fill == "none" { "1" } else { "0.18" };
+    output.push_str(&format!(
+        "      <polygon data-rule-area=\"true\" points=\"{}\" stroke=\"{}\" stroke-width=\"{}\"{} fill=\"{}\" fill-opacity=\"{}\"/>\n",
+        points,
+        stroke,
+        fmt(stroke_width),
+        dash_array,
+        fill,
+        fill_opacity
+    ));
+}
+
 fn render_graphic(
     output: &mut String,
     viewport: &SvgViewport,
@@ -866,6 +899,36 @@ mod tests {
         assert!(svg.contains("stroke=\"rgba(236,104,255,1)\""));
         assert!(svg.contains("fill=\"rgba(236,104,255,1)\""));
         assert!(svg.contains(">HV</text>"));
+    }
+
+    #[test]
+    fn renders_kicad_rule_areas_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (rule_area
+    (polyline
+      (pts (xy 10 10) (xy 25 10) (xy 25 20) (xy 10 20))
+      (stroke (width 0.127) (type dash) (color 10 20 30 1))
+      (fill (type color) (color 20 200 170 0.25))
+      (uuid "c41fc141-ff73-4a8e-9714-30fcb0d8076b")
+    )
+  )
+)"#,
+            "rule_area.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-rule-area=\"true\""));
+        assert!(svg.contains("stroke=\"rgba(10,20,30,1)\""));
+        assert!(svg.contains("stroke-width=\"2.286\""));
+        assert!(svg.contains("stroke-dasharray=\"8 5\""));
+        assert!(svg.contains("fill=\"rgba(20,200,170,0.25)\""));
     }
 
     #[test]
