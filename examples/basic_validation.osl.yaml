@@ -9,11 +9,13 @@ runs:
         signal: v(out)
         min: 0.20
         max: 0.35
-      - name: average_output
+      - name: steady_average_output
         kind: avg
         signal: v(out)
-        min: 0.45
-        max: 0.50
+        from: 8us
+        to: 10us
+        min: 0.48
+        max: 0.52
       - name: source_current_rms
         kind: rms
         signal: i(v1)
@@ -24,11 +26,13 @@ runs:
     sweep:
       rload: [500, 1000, 2000]
     checks:
-      - name: output_average_windowless
+      - name: steady_average_output
         kind: avg
         signal: v(out)
-        min: 0.35
-        max: 0.60
+        from: 8us
+        to: 10us
+        min: 0.48
+        max: 0.52
   - name: diode_rectifier
     netlist: diode_rectifier/rectifier.cir
     checks:
@@ -58,5 +62,7 @@ runs:
       - name: output_rms
         kind: rms
         signal: v(out)
-        min: 7.4
-        max: 7.7
+        from: 100us
+        to: 200us
+        min: 7.8
+        max: 8.2

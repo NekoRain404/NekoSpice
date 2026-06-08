@@ -51,6 +51,45 @@ impl Waveform {
             ))
         })
     }
+
+    pub fn signal_values_in_window(
+        &self,
+        signal: &str,
+        from: Option<f64>,
+        to: Option<f64>,
+    ) -> OslResult<Vec<f64>> {
+        if from.is_none() && to.is_none() {
+            return Ok(self.signal_values(signal)?.to_vec());
+        }
+        if let (Some(from), Some(to)) = (from, to)
+            && from > to
+        {
+            return Err(OslError::InvalidInput(format!(
+                "invalid measurement window: from={} is greater than to={}",
+                from, to
+            )));
+        }
+
+        let time = self.signal_values("time")?;
+        let values = self.signal_values(signal)?;
+        let selected = time
+            .iter()
+            .copied()
+            .zip(values.iter().copied())
+            .filter(|(time, _)| from.is_none_or(|from| *time >= from))
+            .filter(|(time, _)| to.is_none_or(|to| *time <= to))
+            .map(|(_, value)| value)
+            .collect::<Vec<_>>();
+
+        if selected.is_empty() {
+            return Err(OslError::InvalidInput(format!(
+                "measurement window for '{}' contains no samples",
+                signal
+            )));
+        }
+
+        Ok(selected)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -404,6 +443,12 @@ Values:
             )
             .unwrap(),
             2.0
+        );
+        assert_eq!(
+            waveform
+                .signal_values_in_window("v(out)", Some(0.5e-6), Some(1.5e-6))
+                .unwrap(),
+            vec![4.0]
         );
     }
 }

@@ -337,6 +337,8 @@ struct VerifyCheck {
     name: String,
     kind: String,
     signal: String,
+    from: Option<f64>,
+    to: Option<f64>,
     min: Option<f64>,
     max: Option<f64>,
 }
@@ -462,6 +464,8 @@ impl VerifyConfig {
                     name: unquote(value),
                     kind: "final_value".to_string(),
                     signal: String::new(),
+                    from: None,
+                    to: None,
                     min: None,
                     max: None,
                 });
@@ -477,12 +481,20 @@ impl VerifyConfig {
                     check.signal = unquote(value);
                     continue;
                 }
+                if let Some(value) = strip_key(line, "from:") {
+                    check.from = Some(parse_number(value, "check from")?);
+                    continue;
+                }
+                if let Some(value) = strip_key(line, "to:") {
+                    check.to = Some(parse_number(value, "check to")?);
+                    continue;
+                }
                 if let Some(value) = strip_key(line, "min:") {
-                    check.min = Some(parse_f64(value, "check min")?);
+                    check.min = Some(parse_number(value, "check min")?);
                     continue;
                 }
                 if let Some(value) = strip_key(line, "max:") {
-                    check.max = Some(parse_f64(value, "check max")?);
+                    check.max = Some(parse_number(value, "check max")?);
                     continue;
                 }
             }
@@ -552,7 +564,7 @@ fn parse_f64_list(value: &str, context: &str) -> OslResult<Vec<f64>> {
 
     inner
         .split(',')
-        .map(|part| parse_f64(part.trim(), context))
+        .map(|part| parse_number(part.trim(), context))
         .collect()
 }
 
@@ -581,6 +593,14 @@ fn validate_check(check: VerifyCheck) -> OslResult<VerifyCheck> {
     if check.min.is_none() && check.max.is_none() {
         return Err(OslError::InvalidInput(format!(
             "verify check '{}' must define min or max",
+            check.name
+        )));
+    }
+    if let (Some(from), Some(to)) = (check.from, check.to)
+        && from > to
+    {
+        return Err(OslError::InvalidInput(format!(
+            "verify check '{}' has from > to",
             check.name
         )));
     }
@@ -694,6 +714,8 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
                 name: check.name.clone(),
                 kind: check.kind.clone(),
                 signal: check.signal.clone(),
+                from: check.from,
+                to: check.to,
                 value: None,
                 min: check.min,
                 max: check.max,
@@ -702,13 +724,15 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
             };
         }
     };
-    let values = match waveform.signal_values(&check.signal) {
+    let values = match waveform.signal_values_in_window(&check.signal, check.from, check.to) {
         Ok(values) => values,
         Err(error) => {
             return CheckResult {
                 name: check.name.clone(),
                 kind: check.kind.clone(),
                 signal: check.signal.clone(),
+                from: check.from,
+                to: check.to,
                 value: None,
                 min: check.min,
                 max: check.max,
@@ -724,6 +748,8 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
                 name: check.name.clone(),
                 kind: check.kind.clone(),
                 signal: check.signal.clone(),
+                from: check.from,
+                to: check.to,
                 value: None,
                 min: check.min,
                 max: check.max,
@@ -732,13 +758,15 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
             };
         }
     };
-    let value = match measure(kind, values) {
+    let value = match measure(kind, &values) {
         Ok(value) => value,
         Err(error) => {
             return CheckResult {
                 name: check.name.clone(),
                 kind: check.kind.clone(),
                 signal: check.signal.clone(),
+                from: check.from,
+                to: check.to,
                 value: None,
                 min: check.min,
                 max: check.max,
@@ -752,16 +780,19 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
     let below_max = check.max.is_none_or(|max| value <= max);
     let passed = above_min && below_max;
     let message = format!(
-        "value={} min={} max={}",
+        "value={} min={} max={} window={}",
         value,
         option_f64_text(check.min),
-        option_f64_text(check.max)
+        option_f64_text(check.max),
+        window_text(check.from, check.to)
     );
 
     CheckResult {
         name: check.name.clone(),
         kind: check.kind.clone(),
         signal: check.signal.clone(),
+        from: check.from,
+        to: check.to,
         value: Some(value),
         min: check.min,
         max: check.max,
@@ -797,6 +828,8 @@ struct CheckResult {
     name: String,
     kind: String,
     signal: String,
+    from: Option<f64>,
+    to: Option<f64>,
     value: Option<f64>,
     min: Option<f64>,
     max: Option<f64>,
@@ -835,11 +868,13 @@ impl VerifyReport {
                         format!(
                             concat!(
                                 "        {{ \"name\": \"{}\", \"kind\": \"{}\", \"signal\": \"{}\", ",
-                                "\"value\": {}, \"min\": {}, \"max\": {}, \"passed\": {}, \"message\": \"{}\" }}"
+                                "\"from\": {}, \"to\": {}, \"value\": {}, \"min\": {}, \"max\": {}, \"passed\": {}, \"message\": \"{}\" }}"
                             ),
                             json_escape(&check.name),
                             json_escape(&check.kind),
                             json_escape(&check.signal),
+                            option_f64_json(check.from),
+                            option_f64_json(check.to),
                             option_f64_json(check.value),
                             option_f64_json(check.min),
                             option_f64_json(check.max),
@@ -1067,14 +1102,67 @@ fn strip_key<'a>(line: &'a str, key: &str) -> Option<&'a str> {
     line.strip_prefix(key).map(str::trim)
 }
 
-fn parse_f64(value: &str, context: &str) -> OslResult<f64> {
+fn parse_number(value: &str, context: &str) -> OslResult<f64> {
     let value = unquote(value);
-    value.parse::<f64>().map_err(|_| {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(OslError::InvalidInput(format!("{context} is empty")));
+    }
+
+    if let Ok(value) = value.parse::<f64>() {
+        return Ok(value);
+    }
+
+    let split_at = value
+        .char_indices()
+        .find(|(_, character)| {
+            !character.is_ascii_digit()
+                && *character != '.'
+                && *character != '-'
+                && *character != '+'
+                && *character != 'e'
+                && *character != 'E'
+        })
+        .map(|(index, _)| index)
+        .unwrap_or(value.len());
+
+    let (number, suffix) = value.split_at(split_at);
+    if number.is_empty() || suffix.is_empty() {
+        return Err(OslError::InvalidInput(format!(
+            "invalid {context}: '{}' is not a number",
+            value
+        )));
+    }
+
+    let number = number.parse::<f64>().map_err(|_| {
         OslError::InvalidInput(format!(
             "invalid {context}: '{}' is not a floating point number",
             value
         ))
-    })
+    })?;
+    let multiplier = spice_suffix_multiplier(suffix).ok_or_else(|| {
+        OslError::InvalidInput(format!(
+            "invalid {context}: unknown numeric suffix '{}'",
+            suffix
+        ))
+    })?;
+    Ok(number * multiplier)
+}
+
+fn spice_suffix_multiplier(suffix: &str) -> Option<f64> {
+    match suffix.to_ascii_lowercase().as_str() {
+        "t" => Some(1e12),
+        "g" => Some(1e9),
+        "meg" => Some(1e6),
+        "k" => Some(1e3),
+        "m" | "ms" => Some(1e-3),
+        "u" | "us" => Some(1e-6),
+        "n" | "ns" => Some(1e-9),
+        "p" | "ps" => Some(1e-12),
+        "f" | "fs" => Some(1e-15),
+        "s" => Some(1.0),
+        _ => None,
+    }
 }
 
 fn option_f64_json(value: Option<f64>) -> String {
@@ -1093,6 +1181,15 @@ fn option_f64_text(value: Option<f64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "none".to_string())
+}
+
+fn window_text(from: Option<f64>, to: Option<f64>) -> String {
+    match (from, to) {
+        (Some(from), Some(to)) => format!("{}..{}", from, to),
+        (Some(from), None) => format!("{}..", from),
+        (None, Some(to)) => format!("..{}", to),
+        (None, None) => "all".to_string(),
+    }
 }
 
 fn format_parameter_value(value: f64) -> String {
@@ -1172,7 +1269,7 @@ fn find_circuits_inner(path: &Path, circuits: &mut Vec<PathBuf>) -> OslResult<()
 
 #[cfg(test)]
 mod tests {
-    use super::{SweepDimension, VerifyRun};
+    use super::{SweepDimension, VerifyRun, parse_number};
     use std::path::PathBuf;
 
     #[test]
@@ -1201,5 +1298,20 @@ mod tests {
         assert_eq!(cases[3].parameters[0].value, 12.0);
         assert_eq!(cases[3].parameters[1].name, "load");
         assert_eq!(cases[3].parameters[1].value, 2.0);
+    }
+
+    #[test]
+    fn parses_spice_numeric_suffixes() {
+        assert_close(parse_number("3ms", "test").unwrap(), 0.003);
+        assert_close(parse_number("50us", "test").unwrap(), 0.00005);
+        assert_close(parse_number("1k", "test").unwrap(), 1000.0);
+        assert_close(parse_number("2Meg", "test").unwrap(), 2_000_000.0);
+    }
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() <= expected.abs().max(1.0) * 1e-12,
+            "actual={actual} expected={expected}"
+        );
     }
 }

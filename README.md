@@ -38,11 +38,13 @@ runs:
       - name: average_output
         kind: avg
         signal: v(out)
+        from: 8us
+        to: 10us
         min: 0.45
         max: 0.50
 ```
 
-Each sweep dimension expands into a Cartesian product of ngspice runs. `--jobs <n>` runs independent cases concurrently. Parameters are injected as `.param` overrides in the working netlist and recorded in `run.json` and `verify.json`; reports are sorted by the original expansion order.
+Each sweep dimension expands into a Cartesian product of ngspice runs. `--jobs <n>` runs independent cases concurrently. Parameters are injected as `.param` overrides in the working netlist and recorded in `run.json` and `verify.json`; reports are sorted by the original expansion order. Checks can use optional `from` / `to` windows with SPICE-style suffixes such as `8us`, `3ms`, or `1k`.
 
 The ngspice runner automatically injects an ASCII raw export into the working netlist:
 
