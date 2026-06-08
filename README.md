@@ -136,6 +136,8 @@ cargo run -p osl-cli -- kicad-export examples/kicad_schematic/neko_spice.kicad_s
 
 Symbol graphic text items now preserve KiCad text effects through Rust IR, `.kicad_sym` / `.kicad_sch` roundtrips, canvas scene generation, and the SVG baseline renderer, including font size, thickness, bold/italic, color, justification, hide flags, and href metadata.
 
+Multi-unit and body-style symbol data is tracked from KiCad nested symbol names and instance `(unit ...)` / `(body_style ...)` metadata. Canvas scenes, schematic-to-SPICE pin selection, placement pin UUID generation, and KiCad writers use that scope so a placed unit does not render or connect pins from other units.
+
 ## Validation
 
 ```bash

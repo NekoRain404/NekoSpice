@@ -666,7 +666,10 @@ impl KicadSchematic {
         );
         let instance_uuid = self.edit_uuid(uuid, "symbol", &instance_payload)?;
         let properties = symbol_instance_properties(&definition, reference, value, at);
-        let mut sorted_pins = definition.pins.iter().collect::<Vec<_>>();
+        let unit = unit.unwrap_or(1);
+        let body_style = None;
+        let mut sorted_pins =
+            scoped_symbol_pins(&definition, Some(unit), body_style).collect::<Vec<_>>();
         sorted_pins.sort_by(compare_pin_numbers);
         let mut generated_pin_uuids = BTreeSet::new();
         let mut pins = Vec::new();
@@ -689,7 +692,8 @@ impl KicadSchematic {
             lib_id: lib_id.clone(),
             at: Some(at),
             mirror: None,
-            unit: Some(unit.unwrap_or(1)),
+            unit: Some(unit),
+            body_style,
             uuid: Some(instance_uuid),
             exclude_from_sim: None,
             in_bom: None,
@@ -1665,7 +1669,8 @@ impl KicadSchematic {
                 continue;
             };
 
-            let mut definition_pins = definition.pins.iter().collect::<Vec<_>>();
+            let mut definition_pins =
+                scoped_symbol_pins(definition, symbol.unit, symbol.body_style).collect::<Vec<_>>();
             definition_pins.sort_by(compare_pin_numbers);
             if !definition_pins.is_empty() && symbol.pins.is_empty() {
                 diagnostics.push(kicad_schematic_diagnostic(
@@ -1682,6 +1687,14 @@ impl KicadSchematic {
                 if !definition
                     .pins
                     .iter()
+                    .filter(|pin| {
+                        symbol_item_scope_matches(
+                            pin.unit,
+                            pin.body_style,
+                            symbol.unit.unwrap_or(1),
+                            symbol.body_style.unwrap_or(1),
+                        )
+                    })
                     .any(|pin| pin.number() == pin_number || pin.name() == pin_number)
                 {
                     diagnostics.push(kicad_schematic_diagnostic(
@@ -2175,6 +2188,7 @@ impl KicadSchematic {
                 "  \"bom_excluded_count\": {},\n",
                 "  \"board_excluded_count\": {},\n",
                 "  \"mirrored_symbol_count\": {},\n",
+                "  \"symbol_body_style_count\": {},\n",
                 "  \"fields_autoplaced_count\": {},\n",
                 "  \"shaped_label_count\": {},\n",
                 "  \"label_property_count\": {},\n",
@@ -2251,6 +2265,7 @@ impl KicadSchematic {
             self.bom_excluded_count(),
             self.board_excluded_count(),
             self.mirrored_symbol_count(),
+            self.symbol_body_style_count(),
             self.fields_autoplaced_count(),
             self.shaped_label_count(),
             self.label_property_count(),
@@ -2480,6 +2495,13 @@ impl KicadSchematic {
         self.symbols
             .iter()
             .filter(|symbol| symbol.mirror.is_some())
+            .count()
+    }
+
+    fn symbol_body_style_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .filter(|symbol| symbol.body_style.is_some())
             .count()
     }
 
@@ -2939,14 +2961,11 @@ impl KicadCanvasScene {
                     y: 0.0,
                     rotation: 0.0,
                 });
-                let graphics = definition
-                    .graphics
-                    .iter()
-                    .map(|graphic| graphic.transformed(at))
-                    .collect::<Vec<_>>();
-                let pins = definition
-                    .pins
-                    .iter()
+                let graphics =
+                    scoped_definition_graphics(definition, symbol.unit, symbol.body_style)
+                        .map(|graphic| graphic.transformed(at))
+                        .collect::<Vec<_>>();
+                let pins = scoped_symbol_pins(definition, symbol.unit, symbol.body_style)
                     .filter_map(|pin| KicadCanvasPin::from_pin_def(pin, at))
                     .collect::<Vec<_>>();
                 let symbol_bounds = canvas_symbol_bounds(&graphics, &pins);
@@ -3885,6 +3904,30 @@ impl KicadSymbolLibrary {
                 )
             })
             .count();
+        let unit_scoped_item_count = self
+            .symbols
+            .iter()
+            .map(|symbol| {
+                symbol
+                    .graphics
+                    .iter()
+                    .filter(|graphic| graphic.unit != 0)
+                    .count()
+                    + symbol.pins.iter().filter(|pin| pin.unit != 0).count()
+            })
+            .sum::<usize>();
+        let body_style_scoped_item_count = self
+            .symbols
+            .iter()
+            .map(|symbol| {
+                symbol
+                    .graphics
+                    .iter()
+                    .filter(|graphic| graphic.body_style != 0)
+                    .count()
+                    + symbol.pins.iter().filter(|pin| pin.body_style != 0).count()
+            })
+            .sum::<usize>();
 
         format!(
             concat!(
@@ -3896,6 +3939,8 @@ impl KicadSymbolLibrary {
                 "  \"symbol_count\": {},\n",
                 "  \"graphic_count\": {},\n",
                 "  \"symbol_graphic_text_effect_count\": {},\n",
+                "  \"unit_scoped_item_count\": {},\n",
+                "  \"body_style_scoped_item_count\": {},\n",
                 "  \"pin_count\": {},\n",
                 "  \"pin_display_setting_count\": {},\n",
                 "  \"pin_text_effect_count\": {},\n",
@@ -3921,6 +3966,8 @@ impl KicadSymbolLibrary {
                 .map(|symbol| symbol.graphics.len())
                 .sum::<usize>(),
             symbol_graphic_text_effect_count,
+            unit_scoped_item_count,
+            body_style_scoped_item_count,
             pin_count,
             pin_display_setting_count,
             pin_text_effect_count,
@@ -4144,6 +4191,7 @@ pub struct KicadSymbolInstance {
     pub at: Option<KicadAt>,
     pub mirror: Option<String>,
     pub unit: Option<u32>,
+    pub body_style: Option<u32>,
     pub uuid: Option<String>,
     pub exclude_from_sim: Option<bool>,
     pub in_bom: Option<bool>,
@@ -4272,6 +4320,9 @@ impl KicadSymbolInstance {
         if let Some(unit) = self.unit {
             output.push_str(&format!("{}  (unit {})\n", pad, unit));
         }
+        if let Some(body_style) = self.body_style {
+            output.push_str(&format!("{}  (body_style {})\n", pad, body_style));
+        }
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
         }
@@ -4358,10 +4409,10 @@ impl KicadSymbolDef {
 
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
         let mut bounds = KicadBoundingBoxBuilder::default();
-        for graphic in &self.graphics {
+        for graphic in scoped_definition_graphics(self, Some(1), None) {
             graphic.include_in_bounds(&mut bounds);
         }
-        for pin in &self.pins {
+        for pin in scoped_symbol_pins(self, Some(1), None) {
             if let Some(at) = pin.at {
                 bounds.include(at.point());
                 if let Some(length) = pin.length {
@@ -4436,19 +4487,54 @@ impl KicadSymbolDef {
         for property in &self.properties {
             property.write_property_sexpr(output, indent + 2);
         }
-        output.push_str(&format!(
-            "{}  (symbol {}\n",
-            pad,
-            sexpr_string(&format!("{}_0_1", self.local_name()))
-        ));
-        for graphic in &self.graphics {
-            graphic.write_symbol_graphic_sexpr(output, indent + 4);
+        for scope in self.item_scopes() {
+            output.push_str(&format!(
+                "{}  (symbol {}\n",
+                pad,
+                sexpr_string(&format!(
+                    "{}_{}_{}",
+                    self.local_name(),
+                    scope.unit,
+                    scope.body_style
+                ))
+            ));
+            for graphic in self.graphics.iter().filter(|graphic| {
+                graphic.unit == scope.unit && graphic.body_style == scope.body_style
+            }) {
+                graphic.write_symbol_graphic_sexpr(output, indent + 4);
+            }
+            for pin in self
+                .pins
+                .iter()
+                .filter(|pin| pin.unit == scope.unit && pin.body_style == scope.body_style)
+            {
+                pin.write_pin_sexpr(output, indent + 4);
+            }
+            output.push_str(&format!("{}  )\n", pad));
         }
-        for pin in &self.pins {
-            pin.write_pin_sexpr(output, indent + 4);
-        }
-        output.push_str(&format!("{}  )\n", pad));
         output.push_str(&format!("{})\n", pad));
+    }
+
+    fn item_scopes(&self) -> Vec<KicadSymbolItemScope> {
+        let mut scopes = self
+            .graphics
+            .iter()
+            .map(|graphic| KicadSymbolItemScope {
+                unit: graphic.unit,
+                body_style: graphic.body_style,
+            })
+            .chain(self.pins.iter().map(|pin| KicadSymbolItemScope {
+                unit: pin.unit,
+                body_style: pin.body_style,
+            }))
+            .collect::<BTreeSet<_>>();
+        if scopes.is_empty() {
+            scopes.insert(KicadSymbolItemScope {
+                unit: 0,
+                body_style: 1,
+            });
+        }
+        scopes.into_iter().collect()
     }
 }
 
@@ -4517,6 +4603,8 @@ impl KicadPinDisplay {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadSymbolGraphic {
     pub graphic: KicadGraphic,
+    pub unit: u32,
+    pub body_style: u32,
     pub private: bool,
     pub stroke: Option<KicadStroke>,
     pub fill: Option<KicadFill>,
@@ -5312,6 +5400,8 @@ pub struct KicadPinDef {
     pub name: KicadPinText,
     pub electrical_type: String,
     pub shape: String,
+    pub unit: u32,
+    pub body_style: u32,
     pub at: Option<KicadAt>,
     pub length: Option<f64>,
     pub alternates: Vec<KicadPinAlternate>,
@@ -6447,6 +6537,9 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
         at: child(items, "at").and_then(parse_at),
         mirror: child_value(items, "mirror"),
         unit: child_value(items, "unit").and_then(|value| value.parse().ok()),
+        body_style: child_value(items, "body_style")
+            .or_else(|| child_value(items, "convert"))
+            .and_then(|value| value.parse().ok()),
         uuid: child_value(items, "uuid"),
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
         in_bom: child_value(items, "in_bom").and_then(parse_kicad_bool_value),
@@ -6910,6 +7003,8 @@ fn parse_pin_def(node: &Sexp) -> Option<KicadPinDef> {
             .unwrap_or_else(|| KicadPinText::new("~".to_string(), None)),
         electrical_type: list_value(node, 1).unwrap_or_else(|| "unspecified".to_string()),
         shape: list_value(node, 2).unwrap_or_else(|| "line".to_string()),
+        unit: 0,
+        body_style: 0,
         at: child(items, "at").and_then(parse_at),
         length: child_value(items, "length").and_then(|value| value.parse().ok()),
         alternates: direct_children(items, "alternate")
@@ -7425,38 +7520,75 @@ fn parse_at(node: &Sexp) -> Option<KicadAt> {
 
 fn collect_pin_defs(node: &Sexp) -> Vec<KicadPinDef> {
     let mut pins = Vec::new();
-    collect_pin_defs_into(node, &mut pins);
+    collect_pin_defs_into(node, KicadSymbolItemScope::default(), &mut pins);
     pins
 }
 
-fn collect_pin_defs_into(node: &Sexp, pins: &mut Vec<KicadPinDef>) {
+fn collect_pin_defs_into(node: &Sexp, scope: KicadSymbolItemScope, pins: &mut Vec<KicadPinDef>) {
     if head(node) == Some("pin")
-        && let Some(pin) = parse_pin_def(node)
+        && let Some(mut pin) = parse_pin_def(node)
     {
+        pin.unit = scope.unit;
+        pin.body_style = scope.body_style;
         pins.push(pin);
     }
     for child in list_items(node) {
         if matches!(child, Sexp::List(_)) {
-            collect_pin_defs_into(child, pins);
+            let child_scope = child_symbol_item_scope(child).unwrap_or(scope);
+            collect_pin_defs_into(child, child_scope, pins);
         }
     }
 }
 
 fn collect_graphics(node: &Sexp) -> Vec<KicadSymbolGraphic> {
     let mut graphics = Vec::new();
-    collect_graphics_into(node, &mut graphics);
+    collect_graphics_into(node, KicadSymbolItemScope::default(), &mut graphics);
     graphics
 }
 
-fn collect_graphics_into(node: &Sexp, graphics: &mut Vec<KicadSymbolGraphic>) {
+fn collect_graphics_into(
+    node: &Sexp,
+    scope: KicadSymbolItemScope,
+    graphics: &mut Vec<KicadSymbolGraphic>,
+) {
     if let Some(graphic) = parse_symbol_graphic(node) {
-        graphics.push(graphic);
+        graphics.push(KicadSymbolGraphic {
+            unit: scope.unit,
+            body_style: scope.body_style,
+            ..graphic
+        });
     }
     for child in list_items(node) {
         if matches!(child, Sexp::List(_)) {
-            collect_graphics_into(child, graphics);
+            let child_scope = child_symbol_item_scope(child).unwrap_or(scope);
+            collect_graphics_into(child, child_scope, graphics);
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct KicadSymbolItemScope {
+    unit: u32,
+    body_style: u32,
+}
+
+fn child_symbol_item_scope(node: &Sexp) -> Option<KicadSymbolItemScope> {
+    if head(node) != Some("symbol") {
+        return None;
+    }
+    parse_symbol_item_scope(list_value(node, 1)?.as_str())
+}
+
+fn parse_symbol_item_scope(name: &str) -> Option<KicadSymbolItemScope> {
+    let (_, body_style) = name.rsplit_once('_')?;
+    let (base, unit) = name[..name.len() - body_style.len() - 1].rsplit_once('_')?;
+    if base.is_empty() {
+        return None;
+    }
+    Some(KicadSymbolItemScope {
+        unit: unit.parse().ok()?,
+        body_style: body_style.parse().ok()?,
+    })
 }
 
 fn parse_symbol_graphic(node: &Sexp) -> Option<KicadSymbolGraphic> {
@@ -7465,6 +7597,8 @@ fn parse_symbol_graphic(node: &Sexp) -> Option<KicadSymbolGraphic> {
             let items = list_items(node);
             Some(KicadSymbolGraphic {
                 graphic: parse_graphic(node)?,
+                unit: 0,
+                body_style: 0,
                 private: items
                     .iter()
                     .skip(1)
@@ -8083,14 +8217,16 @@ fn symbol_ordered_pins<'a>(
     symbol: &'a KicadSymbolInstance,
     definition: &'a KicadSymbolDef,
 ) -> Vec<&'a KicadPinDef> {
-    let mut by_number = definition
-        .pins
+    let scoped_pins =
+        scoped_symbol_pins(definition, symbol.unit, symbol.body_style).collect::<Vec<_>>();
+    let mut by_number = scoped_pins
         .iter()
+        .copied()
         .map(|pin| (pin.number(), pin))
         .collect::<BTreeMap<_, _>>();
-    let by_name = definition
-        .pins
+    let by_name = scoped_pins
         .iter()
+        .copied()
         .map(|pin| (pin.name(), pin))
         .collect::<BTreeMap<_, _>>();
     let mut ordered = Vec::new();
@@ -8104,11 +8240,46 @@ fn symbol_ordered_pins<'a>(
     }
 
     if ordered.is_empty() {
-        ordered = definition.pins.iter().collect::<Vec<_>>();
+        ordered = scoped_pins;
         ordered.sort_by(compare_pin_numbers);
     }
 
     ordered
+}
+
+fn scoped_symbol_pins<'a>(
+    definition: &'a KicadSymbolDef,
+    unit: Option<u32>,
+    body_style: Option<u32>,
+) -> impl Iterator<Item = &'a KicadPinDef> + 'a {
+    let unit = unit.unwrap_or(1);
+    let body_style = body_style.unwrap_or(1);
+    definition
+        .pins
+        .iter()
+        .filter(move |pin| symbol_item_scope_matches(pin.unit, pin.body_style, unit, body_style))
+}
+
+fn scoped_definition_graphics<'a>(
+    definition: &'a KicadSymbolDef,
+    unit: Option<u32>,
+    body_style: Option<u32>,
+) -> impl Iterator<Item = &'a KicadSymbolGraphic> + 'a {
+    let unit = unit.unwrap_or(1);
+    let body_style = body_style.unwrap_or(1);
+    definition.graphics.iter().filter(move |graphic| {
+        symbol_item_scope_matches(graphic.unit, graphic.body_style, unit, body_style)
+    })
+}
+
+fn symbol_item_scope_matches(
+    item_unit: u32,
+    item_body_style: u32,
+    selected_unit: u32,
+    selected_body_style: u32,
+) -> bool {
+    (item_unit == 0 || item_unit == selected_unit)
+        && (item_body_style == 0 || item_body_style == selected_body_style)
 }
 
 fn symbol_sim_pin_order(symbol: &KicadSymbolInstance, definition: &KicadSymbolDef) -> Vec<String> {
@@ -10912,6 +11083,132 @@ mod tests {
             scene
                 .to_summary_json()
                 .contains("\"spice_directive_count\": 1")
+        );
+    }
+
+    #[test]
+    fn selects_kicad_symbol_unit_scope_for_canvas_and_netlist() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:Multi"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "Multi" (at 0 -2.54 0))
+      (property "Sim.Device" "R" (at 0 0 0))
+      (symbol "Multi_0_1"
+        (rectangle
+          (start -1 -1)
+          (end 1 1)
+          (stroke (width 0) (type default))
+          (fill (type none))
+        )
+      )
+      (symbol "Multi_1_1"
+        (polyline
+          (pts (xy -1 0) (xy 1 0))
+          (stroke (width 0.127) (type default))
+          (fill (type none))
+        )
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "A1") (number "1"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "B1") (number "2"))
+      )
+      (symbol "Multi_2_1"
+        (circle
+          (center 0 0)
+          (radius 1)
+          (stroke (width 0.127) (type default))
+          (fill (type none))
+        )
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "A2") (number "3"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "B2") (number "4"))
+      )
+    )
+  )
+  (wire (pts (xy 17.46 10) (xy 10 10)))
+  (wire (pts (xy 22.54 10) (xy 30 10)))
+  (label "in" (at 10 10 0))
+  (label "0" (at 30 10 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:Multi")
+    (at 20 10 0)
+    (unit 2)
+    (body_style 1)
+    (property "Reference" "R1" (at 20 8 0))
+    (property "Value" "10k" (at 20 12 0))
+  )
+)"#,
+            "multi_unit.kicad_sch",
+        )
+        .unwrap();
+
+        let definition = schematic.symbol_definition("NekoSpice:Multi").unwrap();
+        assert_eq!(definition.graphics[0].unit, 0);
+        assert_eq!(definition.graphics[1].unit, 1);
+        assert_eq!(definition.graphics[2].unit, 2);
+        assert_eq!(definition.pins[0].unit, 1);
+        assert_eq!(definition.pins[2].unit, 2);
+        assert_eq!(
+            definition
+                .graphics
+                .iter()
+                .filter(|graphic| graphic.unit != 0)
+                .count(),
+            2
+        );
+        assert_eq!(
+            definition.pins.iter().filter(|pin| pin.unit != 0).count(),
+            4
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"symbol_body_style_count\": 1")
+        );
+
+        let scene = schematic.canvas_scene();
+        let symbol = scene
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference == "R1")
+            .unwrap();
+        assert_eq!(symbol.graphics.len(), 2);
+        assert_eq!(symbol.pins.len(), 2);
+        assert_eq!(symbol.pins[0].number, "3");
+        assert_eq!(symbol.pins[1].number, "4");
+        assert!(!symbol.pins.iter().any(|pin| pin.number == "1"));
+
+        let netlist = schematic.to_spice_netlist().unwrap();
+        assert!(netlist.contains("R1 in 0 10k"));
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(body_style 1)"));
+        assert!(exported.contains("(symbol \"Multi_0_1\""));
+        assert!(exported.contains("(symbol \"Multi_1_1\""));
+        assert!(exported.contains("(symbol \"Multi_2_1\""));
+        let reparsed = parse_kicad_schematic(&exported, "multi_unit_roundtrip.kicad_sch").unwrap();
+        assert_eq!(
+            reparsed
+                .symbols
+                .iter()
+                .find(|symbol| symbol.reference() == Some("R1"))
+                .unwrap()
+                .body_style,
+            Some(1)
+        );
+        assert_eq!(
+            reparsed
+                .canvas_scene()
+                .symbols
+                .iter()
+                .find(|symbol| symbol.reference == "R1")
+                .unwrap()
+                .pins
+                .len(),
+            2
         );
     }
 
