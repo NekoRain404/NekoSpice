@@ -2,6 +2,7 @@ use osl_core::{OslError, OslResult, json_escape, read_text, write_text};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +35,12 @@ pub fn read_kicad_schematic_with_libraries(path: &Path) -> OslResult<KicadSchema
         schematic.resolve_project_symbol_libraries(project_dir)?;
     }
     Ok(schematic)
+}
+
+pub fn read_kicad_schematic_hierarchy_netlist(path: &Path) -> OslResult<KicadHierarchyNetlist> {
+    let schematic = read_kicad_schematic_with_libraries(path)?;
+    let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
+    schematic.to_spice_netlist_with_hierarchy(base_dir)
 }
 
 pub fn read_kicad_project(path: &Path) -> OslResult<KicadProject> {
@@ -378,6 +385,12 @@ impl KicadSchematicCheckReport {
             diagnostics
         )
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadHierarchyNetlist {
+    pub netlist: String,
+    pub diagnostics: Vec<KicadSchematicDiagnostic>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -750,6 +763,48 @@ impl KicadSchematic {
         Ok(format!("{}\n", lines.join("\n")))
     }
 
+    pub fn to_spice_netlist_with_hierarchy(
+        &self,
+        base_dir: &Path,
+    ) -> OslResult<KicadHierarchyNetlist> {
+        let mut export = KicadHierarchyExport::new();
+        let root_diagnostics = self.check_report().diagnostics;
+        export.export_schematic(self, base_dir, "root", &BTreeMap::new())?;
+
+        let has_spice_directive = !export.directives.is_empty();
+        let has_analysis_directive = export
+            .directives
+            .iter()
+            .any(|directive| is_spice_analysis_directive(directive));
+        let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
+        lines.extend(export.includes);
+        lines.extend(export.components);
+        lines.extend(export.directives);
+        if !lines
+            .iter()
+            .any(|line| line.trim().eq_ignore_ascii_case(".end"))
+        {
+            lines.push(".end".to_string());
+        }
+
+        let mut diagnostics = root_diagnostics
+            .into_iter()
+            .filter(|diagnostic| {
+                !is_hierarchy_root_nonfatal_diagnostic(
+                    diagnostic,
+                    has_spice_directive,
+                    has_analysis_directive,
+                )
+            })
+            .collect::<Vec<_>>();
+        diagnostics.extend(export.diagnostics);
+
+        Ok(KicadHierarchyNetlist {
+            netlist: format!("{}\n", lines.join("\n")),
+            diagnostics,
+        })
+    }
+
     pub fn spice_directives(&self) -> Vec<&KicadTextItem> {
         self.text_items
             .iter()
@@ -802,6 +857,15 @@ impl KicadSchematic {
         symbol: &KicadSymbolInstance,
         graph: &KicadNetGraph,
     ) -> Option<String> {
+        let nodes = self.symbol_pin_nets(symbol, graph)?;
+        self.symbol_to_spice_line_with_nodes(symbol, &nodes)
+    }
+
+    fn symbol_to_spice_line_with_nodes(
+        &self,
+        symbol: &KicadSymbolInstance,
+        nodes: &[String],
+    ) -> Option<String> {
         let definition = self.symbol_definition(&symbol.lib_id);
         if symbol.sim_enabled(definition) == Some(false) {
             return None;
@@ -833,7 +897,6 @@ impl KicadSchematic {
                 })
             })?
             .to_ascii_uppercase();
-        let nodes = self.symbol_pin_nets(symbol, graph)?;
         let primitive = if explicit_device.is_some() {
             spice_primitive_for_device(&device)?
         } else {
@@ -858,7 +921,7 @@ impl KicadSchematic {
             if value.is_empty() {
                 return None;
             }
-            return Some(expand_spice_template(&value, &spice_reference, &nodes));
+            return Some(expand_spice_template(&value, &spice_reference, nodes));
         }
 
         match primitive.as_str() {
@@ -915,13 +978,21 @@ impl KicadSchematic {
         symbol: &KicadSymbolInstance,
         graph: &KicadNetGraph,
     ) -> Option<String> {
+        let nodes = self.symbol_pin_nets(symbol, graph)?;
+        self.symbol_to_spice_line_legacy_with_nodes(symbol, &nodes)
+    }
+
+    fn symbol_to_spice_line_legacy_with_nodes(
+        &self,
+        symbol: &KicadSymbolInstance,
+        nodes: &[String],
+    ) -> Option<String> {
         let reference = symbol.reference()?.trim();
         if reference.is_empty() || reference.starts_with('#') {
             return None;
         }
 
         let value = symbol.value().unwrap_or_default().trim();
-        let nodes = self.symbol_pin_nets(symbol, graph)?;
         let designator = reference
             .chars()
             .next()
@@ -1350,13 +1421,10 @@ impl KicadSchematic {
             ));
             return;
         }
-        if !directives.iter().any(|directive| {
-            let text = directive.text.trim_start().to_ascii_lowercase();
-            text.starts_with(".tran")
-                || text.starts_with(".ac")
-                || text.starts_with(".dc")
-                || text.starts_with(".op")
-        }) {
+        if !directives
+            .iter()
+            .any(|directive| is_spice_analysis_directive(&directive.text))
+        {
             diagnostics.push(kicad_schematic_diagnostic(
                 KicadDiagnosticSeverity::Warning,
                 "missing-analysis-directive",
@@ -1485,6 +1553,18 @@ impl KicadSchematic {
             .collect()
     }
 
+    fn sheet_pin_points(&self) -> Vec<KicadPoint> {
+        self.sheets
+            .iter()
+            .flat_map(|sheet| {
+                sheet
+                    .pins
+                    .iter()
+                    .filter_map(|pin| pin.at.map(|at| at.point()))
+            })
+            .collect()
+    }
+
     pub fn to_summary_json(&self) -> String {
         format!(
             concat!(
@@ -1522,6 +1602,316 @@ impl KicadSchematic {
                 .map(|symbol| symbol.graphics.len())
                 .sum::<usize>()
         )
+    }
+}
+
+struct KicadHierarchyExport {
+    includes: BTreeSet<String>,
+    components: Vec<String>,
+    directives: Vec<String>,
+    diagnostics: Vec<KicadSchematicDiagnostic>,
+    visited: BTreeSet<PathBuf>,
+}
+
+impl KicadHierarchyExport {
+    fn new() -> Self {
+        Self {
+            includes: BTreeSet::new(),
+            components: Vec::new(),
+            directives: Vec::new(),
+            diagnostics: Vec::new(),
+            visited: BTreeSet::new(),
+        }
+    }
+
+    fn export_schematic(
+        &mut self,
+        schematic: &KicadSchematic,
+        base_dir: &Path,
+        scope: &str,
+        net_aliases: &BTreeMap<String, String>,
+    ) -> OslResult<()> {
+        let graph = schematic.connectivity_graph();
+        self.includes.extend(schematic.spice_include_directives());
+        for symbol in &schematic.symbols {
+            let Some(nodes) = schematic.symbol_pin_nets(symbol, &graph) else {
+                continue;
+            };
+            let mapped_nodes = nodes
+                .iter()
+                .map(|node| scoped_net_name(scope, node, net_aliases))
+                .collect::<Vec<_>>();
+            let scoped_symbol = scoped_symbol_instance(symbol, scope);
+            match schematic.symbol_to_spice_line_with_nodes(&scoped_symbol, &mapped_nodes) {
+                Some(line) => self.components.push(line),
+                None if scoped_symbol.sim_enabled(schematic.symbol_definition(&symbol.lib_id))
+                    == Some(false) => {}
+                None => {
+                    if let Some(line) = schematic
+                        .symbol_to_spice_line_legacy_with_nodes(&scoped_symbol, &mapped_nodes)
+                    {
+                        self.components.push(line);
+                    } else {
+                        self.components.push(format!(
+                            "* Unsupported KiCad symbol {} {}",
+                            scoped_symbol.reference().unwrap_or("<no-reference>"),
+                            scoped_symbol.lib_id
+                        ));
+                    }
+                }
+            }
+        }
+
+        for sheet in &schematic.sheets {
+            if sheet.exclude_from_sim == Some(true) {
+                continue;
+            }
+            let Some(sheet_file) = sheet.sheet_file().filter(|file| !file.trim().is_empty()) else {
+                continue;
+            };
+            let sheet_path = base_dir.join(sheet_file);
+            let visit_key = fs::canonicalize(&sheet_path).unwrap_or_else(|_| sheet_path.clone());
+            if !self.visited.insert(visit_key.clone()) {
+                self.diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "hierarchical-sheet-cycle",
+                    &format!(
+                        "hierarchical sheet '{}' was already visited",
+                        sheet_path.display()
+                    ),
+                    sheet.sheet_name().map(str::to_string),
+                    None,
+                    None,
+                ));
+                continue;
+            }
+
+            match read_kicad_schematic_with_libraries(&sheet_path) {
+                Ok(child) => {
+                    self.diagnostics.extend(
+                        child
+                            .check_report()
+                            .diagnostics
+                            .into_iter()
+                            .filter(|diagnostic| !is_child_sheet_nonfatal_diagnostic(diagnostic)),
+                    );
+                    let aliases =
+                        self.sheet_net_aliases(schematic, sheet, &graph, scope, net_aliases);
+                    let child_scope = child_sheet_scope(scope, sheet);
+                    let child_base_dir = sheet_path.parent().unwrap_or(base_dir);
+                    self.export_schematic(&child, child_base_dir, &child_scope, &aliases)?;
+                }
+                Err(error) => self.diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "missing-child-sheet",
+                    &format!(
+                        "failed to load hierarchical sheet {}: {}",
+                        sheet_path.display(),
+                        error
+                    ),
+                    sheet.sheet_name().map(str::to_string),
+                    None,
+                    None,
+                )),
+            }
+            self.visited.remove(&visit_key);
+        }
+
+        for directive in schematic.spice_directives() {
+            let directive = directive.text.trim();
+            if directive.eq_ignore_ascii_case(".end") {
+                continue;
+            }
+            if !self
+                .directives
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(directive))
+            {
+                self.directives.push(directive.to_string());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn sheet_net_aliases(
+        &mut self,
+        schematic: &KicadSchematic,
+        sheet: &KicadSheet,
+        graph: &KicadNetGraph,
+        scope: &str,
+        parent_aliases: &BTreeMap<String, String>,
+    ) -> BTreeMap<String, String> {
+        let mut aliases = BTreeMap::new();
+        for pin in &sheet.pins {
+            let Some(at) = pin.at else {
+                continue;
+            };
+            match graph.net_at(at.point()) {
+                Some(net) => {
+                    aliases.insert(
+                        normalize_net_name(&pin.name),
+                        scoped_net_name(scope, net, parent_aliases),
+                    );
+                }
+                None => self.diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Warning,
+                    "unconnected-sheet-pin",
+                    &format!(
+                        "hierarchical sheet '{}' pin '{}' is not connected to a parent net",
+                        sheet.sheet_name().unwrap_or("<unnamed-sheet>"),
+                        pin.name
+                    ),
+                    sheet.sheet_name().map(str::to_string),
+                    None,
+                    Some(pin.name.clone()),
+                )),
+            }
+        }
+        if aliases.is_empty() && !sheet.pins.is_empty() {
+            self.diagnostics.push(kicad_schematic_diagnostic(
+                KicadDiagnosticSeverity::Warning,
+                "unmapped-sheet-pins",
+                &format!(
+                    "hierarchical sheet '{}' has pins but no parent net aliases were mapped",
+                    sheet.sheet_name().unwrap_or("<unnamed-sheet>")
+                ),
+                sheet.sheet_name().map(str::to_string),
+                None,
+                None,
+            ));
+        }
+        if sheet.pins.is_empty() && !schematic.sheets.is_empty() {
+            self.diagnostics.push(kicad_schematic_diagnostic(
+                KicadDiagnosticSeverity::Info,
+                "sheet-without-pins",
+                &format!(
+                    "hierarchical sheet '{}' has no sheet pins",
+                    sheet.sheet_name().unwrap_or("<unnamed-sheet>")
+                ),
+                sheet.sheet_name().map(str::to_string),
+                None,
+                None,
+            ));
+        }
+        aliases
+    }
+}
+
+fn is_child_sheet_nonfatal_diagnostic(diagnostic: &KicadSchematicDiagnostic) -> bool {
+    matches!(
+        diagnostic.code.as_str(),
+        "hierarchical-sheet-unsupported"
+            | "simulation-disabled-sheet"
+            | "missing-spice-directive"
+            | "missing-analysis-directive"
+            | "missing-ground"
+    )
+}
+
+fn is_hierarchy_root_nonfatal_diagnostic(
+    diagnostic: &KicadSchematicDiagnostic,
+    has_spice_directive: bool,
+    has_analysis_directive: bool,
+) -> bool {
+    matches!(
+        diagnostic.code.as_str(),
+        "hierarchical-sheet-unsupported" | "simulation-disabled-sheet"
+    ) || (diagnostic.code == "missing-spice-directive" && has_spice_directive)
+        || (diagnostic.code == "missing-analysis-directive" && has_analysis_directive)
+}
+
+fn is_spice_analysis_directive(text: &str) -> bool {
+    let text = text.trim_start().to_ascii_lowercase();
+    text.starts_with(".tran")
+        || text.starts_with(".ac")
+        || text.starts_with(".dc")
+        || text.starts_with(".op")
+}
+
+fn scoped_net_name(scope: &str, net: &str, aliases: &BTreeMap<String, String>) -> String {
+    if net == "0" || net.eq_ignore_ascii_case("gnd") {
+        return "0".to_string();
+    }
+    if let Some(alias) = aliases.get(&normalize_net_name(net)) {
+        return alias.clone();
+    }
+    if scope == "root" || net == "unconnected" {
+        return net.to_string();
+    }
+    format!(
+        "{}_{}",
+        sanitize_spice_identifier(scope),
+        sanitize_spice_identifier(net)
+    )
+}
+
+fn child_sheet_scope(parent_scope: &str, sheet: &KicadSheet) -> String {
+    let sheet_name = sheet
+        .sheet_name()
+        .or_else(|| sheet.sheet_file())
+        .unwrap_or("sheet");
+    let sheet_name = sanitize_spice_identifier(sheet_name);
+    if parent_scope == "root" {
+        sheet_name
+    } else {
+        format!("{}_{}", sanitize_spice_identifier(parent_scope), sheet_name)
+    }
+}
+
+fn scoped_symbol_instance(symbol: &KicadSymbolInstance, scope: &str) -> KicadSymbolInstance {
+    if scope == "root" {
+        return symbol.clone();
+    }
+
+    let mut symbol = symbol.clone();
+    if let Some(reference) = symbol.reference().map(str::to_string)
+        && !reference.trim().is_empty()
+        && !reference.starts_with('#')
+    {
+        let scoped_reference = scoped_reference(&reference, scope);
+        if let Some(property) = symbol
+            .properties
+            .iter_mut()
+            .find(|property| property.name == "Reference")
+        {
+            property.value = scoped_reference;
+        }
+    }
+    symbol
+}
+
+fn scoped_reference(reference: &str, scope: &str) -> String {
+    let mut chars = reference.chars();
+    let Some(prefix) = chars.next() else {
+        return reference.to_string();
+    };
+    let suffix = chars.collect::<String>();
+    format!(
+        "{}{}_{}",
+        prefix,
+        sanitize_spice_identifier(scope),
+        sanitize_spice_identifier(&suffix)
+    )
+}
+
+fn sanitize_spice_identifier(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '_' {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('_')
+        .to_string();
+    if sanitized.is_empty() {
+        "item".to_string()
+    } else {
+        sanitized
     }
 }
 
@@ -1863,6 +2253,9 @@ impl KicadNetGraph {
             insert_point(&mut points, junction.at);
         }
         for point in schematic.symbol_pin_points() {
+            insert_point(&mut points, point);
+        }
+        for point in schematic.sheet_pin_points() {
             insert_point(&mut points, point);
         }
 

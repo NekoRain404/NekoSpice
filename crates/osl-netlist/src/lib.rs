@@ -1,7 +1,7 @@
 use osl_core::{OslError, OslResult, html_escape, json_escape, read_text};
 use osl_kicad::{
     KicadDiagnosticSeverity, KicadProject, KicadSchematicDiagnostic, read_kicad_project,
-    read_kicad_schematic_with_libraries,
+    read_kicad_schematic_hierarchy_netlist,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -19,19 +19,17 @@ pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
     let path = resolve_import_source_path(path)?;
     let source = path.display().to_string();
     if is_kicad_schematic(&path) {
-        let schematic = read_kicad_schematic_with_libraries(&path)?;
-        let check_report = schematic.check_report();
-        let netlist = schematic.to_spice_netlist()?;
-        let mut report = parse_netlist(&netlist, &source)?;
+        let exported = read_kicad_schematic_hierarchy_netlist(&path)?;
+        let mut report = parse_netlist(&exported.netlist, &source)?;
         report.flavor = NetlistFlavor::KiCad;
         report.diagnostics.extend(
-            check_report
+            exported
                 .diagnostics
                 .iter()
                 .map(kicad_schematic_diagnostic_to_import),
         );
         Ok(ImportInput {
-            source_netlist: netlist,
+            source_netlist: exported.netlist,
             source_path: path,
             report,
         })
@@ -2773,7 +2771,7 @@ XU1 in out vcc vee GOODAMP
     }
 
     #[test]
-    fn imports_kicad_hierarchical_sheet_with_diagnostic() {
+    fn imports_kicad_missing_child_sheet_with_diagnostic() {
         let project_dir = std::env::temp_dir().join(format!(
             "nekospice_kicad_hierarchical_sheet_import_{}",
             std::process::id()
@@ -2807,15 +2805,126 @@ XU1 in out vcc vee GOODAMP
         assert_eq!(input.report.flavor, NetlistFlavor::KiCad);
         assert!(input.report.error_count() >= 1);
         assert!(input.report.compatibility_score() < 100);
-        assert!(
-            input
-                .source_netlist
-                .contains("* Unsupported KiCad hierarchical sheet gain_stage gain_stage.kicad_sch")
-        );
         assert!(input.report.diagnostics.iter().any(|diagnostic| {
             diagnostic.severity == ImportSeverity::Error
-                && diagnostic.code == "kicad-hierarchical-sheet-unsupported"
+                && diagnostic.code == "kicad-missing-child-sheet"
         }));
+
+        let _ = fs::remove_dir_all(project_dir);
+    }
+
+    #[test]
+    fn imports_kicad_hierarchical_sheet_by_expanding_child_schematic() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let project_dir = std::env::temp_dir().join(format!(
+            "nekospice_kicad_hierarchical_sheet_expand_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project_dir);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::copy(
+            workspace_root.join("examples/kicad_schematic/neko_spice.kicad_sym"),
+            project_dir.join("neko_spice.kicad_sym"),
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("sym-lib-table"),
+            r#"(sym_lib_table
+  (version 7)
+  (lib (name "NekoSpice")(type "KiCad")(uri "${KIPRJMOD}/neko_spice.kicad_sym")(options "")(descr ""))
+)"#,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("root.kicad_sch"),
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (wire (pts (xy 10 10) (xy 25 10)))
+  (wire (pts (xy 10 15.08) (xy 60 15.08)))
+  (wire (pts (xy 45 10) (xy 50 10)))
+  (wire (pts (xy 55.08 10) (xy 60 10)))
+  (label "in" (at 25 10 0))
+  (label "out" (at 45 10 0))
+  (label "0" (at 60 15.08 0))
+  (label "0" (at 60 10 0))
+  (symbol
+    (lib_id "NekoSpice:V")
+    (at 10 12.54 0)
+    (property "Reference" "V1" (at 8 16 0))
+    (property "Value" "DC 5" (at 8 18 0))
+    (pin "1" (uuid "10000000-0000-0000-0000-000000000001"))
+    (pin "2" (uuid "10000000-0000-0000-0000-000000000002"))
+  )
+  (sheet
+    (at 25 5)
+    (size 20 10)
+    (property "Sheetname" "gain_stage" (at 25 4 0))
+    (property "Sheetfile" "gain_stage.kicad_sch" (at 25 16 0))
+    (pin "in" input (at 25 10 180))
+    (pin "out" output (at 45 10 0))
+  )
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 52.54 10 0)
+    (property "Reference" "RLOAD" (at 52.54 8 0))
+    (property "Value" "1k" (at 52.54 12 0))
+    (pin "1" (uuid "10000000-0000-0000-0000-000000000003"))
+    (pin "2" (uuid "10000000-0000-0000-0000-000000000004"))
+  )
+)"#,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("gain_stage.kicad_sch"),
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (wire (pts (xy 7 10) (xy 10 10)))
+  (wire (pts (xy 15.08 10) (xy 18 10)))
+  (hierarchical_label "in" (at 7 10 0))
+  (hierarchical_label "out" (at 18 10 0))
+  (text ".op" (at 5 3 0))
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 12.54 10 0)
+    (property "Reference" "R1" (at 12.54 8 0))
+    (property "Value" "2k" (at 12.54 12 0))
+    (pin "1" (uuid "20000000-0000-0000-0000-000000000001"))
+    (pin "2" (uuid "20000000-0000-0000-0000-000000000002"))
+  )
+)"#,
+        )
+        .unwrap();
+
+        let input = read_import_input(&project_dir.join("root.kicad_sch")).unwrap();
+
+        assert_eq!(input.report.flavor, NetlistFlavor::KiCad);
+        assert_eq!(input.report.error_count(), 0);
+        assert_eq!(input.report.compatibility_score(), 100);
+        assert!(input.source_netlist.contains("V1 in 0 DC 5"));
+        assert!(input.source_netlist.contains("Rgain_stage_1 in out 2k"));
+        assert!(input.source_netlist.contains("RLOAD out 0 1k"));
+        assert!(input.source_netlist.contains(".op"));
+        assert!(
+            !input
+                .source_netlist
+                .contains("Unsupported KiCad hierarchical sheet")
+        );
+        assert!(
+            !input
+                .report
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "kicad-hierarchical-sheet-unsupported")
+        );
 
         let _ = fs::remove_dir_all(project_dir);
     }
