@@ -2077,6 +2077,8 @@ impl KicadSchematic {
                 "  \"bus_count\": {},\n",
                 "  \"bus_entry_count\": {},\n",
                 "  \"schematic_graphic_count\": {},\n",
+                "  \"styled_schematic_graphic_count\": {},\n",
+                "  \"locked_schematic_graphic_count\": {},\n",
                 "  \"image_count\": {},\n",
                 "  \"table_count\": {},\n",
                 "  \"table_cell_count\": {},\n",
@@ -2124,6 +2126,8 @@ impl KicadSchematic {
             self.buses.len(),
             self.bus_entries.len(),
             self.graphics.len(),
+            self.styled_schematic_graphic_count(),
+            self.locked_schematic_graphic_count(),
             self.images.len(),
             self.tables.len(),
             self.tables
@@ -2215,6 +2219,20 @@ impl KicadSchematic {
             .map(|instance| instance.variants.len())
             .sum::<usize>();
         embedded_variants + top_level_variants
+    }
+
+    fn styled_schematic_graphic_count(&self) -> usize {
+        self.graphics
+            .iter()
+            .filter(|graphic| graphic.stroke.is_some() || graphic.fill.is_some())
+            .count()
+    }
+
+    fn locked_schematic_graphic_count(&self) -> usize {
+        self.graphics
+            .iter()
+            .filter(|graphic| graphic.locked == Some(true))
+            .count()
     }
 
     fn dnp_item_count(&self) -> usize {
@@ -4051,6 +4069,9 @@ impl KicadGraphic {
 pub struct KicadSchematicGraphic {
     pub graphic: KicadGraphic,
     pub uuid: Option<String>,
+    pub stroke: Option<KicadStroke>,
+    pub fill: Option<KicadFill>,
+    pub locked: Option<bool>,
 }
 
 impl KicadSchematicGraphic {
@@ -4060,31 +4081,39 @@ impl KicadSchematicGraphic {
             KicadGraphic::Polyline { points } => {
                 output.push_str(&format!("{}(polyline", pad));
                 write_points_sexpr(output, points);
-                output.push_str(" (stroke (width 0) (type default))");
+                write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+                write_inline_optional_fill(output, self.fill.as_ref());
                 self.write_uuid(output);
+                self.write_locked(output);
                 output.push_str(")\n");
             }
             KicadGraphic::Rectangle { start, end } => {
                 output.push_str(&format!(
-                    "{}(rectangle (start {} {}) (end {} {}) (stroke (width 0) (type default)) (fill (type none))",
+                    "{}(rectangle (start {} {}) (end {} {})",
                     pad,
                     format_number(start.x),
                     format_number(start.y),
                     format_number(end.x),
                     format_number(end.y)
                 ));
+                write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+                write_inline_fill(output, self.fill.as_ref());
                 self.write_uuid(output);
+                self.write_locked(output);
                 output.push_str(")\n");
             }
             KicadGraphic::Circle { center, radius } => {
                 output.push_str(&format!(
-                    "{}(circle (center {} {}) (radius {}) (stroke (width 0) (type default)) (fill (type none))",
+                    "{}(circle (center {} {}) (radius {})",
                     pad,
                     format_number(center.x),
                     format_number(center.y),
                     format_number(*radius)
                 ));
+                write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+                write_inline_fill(output, self.fill.as_ref());
                 self.write_uuid(output);
+                self.write_locked(output);
                 output.push_str(")\n");
             }
             KicadGraphic::Arc { start, mid, end } => {
@@ -4093,7 +4122,7 @@ impl KicadSchematicGraphic {
                     y: (start.y + end.y) / 2.0,
                 });
                 output.push_str(&format!(
-                    "{}(arc (start {} {}) (mid {} {}) (end {} {}) (stroke (width 0) (type default)) (fill (type none))",
+                    "{}(arc (start {} {}) (mid {} {}) (end {} {})",
                     pad,
                     format_number(start.x),
                     format_number(start.y),
@@ -4102,7 +4131,10 @@ impl KicadSchematicGraphic {
                     format_number(end.x),
                     format_number(end.y)
                 ));
+                write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+                write_inline_fill(output, self.fill.as_ref());
                 self.write_uuid(output);
+                self.write_locked(output);
                 output.push_str(")\n");
             }
             KicadGraphic::Text { text, at } => {
@@ -4117,6 +4149,7 @@ impl KicadSchematicGraphic {
                 }
                 output.push_str(" (effects (font (size 1.27 1.27)))");
                 self.write_uuid(output);
+                self.write_locked(output);
                 output.push_str(")\n");
             }
         }
@@ -4127,6 +4160,25 @@ impl KicadSchematicGraphic {
             output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
         }
     }
+
+    fn write_locked(&self, output: &mut String) {
+        if self.locked == Some(true) {
+            output.push_str(" (locked yes)");
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadStroke {
+    pub width: Option<f64>,
+    pub stroke_type: Option<String>,
+    pub color: Option<KicadColor>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadFill {
+    pub fill_type: Option<String>,
+    pub color: Option<KicadColor>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -5635,6 +5687,55 @@ fn write_text_effects_line(output: &mut String, indent: usize, effects: Option<&
     }
 }
 
+fn write_inline_stroke(output: &mut String, stroke: Option<&KicadStroke>, default_width: f64) {
+    match stroke {
+        Some(stroke) => {
+            output.push_str(" (stroke");
+            output.push_str(&format!(
+                " (width {})",
+                format_number(stroke.width.unwrap_or(default_width))
+            ));
+            if let Some(stroke_type) = &stroke.stroke_type {
+                output.push_str(&format!(" (type {})", sexpr_atom_or_string(stroke_type)));
+            } else {
+                output.push_str(" (type default)");
+            }
+            if let Some(color) = stroke.color {
+                color.write_inline_color_sexpr(output);
+            }
+            output.push(')');
+        }
+        None => output.push_str(&format!(
+            " (stroke (width {}) (type default))",
+            format_number(default_width)
+        )),
+    }
+}
+
+fn write_inline_optional_fill(output: &mut String, fill: Option<&KicadFill>) {
+    if let Some(fill) = fill {
+        write_inline_fill(output, Some(fill));
+    }
+}
+
+fn write_inline_fill(output: &mut String, fill: Option<&KicadFill>) {
+    match fill {
+        Some(fill) => {
+            output.push_str(" (fill");
+            if let Some(fill_type) = &fill.fill_type {
+                output.push_str(&format!(" (type {})", sexpr_atom_or_string(fill_type)));
+            } else {
+                output.push_str(" (type none)");
+            }
+            if let Some(color) = fill.color {
+                color.write_inline_color_sexpr(output);
+            }
+            output.push(')');
+        }
+        None => output.push_str(" (fill (type none))"),
+    }
+}
+
 fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     let items = list_items(node);
     Some(KicadSymbolDef {
@@ -5775,6 +5876,9 @@ fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
             Some(KicadSchematicGraphic {
                 graphic: parse_graphic(node)?,
                 uuid: child_value(items, "uuid"),
+                stroke: child(items, "stroke").map(parse_stroke),
+                fill: child(items, "fill").map(parse_fill),
+                locked: parse_optional_bool_child(items, "locked"),
             })
         }
         _ => None,
@@ -5983,6 +6087,23 @@ fn parse_color(node: &Sexp) -> Option<KicadColor> {
         blue: atom_text(items.get(3)?)?.parse().ok()?,
         alpha: atom_text(items.get(4)?)?.parse().ok()?,
     })
+}
+
+fn parse_stroke(node: &Sexp) -> KicadStroke {
+    let items = list_items(node);
+    KicadStroke {
+        width: child_value(items, "width").and_then(|value| value.parse().ok()),
+        stroke_type: child_value(items, "type"),
+        color: child(items, "color").and_then(parse_color),
+    }
+}
+
+fn parse_fill(node: &Sexp) -> KicadFill {
+    let items = list_items(node);
+    KicadFill {
+        fill_type: child_value(items, "type"),
+        color: child(items, "color").and_then(parse_color),
+    }
 }
 
 fn parse_margins(node: &Sexp) -> Option<KicadMargins> {
@@ -7341,15 +7462,16 @@ mod tests {
   (lib_symbols)
   (polyline
     (pts (xy 10 10) (xy 20 10) (xy 20 15))
-    (stroke (width 0) (type dash))
+    (stroke (width 0.3556) (type dot) (color 255 89 101 1))
     (uuid "41414141-4141-4141-8141-414141414141")
   )
   (rectangle
     (start 30 10)
     (end 45 20)
     (stroke (width 0) (type default))
-    (fill (type none))
+    (fill (type hatch) (color 255 64 87 1))
     (uuid "42424242-4242-4242-8242-424242424242")
+    (locked yes)
   )
   (circle
     (center 60 15)
@@ -7392,10 +7514,57 @@ mod tests {
             schematic.graphics[0].uuid.as_deref(),
             Some("41414141-4141-4141-8141-414141414141")
         );
+        assert_close(
+            schematic.graphics[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .width
+                .unwrap(),
+            0.3556,
+        );
+        assert_eq!(
+            schematic.graphics[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dot")
+        );
+        assert_eq!(
+            schematic.graphics[0].stroke.as_ref().unwrap().color,
+            Some(KicadColor {
+                red: 255.0,
+                green: 89.0,
+                blue: 101.0,
+                alpha: 1.0,
+            })
+        );
+        assert_eq!(
+            schematic.graphics[1]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("hatch")
+        );
+        assert_eq!(schematic.graphics[1].locked, Some(true));
         assert!(
             schematic
                 .to_summary_json()
                 .contains("\"schematic_graphic_count\": 4")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_schematic_graphic_count\": 4")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"locked_schematic_graphic_count\": 1")
         );
 
         let scene = schematic.canvas_scene();
@@ -7409,7 +7578,10 @@ mod tests {
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(polyline"));
+        assert!(roundtrip.contains("(stroke (width 0.3556) (type dot) (color 255 89 101 1))"));
         assert!(roundtrip.contains("(rectangle"));
+        assert!(roundtrip.contains("(fill (type hatch) (color 255 64 87 1))"));
+        assert!(roundtrip.contains("(locked yes)"));
         assert!(roundtrip.contains("(circle"));
         assert!(roundtrip.contains("(arc"));
         assert!(roundtrip.contains("(uuid \"44444444-4444-4444-8444-444444444444\")"));
@@ -7418,6 +7590,16 @@ mod tests {
         assert_eq!(
             reparsed.graphics[3].uuid.as_deref(),
             Some("44444444-4444-4444-8444-444444444444")
+        );
+        assert_eq!(reparsed.graphics[1].locked, Some(true));
+        assert_eq!(
+            reparsed.graphics[1]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("hatch")
         );
         assert_eq!(reparsed.canvas_scene().graphics.len(), 4);
     }

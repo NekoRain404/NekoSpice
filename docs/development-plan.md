@@ -235,6 +235,7 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 - Rust 原生解析 `.kicad_pro` / `.kicad_sch` / `.kicad_sym`，建立可绘制、可编辑、可验证的 schematic IR，保留 title block、sheet/symbol instance table、project path instance、variant DNP、BOM/board/DNP/autoplace、symbol mirror、label shape/property、property/canvas text display effects、embedded font 等 KiCad 文件级和装配/显示元数据，并从连接图生成 ngspice netlist。
 - 实现 symbol library index、library table 解析、symbol graphics / pin / property / unit 支持。
 - 实现 wire、junction、label、global label、no-connect、hierarchical sheet 的连接图和基础编辑命令；实现 bus alias、bus、bus entry 的 KiCad 资产 roundtrip、canvas 数据和基础编辑命令，bus 暂作为画布/互操作元素，不错误合并进模拟 SPICE net。
+- 保留 schematic-level drawing primitives（`polyline` / `rectangle` / `circle` / `arc`）的 `stroke` / `fill` / `locked` 元数据，确保 Rust-native 原理图画布与 KiCad 文件 roundtrip 不丢失绘制样式。
 - KiCad symbol field 到 SPICE instance / model / value / pin order 的映射诊断。
 - `kicad-cli` 或 KiCad 导出 SPICE netlist 仅作为对照验证路径。
 - LTspice `.asc` / `.asy` 作为迁移导入路径。
