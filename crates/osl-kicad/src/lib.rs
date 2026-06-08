@@ -3519,6 +3519,7 @@ pub struct KicadCanvasPin {
     pub electrical_type: String,
     pub start: KicadPoint,
     pub end: KicadPoint,
+    pub alternates: Vec<KicadPinAlternate>,
     pub name_effects: Option<KicadTextEffects>,
     pub number_effects: Option<KicadTextEffects>,
 }
@@ -3535,6 +3536,7 @@ impl KicadCanvasPin {
             electrical_type: pin.electrical_type.clone(),
             start: transform_local_point(local_start, symbol_at),
             end: transform_local_point(local_end, symbol_at),
+            alternates: pin.alternates.clone(),
             name_effects: pin.name_effects().cloned(),
             number_effects: pin.number_effects().cloned(),
         })
@@ -3798,6 +3800,12 @@ impl KicadSymbolLibrary {
                     + usize::from(pin.number_effects().is_some())
             })
             .sum::<usize>();
+        let pin_alternate_count = self
+            .symbols
+            .iter()
+            .flat_map(|symbol| &symbol.pins)
+            .map(|pin| pin.alternates.len())
+            .sum::<usize>();
         let power_symbol_count = self
             .symbols
             .iter()
@@ -3850,6 +3858,7 @@ impl KicadSymbolLibrary {
                 "  \"pin_count\": {},\n",
                 "  \"pin_display_setting_count\": {},\n",
                 "  \"pin_text_effect_count\": {},\n",
+                "  \"pin_alternate_count\": {},\n",
                 "  \"power_symbol_count\": {},\n",
                 "  \"symbol_in_bom_setting_count\": {},\n",
                 "  \"symbol_on_board_setting_count\": {},\n",
@@ -3871,6 +3880,7 @@ impl KicadSymbolLibrary {
             pin_count,
             pin_display_setting_count,
             pin_text_effect_count,
+            pin_alternate_count,
             power_symbol_count,
             symbol_in_bom_setting_count,
             symbol_on_board_setting_count,
@@ -5250,6 +5260,7 @@ pub struct KicadPinDef {
     pub shape: String,
     pub at: Option<KicadAt>,
     pub length: Option<f64>,
+    pub alternates: Vec<KicadPinAlternate>,
 }
 
 impl KicadPinDef {
@@ -5290,7 +5301,28 @@ impl KicadPinDef {
         }
         self.name.write_inline_pin_text_sexpr(output, "name");
         self.number.write_inline_pin_text_sexpr(output, "number");
+        for alternate in &self.alternates {
+            alternate.write_inline_alternate_sexpr(output);
+        }
         output.push_str(")\n");
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KicadPinAlternate {
+    pub name: String,
+    pub electrical_type: String,
+    pub shape: String,
+}
+
+impl KicadPinAlternate {
+    fn write_inline_alternate_sexpr(&self, output: &mut String) {
+        output.push_str(&format!(
+            " (alternate {} {} {})",
+            sexpr_string(&self.name),
+            sexpr_atom_or_string(&self.electrical_type),
+            sexpr_atom_or_string(&self.shape)
+        ));
     }
 }
 
@@ -6824,6 +6856,17 @@ fn parse_pin_def(node: &Sexp) -> Option<KicadPinDef> {
         shape: list_value(node, 2).unwrap_or_else(|| "line".to_string()),
         at: child(items, "at").and_then(parse_at),
         length: child_value(items, "length").and_then(|value| value.parse().ok()),
+        alternates: direct_children(items, "alternate")
+            .filter_map(parse_pin_alternate)
+            .collect(),
+    })
+}
+
+fn parse_pin_alternate(node: &Sexp) -> Option<KicadPinAlternate> {
+    Some(KicadPinAlternate {
+        name: list_value(node, 1)?,
+        electrical_type: list_value(node, 2).unwrap_or_else(|| "unspecified".to_string()),
+        shape: list_value(node, 3).unwrap_or_else(|| "line".to_string()),
     })
 }
 
@@ -11387,6 +11430,98 @@ mod tests {
         assert_eq!(
             reparsed_symbol.pins[0].number_effects().unwrap().justify,
             vec!["right"]
+        );
+    }
+
+    #[test]
+    fn preserves_kicad_symbol_pin_alternates_and_canvas_metadata() {
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "NekoSpice:AltPin"
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "AltPin" (at 0 -2.54 0))
+    (symbol "AltPin_0_1"
+      (pin input line
+        (at -5.08 0 0)
+        (length 5.08)
+        (name "SDI" (effects (font (size 1.27 1.27))))
+        (number "6" (effects (font (size 1.27 1.27))))
+        (alternate "SDA" bidirectional line)
+        (alternate "SDO" output clock)
+      )
+    )
+  )
+)"#,
+            "alt_pin.kicad_sym",
+        )
+        .unwrap();
+
+        let symbol = library.symbol("NekoSpice:AltPin").unwrap();
+        assert_eq!(symbol.pins.len(), 1);
+        assert_eq!(symbol.pins[0].alternates.len(), 2);
+        assert_eq!(symbol.pins[0].alternates[0].name, "SDA");
+        assert_eq!(
+            symbol.pins[0].alternates[0].electrical_type,
+            "bidirectional"
+        );
+        assert_eq!(symbol.pins[0].alternates[1].name, "SDO");
+        assert_eq!(symbol.pins[0].alternates[1].shape, "clock");
+        assert!(
+            library
+                .to_summary_json()
+                .contains("\"pin_alternate_count\": 2")
+        );
+
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:AltPin"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "AltPin" (at 0 -2.54 0))
+      (symbol "AltPin_0_1"
+        (pin input line
+          (at -5.08 0 0)
+          (length 5.08)
+          (name "SDI" (effects (font (size 1.27 1.27))))
+          (number "6" (effects (font (size 1.27 1.27))))
+          (alternate "SDA" bidirectional line)
+          (alternate "SDO" output clock)
+        )
+      )
+    )
+  )
+  (symbol
+    (lib_id "NekoSpice:AltPin")
+    (at 10 10 0)
+    (property "Reference" "U1" (at 10 7 0))
+    (property "Value" "AltPin" (at 10 13 0))
+  )
+)"#,
+            "alt_pin_canvas.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.symbols[0].pins[0].alternates.len(), 2);
+        assert_eq!(scene.symbols[0].pins[0].alternates[0].name, "SDA");
+        assert_eq!(
+            scene.symbols[0].pins[0].alternates[1].electrical_type,
+            "output"
+        );
+
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(alternate \"SDA\" bidirectional line)"));
+        assert!(exported.contains("(alternate \"SDO\" output clock)"));
+
+        let reparsed =
+            parse_kicad_symbol_library(&exported, "alt_pin_roundtrip.kicad_sym").unwrap();
+        assert_eq!(
+            reparsed.symbol("NekoSpice:AltPin").unwrap().pins[0].alternates,
+            symbol.pins[0].alternates
         );
     }
 
