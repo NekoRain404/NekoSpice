@@ -6,6 +6,7 @@
 /reports/
 /bench-results/
 /cache/
+/kicad-source-mirror-master/
 *.rawcache
 *.mmap
 

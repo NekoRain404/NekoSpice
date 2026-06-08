@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/osl-core",
+    "crates/osl-kicad",
     "crates/osl-model",
     "crates/osl-netlist",
     "crates/osl-waveform",

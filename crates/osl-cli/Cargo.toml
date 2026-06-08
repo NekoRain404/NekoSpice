@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 osl-core = { path = "../osl-core" }
+osl-kicad = { path = "../osl-kicad" }
 osl-model = { path = "../osl-model" }
 osl-netlist = { path = "../osl-netlist" }
 osl-sim = { path = "../osl-sim" }

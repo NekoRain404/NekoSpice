@@ -2,13 +2,14 @@
 
 ## 1. 项目定位
 
-OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标不是简单复制 LTspice，而是在以下方向形成优势：
+OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标不是简单复制 LTspice / KiCad，而是参考 KiCad 源码和公开文件格式，在 Rust 中重构兼容 KiCad 的原理图绘制与 symbol library 能力，并在以下方向形成优势：
 
 * 高性能波形查看器
 * 自动化仿真验证
 * 参数扫描、Corner、Monte Carlo
 * 模型兼容性诊断
-* LTspice / KiCad 工作流导入
+* Rust-native KiCad-compatible 原理图绘制与 symbol library
+* LTspice / 通用 SPICE 迁移导入
 * CI / 批量验证 / 报告系统
 * 可扩展多后端仿真架构
 
@@ -22,13 +23,14 @@ OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标
 
 ### 2.1 Rust-first
 
-整个应用层、数据层、调度层、GUI、波形渲染、模型管理、报告系统全部使用 Rust 编写。
+应用层、数据层、调度层、NekoSpice GUI、原理图绘制、symbol library、波形渲染、模型管理、报告系统全部使用 Rust 编写。
 
 允许的外部组件：
 
 * ngspice CLI
 * ngspice shared library，后期可选
 * Xyce CLI，后期可选
+* KiCad 公开源码、文件格式文档和 `kicad-cli` 作为参考/对照验证
 * Python 插件，后期可选
 
 不在第一阶段做：
@@ -37,7 +39,8 @@ OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标
 * Electron
 * 自研完整 SPICE 求解器
 * GPU SPICE 求解器
-* 完整原理图编辑器
+* 逐行翻译 KiCad C++ 或绑定 KiCad GUI 作为主实现
+* 完整 PCB 编辑器
 
 ---
 
@@ -82,7 +85,7 @@ OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标
 4. 能自动测量
 5. 能输出报告
 6. 能 benchmark
-7. 再做 GUI 和 GPU 波形查看器
+7. 再做 NekoSpice GUI、GPU 波形查看器和 Rust-native schematic canvas
 
 ---
 
@@ -94,7 +97,7 @@ OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标
 Rust stable
 ```
 
-### 3.2 GUI 与渲染
+### 3.2 NekoSpice GUI 与渲染
 
 推荐方案：
 
@@ -109,8 +112,9 @@ GPU 渲染：wgpu
 
 * 不建议完全依赖现成 plot 库。
 * 波形查看器必须自研。
-* egui 用于菜单、面板、参数配置、日志窗口。
-* wgpu 用于高性能波形、热力图、Monte Carlo 云图、频谱图。
+* 原理图画布也必须自研，但文件格式、library 语义和用户资产兼容 KiCad。
+* egui 用于菜单、面板、参数配置、日志窗口、属性面板和 library browser。
+* wgpu 用于高性能波形、schematic canvas、热力图、Monte Carlo 云图、频谱图。
 
 可选简化方案：
 
@@ -350,8 +354,11 @@ OpenSpiceLab-RS
 │   ├── winit shell
 │   ├── egui panels
 │   ├── wgpu waveform viewer
+│   ├── wgpu schematic canvas
 │   ├── report viewer
-│   └── model browser
+│   ├── model browser
+│   ├── symbol library browser
+│   └── property inspector
 │
 ├── osl-core
 │   ├── CircuitIR
@@ -359,6 +366,15 @@ OpenSpiceLab-RS
 │   ├── SimulationConfig
 │   ├── Measurement
 │   └── Diagnostics
+│
+├── osl-kicad
+│   ├── S-expression parser
+│   ├── .kicad_sch reader/writer
+│   ├── .kicad_sym reader/writer
+│   ├── schematic IR
+│   ├── symbol library index
+│   ├── connectivity graph
+│   └── drawing primitives
 │
 ├── osl-sim
 │   ├── SimulatorBackend trait
@@ -369,6 +385,7 @@ OpenSpiceLab-RS
 ├── osl-netlist
 │   ├── SPICE parser
 │   ├── LTspice parser
+│   ├── KiCad schematic-to-SPICE adapter
 │   ├── KiCad netlist importer
 │   └── netlist normalizer
 │
@@ -1136,22 +1153,27 @@ osl verify examples/buck_converter/validation.yaml
 
 ---
 
-### 阶段 6：LTspice / KiCad 工作流导入，6–8 个月
+### 阶段 6：KiCad-compatible 原理图/库子系统与迁移导入，6–8 个月
 
 目标：
 
 ```text
-完成 LTspice .asc 初版导入
-完成 LTspice .asy 初版导入
+完成 KiCad .kicad_pro / .kicad_sch 初版 Rust-native 解析
+完成 KiCad .kicad_sym symbol library 解析和索引
+完成基础 schematic canvas 数据模型
 完成 KiCad netlist 导入
+完成 LTspice .asc / .asy 迁移导入
 完成导入兼容性报告
 ```
 
 验收：
 
 ```text
-常见 LTspice 模拟电路可导入
+NekoSpice 能打开并显示常见 KiCad 原理图
+NekoSpice 能读取 KiCad symbol library 并完成基础放置/属性/引脚语义
+常见 KiCad 模拟电路可从 KiCad 工程进入 NekoSpice 验证
 KiCad 导出的 SPICE netlist 可运行
+常见 LTspice 模拟电路可迁移导入
 不能运行时必须明确指出原因
 ```
 
@@ -1279,7 +1301,7 @@ model compatibility test
 ```text
 - 完整 GUI
 - 完整 LTspice 导入
-- 完整 KiCad 项目解析
+- 完整 KiCad PCB 编辑能力
 - ngspice shared library
 - Python 插件
 - GPU compute
@@ -1386,7 +1408,8 @@ Rust CLI
 → high-performance waveform storage
 → wgpu waveform viewer
 → model compatibility
-→ LTspice / KiCad import
+→ Rust-native KiCad schematic/library
+→ LTspice migration import
 → Monte Carlo / corner
 → CI integration
 → ngspice shared library
@@ -1409,13 +1432,21 @@ CPU 多核负责：
 
 GPU 负责：
 - waveform rendering
+- schematic canvas rendering
 - density map
 - Monte Carlo visualization
 - FFT visualization
-- schematic canvas
+- waveform / report visualization
 
 ngspice / Xyce 负责：
 - SPICE 求解
+
+KiCad 资产兼容层负责：
+- .kicad_sch / .kicad_sym / .kicad_pro 读写
+- symbol placement
+- wiring and labels
+- library management
+- connectivity graph
 ```
 
 项目成功的关键不是“Rust 重写一切”，而是：

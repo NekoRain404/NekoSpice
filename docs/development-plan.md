@@ -1,6 +1,6 @@
 # NekoSpice / OpenSpiceLab-RS 开发计划
 
-本文档把 [dev.md](./dev.md) 中的技术设想整理成可执行开发计划。目标不是第一阶段重写 SPICE 求解器，也不是复制 LTspice 或 KiCad，而是先做一个工程级仿真验证平台：复用成熟求解后端，重点突破批量验证、高性能波形、模型诊断、导入工作流、报告和 CI。
+本文档把 [dev.md](./dev.md) 中的技术设想整理成可执行开发计划。目标不是第一阶段重写 SPICE 求解器，也不是机械复制 LTspice / KiCad，而是做一个 Rust-native 的工程级仿真验证平台：参考 KiCad 的公开源码与文件格式，重构兼容 KiCad 的原理图绘制和 symbol library 子系统，同时复用成熟求解后端，重点突破批量验证、高性能波形、模型诊断、报告和 CI。
 
 ## 1. 产品目标
 
@@ -12,7 +12,8 @@ NekoSpice 是 Rust-first 的开源 SPICE 仿真验证平台，第一年目标是
 - 批量仿真：内置 sweep、corner、Monte Carlo、worst-case search。
 - 高性能波形：支持百万到千万点波形的快速加载、缩放、查询和叠加。
 - 模型诊断：主动发现模型方言、pin mapping、unsupported directive 等问题。
-- 工作流导入：导入 LTspice / KiCad 工作流，并生成可运行 netlist 和兼容性报告。
+- Rust-native KiCad-compatible 原理图工作流：在 Rust 中实现 `.kicad_sch` / `.kicad_sym` / `.kicad_pro` 的解析、IR、绘制和库管理，兼容 KiCad 工程资产，NekoSpice 负责仿真配置、netlist 生成/规范化、模型诊断和兼容性报告。
+- 迁移导入：兼容 LTspice / 通用 SPICE 工作流，并生成可运行 netlist 和兼容性报告。
 - 工程报告：输出 HTML、JSON、JUnit XML，支持 CI 和团队评审。
 
 第一阶段的竞争策略是：
@@ -27,29 +28,27 @@ NekoSpice 是 Rust-first 的开源 SPICE 仿真验证平台，第一年目标是
 v0.x 阶段不做以下事情：
 
 - 自研完整 SPICE 求解器。
-- 完整原理图编辑器或 PCB 设计工具。
+- 自研完整 PCB 设计工具。
+- 逐行翻译 KiCad C++ 源码；允许参考其架构和格式语义，但 Rust 实现必须是本项目自己的抽象。
 - Electron / Qt 前端。
 - GPU SPICE 求解器。
 - 100% LTspice / KiCad 项目兼容。
 
 这些不是永久放弃，而是避免第一年分散主线。
 
+### 1.3 KiCad 原理图与库的 Rust 重构策略
+
+NekoSpice 的原理图绘制路线明确调整为 Rust-native KiCad-compatible：
+
+- `.kicad_sch`、`.kicad_sym` 和 `.kicad_pro` 是一等工程资产，NekoSpice 必须能原生读取、验证、修改并写回兼容格式。
+- KiCad 源码可作为行为和架构参考，尤其是 S-expression IO、symbol model、screen/item model、library table、connectivity graph 和 ERC 思路；实现时避免直接复制 C++ 代码。
+- 第一阶段先做格式解析、Rust IR、symbol library 索引、连接图和仿真 netlist 生成；第二阶段做 schematic canvas、symbol placement、wire/label 编辑和 library browser。
+- NekoSpice GUI 需要包含原理图绘制、symbol library 管理、仿真配置、波形、验证结果和模型诊断；KiCad 兼容是资产入口，不是外部依赖。
+- 可以保留 `kicad-cli` / KiCad 导出 netlist 作为对照验证和迁移辅助，但主线实现必须能在没有 KiCad GUI 的情况下处理 KiCad schematic/library。
+
 ## 2. 当前仓库状态
 
-截至本计划编写时，当前工作区只有文档基础：
-
-- `docs/dev.md`：总体技术设想、模块划分、路线图和 MVP 范围。
-- `docs/development-plan.md`：本文档，作为可执行计划和验收依据。
-
-当前尚未落地：
-
-- Rust workspace。
-- CLI 二进制。
-- ngspice runner。
-- 示例电路、测试数据、benchmark。
-- 有效 Git 仓库元数据。
-
-因此下一步应该从项目骨架和最小仿真闭环开始，而不是直接做 GUI。
+当前仓库已建立 Rust workspace、`osl` CLI、ngspice runner、验证 DSL、批量 sweep、model-check、import、waveform viewport 查询、示例电路和 Git 管理。近期路线调整为新增 KiCad schematic/library 的 Rust-native 基础层，把 KiCad 工程资产接入 NekoSpice 自有原理图、仿真、验证和波形工作流。
 
 ## 3. 架构边界
 
@@ -59,15 +58,16 @@ v0.x 阶段不做以下事情：
 
 - `osl-core`：项目模型、任务模型、分析配置、错误类型、基础单位。
 - `osl-cli`：命令行入口，提供 `run`、`verify`、`bench`、`model-check`、`report`。
+- `osl-kicad`：KiCad S-expression parser、`.kicad_sch` / `.kicad_sym` / `.kicad_pro` IR、symbol library index、后续 schematic canvas 数据模型。
 - `osl-sim`：仿真后端 trait 和 ngspice CLI 实现。
-- `osl-netlist`：SPICE/LTspice/KiCad netlist 解析、规范化和导入。
+- `osl-netlist`：SPICE/LTspice/KiCad netlist 解析、`.kicad_pro` / `.kicad_sch` 适配、规范化和导入。
 - `osl-waveform`：raw 解析、波形列存、CSV/JSON 导出、LOD 和视窗查询。
 - `osl-measure`：测量表达式、测量函数、pass/fail evaluator。
 - `osl-experiment`：sweep、corner、Monte Carlo、任务调度和结果聚合。
 - `osl-report`：HTML、JSON、Markdown、JUnit XML。
 - `osl-bench`：性能基准、测试电路集合和结果记录。
-- `osl-app`：后期 GUI shell，先不进入 v0.1 主线。
-- `osl-render`：后期 wgpu 波形渲染，先不进入 v0.1 主线。
+- `osl-app`：后期 NekoSpice schematic / waveform / report / diagnostics GUI shell。
+- `osl-render`：后期 wgpu schematic canvas 和 waveform 渲染。
 
 ### 3.2 后端策略
 
@@ -184,7 +184,7 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 - 100 条 sweep 曲线可以按需查询。
 - 查询 API 可供 GUI 和报告复用。
 
-### 4.4 v0.4：GPU 波形查看器
+### 4.4 v0.4：GPU 波形查看器与原理图基础画布
 
 周期：3-4 个月。
 
@@ -192,16 +192,18 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 
 - winit + egui + wgpu app shell。
 - waveform renderer。
+- schematic canvas renderer：symbol、wire、label、junction、sheet、selection、grid。
 - 缩放、平移、游标、marker。
 - 多曲线叠加。
 - sweep 分组显示。
+- 从验证报告跳转到 NekoSpice schematic 对象和对应波形。
 
 验收标准：
 
 - 1M 点波形缩放流畅。
 - 10M 点波形可交互浏览。
 - 27 组 sweep 可叠图。
-- 失败检查可跳转到对应波形。
+- 失败检查可跳转到对应波形和原理图对象。
 - GUI 不阻塞后台仿真任务。
 
 ### 4.5 v0.5：模型兼容与诊断
@@ -224,22 +226,26 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 - 不支持语法必须定位到文件和行号。
 - model-check 报告可导出 JSON / HTML。
 
-### 4.6 v0.6：LTspice / KiCad 工作流导入
+### 4.6 v0.6：KiCad-compatible 原理图/库子系统与迁移导入
 
 周期：6-8 个月。
 
 目标：
 
-- LTspice `.asc` 基础解析。
-- LTspice `.asy` pin / attribute 解析。
-- KiCad SPICE netlist 导入。
+- Rust 原生解析 `.kicad_pro` / `.kicad_sch` / `.kicad_sym`，建立可绘制、可编辑、可验证的 schematic IR。
+- 实现 symbol library index、library table 解析、symbol graphics / pin / property / unit 支持。
+- 实现 wire、junction、label、global label、hierarchical sheet 的连接图。
+- KiCad symbol field 到 SPICE instance / model / value / pin order 的映射诊断。
+- `kicad-cli` 或 KiCad 导出 SPICE netlist 仅作为对照验证路径。
+- LTspice `.asc` / `.asy` 作为迁移导入路径。
 - 导入兼容性报告。
 - 输出 ngspice 可运行 netlist。
 
 验收标准：
 
-- 常见 LTspice 模拟电路可导入并运行。
-- KiCad 导出的 SPICE netlist 可运行。
+- 常见 KiCad 模拟电路可由 NekoSpice 直接打开 `.kicad_pro` / `.kicad_sch`、显示基础原理图、解析 symbol library，并导入运行。
+- NekoSpice 生成的 KiCad-compatible schematic/library 修改能被 KiCad 打开，作为互操作回归测试。
+- 常见 LTspice 模拟电路可作为迁移来源导入并运行。
 - 不能运行时必须明确指出原因和修复建议。
 - 导入报告包含组件数量、symbol 数量、directive 数量、兼容性评分。
 
@@ -394,15 +400,16 @@ osl verify examples/buck_converter/validation.yaml
 - v0.3 前不把 GUI 作为主线。
 - 所有视窗查询 API 都用大数据测试。
 
-### 7.3 LTspice / KiCad 兼容范围失控
+### 7.3 KiCad / LTspice 兼容范围失控
 
 风险：导入功能容易变成无底洞。
 
 控制措施：
 
-- v0.6 只承诺常见模拟电路和明确诊断。
+- KiCad 子系统先兼容公开文件格式和常见原理图编辑语义，不追求一次性覆盖 PCB、所有插件和所有 legacy 行为。
+- v0.6 只承诺常见模拟电路、基础原理图绘制、symbol library、连接图和明确诊断。
 - 每个 unsupported feature 都必须生成报告，而不是静默失败。
-- 先导入 netlist 工作流，再考虑完整 schematic 体验。
+- 先打通 `.kicad_sch` / `.kicad_sym` parser、IR、canvas、connectivity 和 normalized project 的闭环，再扩展 LTspice 迁移兼容范围。
 
 ### 7.4 模型诊断准确性
 
@@ -421,7 +428,8 @@ osl verify examples/buck_converter/validation.yaml
 控制措施：
 
 - v0.1-v0.3 以 CLI、数据和验证为主。
-- GUI 只消费稳定 API。
+- GUI 只消费稳定 API；原理图画布必须建立在 `osl-kicad` 的稳定 IR 上，而不是直接耦合 KiCad 文件字符串。
+- 先做 KiCad IR、库索引和 headless 导入，再做交互画布。
 - 渲染目标必须由 benchmark 约束。
 
 ## 8. 下一步开发任务
@@ -437,4 +445,3 @@ osl verify examples/buck_converter/validation.yaml
 7. 输出第一份 `run.json`。
 
 完成这些任务后，项目才进入真实实现阶段。
-

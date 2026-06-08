@@ -2,6 +2,7 @@ use osl_core::{
     Artifact, OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape,
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
+use osl_kicad::{read_kicad_schematic, read_kicad_symbol_library};
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
@@ -50,6 +51,7 @@ fn run_cli() -> OslResult<i32> {
         "bench" => bench_command(&args),
         "model-check" => model_check_command(&args),
         "import" => import_command(&args),
+        "kicad-inspect" => kicad_inspect_command(&args),
         "waveform" => waveform_command(&args),
         "report" => report_command(&args),
         unknown => Err(OslError::InvalidInput(format!(
@@ -69,6 +71,7 @@ Usage:
   osl bench <directory> [--output <dir>] [--ngspice <path>]
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl import <spice-netlist-or-ltspice.asc-or-kicad-project> [--output <dir>]
+  osl kicad-inspect <file.kicad_sch-or-file.kicad_sym> [--output <file>]
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
@@ -328,6 +331,36 @@ fn waveform_command(args: &[String]) -> OslResult<i32> {
         print!("{json}");
     }
 
+    Ok(0)
+}
+
+fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing KiCad path for 'osl kicad-inspect'")?;
+    let output = flag_value(args, "--output");
+    let path = Path::new(input);
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+
+    let json = match extension.as_str() {
+        "kicad_sch" => read_kicad_schematic(path)?.to_summary_json(),
+        "kicad_sym" => read_kicad_symbol_library(path)?.to_summary_json(),
+        _ => {
+            return Err(OslError::InvalidInput(format!(
+                "{} is not a supported KiCad schematic/library file (.kicad_sch, .kicad_sym)",
+                path.display()
+            )));
+        }
+    };
+
+    if let Some(output) = output {
+        write_text(Path::new(&output), &json)?;
+        println!("kicad-inspect -> {output}");
+    } else {
+        print!("{json}");
+    }
     Ok(0)
 }
 

@@ -2,7 +2,7 @@
 
 用户给定时间窗口：3 天。
 
-三天内不能完成完整替代 LTspice / KiCad，但可以完成一个有竞争力的垂直切片：用 ngspice 作为求解后端，交付自动化批量仿真、可追溯运行元数据、HTML/JSON 报告和 CI 友好的 pass/fail 命令。这一切是 LTspice 手工工作流最弱的部分，也是后续扩展测量、sweep、模型诊断和 GUI 的地基。
+三天内不能完成完整替代 LTspice / KiCad，但可以完成一个有竞争力的垂直切片：用 ngspice 作为求解后端，交付自动化批量仿真、可追溯运行元数据、HTML/JSON 报告和 CI 友好的 pass/fail 命令。原理图绘制和 library 能力参考 KiCad 源码与公开格式，用 Rust 重构为 NekoSpice 自有子系统，自动验证、波形数据层、模型诊断和工程报告继续作为差异化核心。
 
 ## Day 1：跑起来
 
@@ -59,7 +59,7 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output repor
 - 实现 `osl waveform <waveform.raw>` 的视窗 min/max envelope JSON 查询，为后续 GUI 波形查看器提供数据接口。
 - 补充文档和使用命令。
 - 建立 Git 工程。
-- 固化三天后下一步任务：measurement、sweep、KiCad/LTspice 规范化导入、波形数据层。
+- 固化三天后下一步任务：measurement、sweep、Rust-native KiCad schematic/library、LTspice 迁移导入、波形数据层。
 
 验收：
 
@@ -96,6 +96,7 @@ cargo run -p osl-cli -- waveform runs/kicad_rc_001/waveform.raw --signal 'v(out)
 
 优先级从高到低：
 
-1. normalized import v2：把 LTspice `.asc` 基础导入扩展到 hierarchical sheet、更多 vendor symbol dialect，并把现有可观测信号/checks 建议升级为带工程意图的 checks 模板。
+1. Rust-native KiCad schematic/library：参考 KiCad 源码和官方 S-expression 格式，新增 `.kicad_sch` / `.kicad_sym` parser、Rust IR、symbol library index、连接图和后续 schematic canvas 数据模型，并把 symbol fields、模型路径、pin order 和仿真 directives 转为可诊断报告。
 2. waveform data layer：持久 LOD cache、mmap、大文件 viewport query 优化。
 3. richer verification DSL：backend、analysis、corner、Monte Carlo 和 worst-case search。
+4. LTspice migration import：把现有 `.asc` 基础导入扩展到 hierarchical sheet 和更多 vendor symbol dialect。
