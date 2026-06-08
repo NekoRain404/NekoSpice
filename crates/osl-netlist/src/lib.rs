@@ -1453,6 +1453,27 @@ fn ltspice_builtin_symbol(name: &str) -> Option<LtspiceSymbolSpec> {
     const SOURCE_PINS: &[AscPoint] = &[AscPoint { x: 0, y: 16 }, AscPoint { x: 0, y: 96 }];
     const CURRENT_PINS: &[AscPoint] = &[AscPoint { x: 0, y: 0 }, AscPoint { x: 0, y: 80 }];
     const DIODE_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 0 }, AscPoint { x: 16, y: 64 }];
+    const BJT_PINS: &[AscPoint] = &[
+        AscPoint { x: 64, y: 0 },
+        AscPoint { x: 0, y: 48 },
+        AscPoint { x: 64, y: 96 },
+    ];
+    const MOS_PINS: &[AscPoint] = &[
+        AscPoint { x: 48, y: 0 },
+        AscPoint { x: 0, y: 80 },
+        AscPoint { x: 48, y: 96 },
+    ];
+    const MOS4_PINS: &[AscPoint] = &[
+        AscPoint { x: 48, y: 0 },
+        AscPoint { x: 0, y: 80 },
+        AscPoint { x: 48, y: 96 },
+        AscPoint { x: 48, y: 48 },
+    ];
+    const JFET_PINS: &[AscPoint] = &[
+        AscPoint { x: 48, y: 0 },
+        AscPoint { x: 0, y: 64 },
+        AscPoint { x: 48, y: 96 },
+    ];
 
     match ltspice_symbol_basename(name).as_str() {
         "res" | "res2" => Some(LtspiceSymbolSpec {
@@ -1487,6 +1508,31 @@ fn ltspice_builtin_symbol(name: &str) -> Option<LtspiceSymbolSpec> {
                 source: LtspiceSymbolSpecSource::Builtin,
             })
         }
+        "npn" | "npn2" | "npn3" | "npn4" => Some(LtspiceSymbolSpec {
+            prefix: "Q".to_string(),
+            pins: BJT_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
+        }),
+        "pnp" | "pnp2" | "pnp4" | "lpnp" => Some(LtspiceSymbolSpec {
+            prefix: "Q".to_string(),
+            pins: BJT_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
+        }),
+        "nmos" | "pmos" => Some(LtspiceSymbolSpec {
+            prefix: "M".to_string(),
+            pins: MOS_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
+        }),
+        "nmos4" | "pmos4" => Some(LtspiceSymbolSpec {
+            prefix: "M".to_string(),
+            pins: MOS4_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
+        }),
+        "njf" | "pjf" => Some(LtspiceSymbolSpec {
+            prefix: "J".to_string(),
+            pins: JFET_PINS.to_vec(),
+            source: LtspiceSymbolSpecSource::Builtin,
+        }),
         _ => None,
     }
 }
@@ -2163,6 +2209,26 @@ XU1 in out vcc vee GOODAMP
         assert!(!input.report.diagnostics.iter().any(|diagnostic| {
             diagnostic.code == "ltspice_unsupported_symbol"
                 || diagnostic.code == "ltspice_symbol_no_pins"
+        }));
+    }
+
+    #[test]
+    fn imports_ltspice_bjt_builtin_symbol() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let input =
+            read_import_input(&workspace_root.join("examples/ltspice_import/ltspice_bjt.asc"))
+                .unwrap();
+
+        assert_eq!(input.report.flavor, NetlistFlavor::Ltspice);
+        assert_eq!(input.report.error_count(), 0);
+        assert!(input.source_netlist.contains("Q1 vcc in 0 QTEST"));
+        assert!(input.source_netlist.contains(".model QTEST NPN"));
+        assert!(!input.report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "ltspice_unsupported_symbol"
+                || diagnostic.code == "ltspice_unmapped_pin"
         }));
     }
 
