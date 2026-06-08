@@ -70,6 +70,20 @@ pub fn render_kicad_scene_svg_with_options(
             fmt(point.y)
         ));
     }
+    for marker in &scene.no_connects {
+        let point = viewport.project(marker.at);
+        output.push_str(&format!(
+            "    <g data-no-connect=\"true\" stroke=\"#dc2626\" stroke-width=\"1.8\">\n      <line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n      <line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n    </g>\n",
+            fmt(point.x - 4.0),
+            fmt(point.y - 4.0),
+            fmt(point.x + 4.0),
+            fmt(point.y + 4.0),
+            fmt(point.x - 4.0),
+            fmt(point.y + 4.0),
+            fmt(point.x + 4.0),
+            fmt(point.y - 4.0)
+        ));
+    }
     output.push_str("  </g>\n");
     output.push_str("  <g font-family=\"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace\" font-size=\"11\" fill=\"#334155\">\n");
     for label in &scene.labels {

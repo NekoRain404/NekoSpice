@@ -107,6 +107,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         sheets: direct_children(root_list, "sheet")
             .filter_map(parse_sheet)
             .collect(),
+        no_connects: direct_children(root_list, "no_connect")
+            .filter_map(parse_no_connect)
+            .collect(),
         text_items: direct_children(root_list, "text")
             .filter_map(parse_text_item)
             .collect(),
@@ -188,6 +191,7 @@ pub struct KicadSchematic {
     pub wires: Vec<KicadWire>,
     pub labels: Vec<KicadLabel>,
     pub sheets: Vec<KicadSheet>,
+    pub no_connects: Vec<KicadNoConnect>,
     pub text_items: Vec<KicadTextItem>,
     pub junctions: Vec<KicadJunction>,
 }
@@ -285,6 +289,10 @@ pub enum KicadSchematicEdit {
         uuid: Option<String>,
     },
     AddJunction {
+        at: KicadPoint,
+        uuid: Option<String>,
+    },
+    AddNoConnect {
         at: KicadPoint,
         uuid: Option<String>,
     },
@@ -439,6 +447,7 @@ impl KicadSchematic {
             } => self.place_symbol(definition, &reference, &value, at, unit, uuid),
             KicadSchematicEdit::AddWire { points, uuid } => self.add_wire(points, uuid),
             KicadSchematicEdit::AddJunction { at, uuid } => self.add_junction(at, uuid),
+            KicadSchematicEdit::AddNoConnect { at, uuid } => self.add_no_connect(at, uuid),
             KicadSchematicEdit::AddLabel {
                 text,
                 kind,
@@ -663,6 +672,32 @@ impl KicadSchematic {
         })
     }
 
+    pub fn add_no_connect(
+        &mut self,
+        at: KicadPoint,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        validate_point(at, "no-connect")?;
+        if self.no_connects.iter().any(|marker| {
+            coordinate_key(marker.at.x) == coordinate_key(at.x)
+                && coordinate_key(marker.at.y) == coordinate_key(at.y)
+        }) {
+            return Err(OslError::InvalidInput(format!(
+                "KiCad no-connect marker already exists at {},{}",
+                at.x, at.y
+            )));
+        }
+
+        let payload = format!("{},{}", at.x, at.y);
+        let uuid = Some(self.edit_uuid(uuid, "no-connect", &payload)?);
+        self.no_connects.push(KicadNoConnect { at, uuid });
+
+        Ok(KicadEditSummary {
+            operation: "add-no-connect".to_string(),
+            target: payload,
+        })
+    }
+
     pub fn add_label(
         &mut self,
         text: impl Into<String>,
@@ -833,6 +868,7 @@ impl KicadSchematic {
         self.check_wires(&mut diagnostics);
         self.check_labels(&graph, &mut diagnostics);
         self.check_sheets(&mut diagnostics);
+        self.check_no_connects(&mut diagnostics);
         self.check_spice_directives(&mut diagnostics);
         if !graph.nets.iter().any(|net| net.name == "0") {
             diagnostics.push(kicad_schematic_diagnostic(
@@ -996,6 +1032,9 @@ impl KicadSchematic {
         }
         for junction in &self.junctions {
             junction.write_junction_sexpr(&mut output, 2);
+        }
+        for no_connect in &self.no_connects {
+            no_connect.write_no_connect_sexpr(&mut output, 2);
         }
         for label in &self.labels {
             label.write_label_sexpr(&mut output, 2);
@@ -1441,6 +1480,9 @@ impl KicadSchematic {
                     continue;
                 };
                 let point = transform_symbol_point(pin_at, symbol_at);
+                if self.has_no_connect_at(point) {
+                    continue;
+                }
                 match graph.net_at(point) {
                     Some("unconnected") | None => diagnostics.push(kicad_schematic_diagnostic(
                         KicadDiagnosticSeverity::Warning,
@@ -1569,6 +1611,25 @@ impl KicadSchematic {
         }
     }
 
+    fn check_no_connects(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
+        let pin_points = self.symbol_pin_points();
+        for marker in &self.no_connects {
+            if !pin_points.iter().any(|point| same_point(*point, marker.at)) {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Warning,
+                    "floating-no-connect",
+                    &format!(
+                        "no-connect marker at {},{} is not attached to a symbol pin",
+                        marker.at.x, marker.at.y
+                    ),
+                    None,
+                    None,
+                    None,
+                ));
+            }
+        }
+    }
+
     fn check_spice_directives(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
         let directives = self.spice_directives();
         if directives.is_empty() {
@@ -1670,6 +1731,11 @@ impl KicadSchematic {
                 uuids.insert(uuid.clone());
             }
         }
+        for marker in &self.no_connects {
+            if let Some(uuid) = &marker.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
         for sheet in &self.sheets {
             if let Some(uuid) = &sheet.uuid {
                 uuids.insert(uuid.clone());
@@ -1731,6 +1797,12 @@ impl KicadSchematic {
             .collect()
     }
 
+    fn has_no_connect_at(&self, point: KicadPoint) -> bool {
+        self.no_connects
+            .iter()
+            .any(|marker| same_point(marker.at, point))
+    }
+
     pub fn to_summary_json(&self) -> String {
         format!(
             concat!(
@@ -1743,6 +1815,7 @@ impl KicadSchematic {
                 "  \"wire_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
+                "  \"no_connect_count\": {},\n",
                 "  \"sheet_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"text_count\": {},\n",
@@ -1758,6 +1831,7 @@ impl KicadSchematic {
             self.wires.len(),
             self.labels.len(),
             self.junctions.len(),
+            self.no_connects.len(),
             self.sheets.len(),
             self.sheets
                 .iter()
@@ -2101,6 +2175,7 @@ pub struct KicadCanvasScene {
     pub wires: Vec<KicadCanvasWire>,
     pub labels: Vec<KicadCanvasLabel>,
     pub junctions: Vec<KicadCanvasJunction>,
+    pub no_connects: Vec<KicadCanvasNoConnect>,
     pub bounds: Option<KicadBoundingBox>,
 }
 
@@ -2217,6 +2292,15 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let no_connects = schematic
+            .no_connects
+            .iter()
+            .map(|marker| {
+                bounds.include(marker.at);
+                KicadCanvasNoConnect { at: marker.at }
+            })
+            .collect::<Vec<_>>();
+
         Self {
             source: schematic.source.clone(),
             symbols,
@@ -2224,6 +2308,7 @@ impl KicadCanvasScene {
             wires,
             labels,
             junctions,
+            no_connects,
             bounds: bounds.finish(),
         }
     }
@@ -2256,6 +2341,7 @@ impl KicadCanvasScene {
                 "  \"wire_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
+                "  \"no_connect_count\": {},\n",
                 "  \"bounds\": {}\n",
                 "}}"
             ),
@@ -2271,6 +2357,7 @@ impl KicadCanvasScene {
             self.wires.len(),
             self.labels.len(),
             self.junctions.len(),
+            self.no_connects.len(),
             bounds
         )
     }
@@ -2405,6 +2492,11 @@ pub struct KicadCanvasLabel {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasJunction {
+    pub at: KicadPoint,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasNoConnect {
     pub at: KicadPoint,
 }
 
@@ -3540,6 +3632,29 @@ impl KicadJunction {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadNoConnect {
+    pub at: KicadPoint,
+    pub uuid: Option<String>,
+}
+
+impl KicadNoConnect {
+    fn write_no_connect_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(no_connect\n{}  (at {} {})\n",
+            pad,
+            pad,
+            format_number(self.at.x),
+            format_number(self.at.y)
+        ));
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KicadPoint {
     pub x: f64,
@@ -3876,6 +3991,15 @@ fn parse_junction(node: &Sexp) -> Option<KicadJunction> {
     let items = list_items(node);
     let at = child(items, "at").and_then(parse_at)?;
     Some(KicadJunction {
+        at: KicadPoint { x: at.x, y: at.y },
+        uuid: child_value(items, "uuid"),
+    })
+}
+
+fn parse_no_connect(node: &Sexp) -> Option<KicadNoConnect> {
+    let items = list_items(node);
+    let at = child(items, "at").and_then(parse_at)?;
+    Some(KicadNoConnect {
         at: KicadPoint { x: at.x, y: at.y },
         uuid: child_value(items, "uuid"),
     })
@@ -4325,6 +4449,11 @@ fn between_inclusive(value: f64, left: f64, right: f64) -> bool {
 
 fn coordinate_key(value: f64) -> i64 {
     (value * 1_000_000.0).round() as i64
+}
+
+fn same_point(left: KicadPoint, right: KicadPoint) -> bool {
+    coordinate_key(left.x) == coordinate_key(right.x)
+        && coordinate_key(left.y) == coordinate_key(right.y)
 }
 
 fn normalize_net_name(name: &str) -> String {
@@ -4924,6 +5053,68 @@ mod tests {
     }
 
     #[test]
+    fn honors_no_connect_markers_on_unconnected_symbol_pins() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:R"
+      (property "Reference" "R" (at 0 0 0))
+      (property "Value" "1k" (at 0 -2.54 0))
+      (property "Sim.Device" "R" (at 0 0 0))
+      (symbol "R_0_1"
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "~") (number "1"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "~") (number "2"))
+      )
+    )
+  )
+  (label "0" (at 15.08 10 0))
+  (no_connect (at 10 10) (uuid "12121212-1212-1212-1212-121212121212"))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 12.54 10 0)
+    (property "Reference" "R1" (at 12.54 8 0))
+    (property "Value" "1k" (at 12.54 12 0))
+    (pin "1" (uuid "abababab-0000-0000-0000-000000000001"))
+    (pin "2" (uuid "abababab-0000-0000-0000-000000000002"))
+  )
+)"#,
+            "no_connect.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.no_connects.len(), 1);
+        assert_eq!(
+            schematic.no_connects[0].uuid.as_deref(),
+            Some("12121212-1212-1212-1212-121212121212")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"no_connect_count\": 1")
+        );
+
+        let report = schematic.check_report();
+        assert_eq!(report.error_count(), 0);
+        assert!(!report.diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic.code.as_str(),
+                "unconnected-pin" | "generated-net-name" | "floating-no-connect"
+            )
+        }));
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(no_connect"));
+        assert!(roundtrip.contains("(uuid \"12121212-1212-1212-1212-121212121212\")"));
+        let reparsed = parse_kicad_schematic(&roundtrip, "roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.no_connects.len(), 1);
+        assert_eq!(reparsed.canvas_scene().no_connects.len(), 1);
+    }
+
+    #[test]
     fn parses_hierarchical_sheet_items_and_reports_unsupported_expansion() {
         let schematic = parse_kicad_schematic(
             r#"(kicad_sch
@@ -5384,6 +5575,12 @@ mod tests {
             })
             .unwrap();
         schematic
+            .apply_edit(KicadSchematicEdit::AddNoConnect {
+                at: KicadPoint { x: 101.6, y: 45.72 },
+                uuid: Some("22222222-aaaa-bbbb-cccc-222222222222".to_string()),
+            })
+            .unwrap();
+        schematic
             .apply_edit(KicadSchematicEdit::AddLabel {
                 text: "sense".to_string(),
                 kind: KicadLabelKind::Global,
@@ -5465,6 +5662,7 @@ mod tests {
         assert_eq!(resistor.value(), Some("2k"));
         assert_eq!(schematic.wires.len(), 4);
         assert_eq!(schematic.junctions.len(), 1);
+        assert_eq!(schematic.no_connects.len(), 1);
         assert_eq!(schematic.sheets.len(), 1);
         assert_eq!(schematic.sheets[0].sheet_name(), Some("gain_stage"));
         assert_eq!(schematic.sheets[0].pins.len(), 2);
@@ -5483,6 +5681,8 @@ mod tests {
         let exported = schematic.to_kicad_schematic_sexpr();
         assert!(exported.contains("(junction"));
         assert!(exported.contains("(uuid \"11111111-aaaa-bbbb-cccc-111111111111\")"));
+        assert!(exported.contains("(no_connect"));
+        assert!(exported.contains("(uuid \"22222222-aaaa-bbbb-cccc-222222222222\")"));
         assert!(exported.contains("(global_label \"sense\""));
         assert!(exported.contains("(sheet"));
         assert!(exported.contains("(property \"Sheetname\" \"gain_stage\""));
@@ -5495,9 +5695,15 @@ mod tests {
             reparsed.junctions[0].uuid.as_deref(),
             Some("11111111-aaaa-bbbb-cccc-111111111111")
         );
+        assert_eq!(reparsed.no_connects.len(), 1);
+        assert_eq!(
+            reparsed.no_connects[0].uuid.as_deref(),
+            Some("22222222-aaaa-bbbb-cccc-222222222222")
+        );
         assert_eq!(reparsed.sheets.len(), 1);
         assert_eq!(reparsed.sheets[0].pins.len(), 2);
         assert_eq!(reparsed.canvas_scene().junctions.len(), 1);
+        assert_eq!(reparsed.canvas_scene().no_connects.len(), 1);
         assert_eq!(
             reparsed
                 .symbols
