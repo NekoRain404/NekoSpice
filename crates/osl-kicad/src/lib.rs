@@ -2081,7 +2081,10 @@ impl KicadSchematic {
                 "  \"locked_schematic_graphic_count\": {},\n",
                 "  \"image_count\": {},\n",
                 "  \"table_count\": {},\n",
+                "  \"styled_table_count\": {},\n",
                 "  \"table_cell_count\": {},\n",
+                "  \"styled_table_cell_count\": {},\n",
+                "  \"locked_table_cell_count\": {},\n",
                 "  \"group_count\": {},\n",
                 "  \"group_member_count\": {},\n",
                 "  \"label_count\": {},\n",
@@ -2132,10 +2135,13 @@ impl KicadSchematic {
             self.locked_schematic_graphic_count(),
             self.images.len(),
             self.tables.len(),
+            self.styled_table_count(),
             self.tables
                 .iter()
                 .map(|table| table.cells.len())
                 .sum::<usize>(),
+            self.styled_table_cell_count(),
+            self.locked_table_cell_count(),
             self.groups.len(),
             self.groups
                 .iter()
@@ -2250,6 +2256,29 @@ impl KicadSchematic {
         self.text_boxes
             .iter()
             .filter(|text_box| text_box.locked == Some(true))
+            .count()
+    }
+
+    fn styled_table_count(&self) -> usize {
+        self.tables
+            .iter()
+            .filter(|table| table.border.is_some() || table.separators.is_some())
+            .count()
+    }
+
+    fn styled_table_cell_count(&self) -> usize {
+        self.tables
+            .iter()
+            .flat_map(|table| &table.cells)
+            .filter(|cell| cell.fill.is_some() || cell.effects.is_some())
+            .count()
+    }
+
+    fn locked_table_cell_count(&self) -> usize {
+        self.tables
+            .iter()
+            .flat_map(|table| &table.cells)
+            .filter(|cell| cell.locked == Some(true))
             .count()
     }
 
@@ -2852,6 +2881,8 @@ impl KicadCanvasScene {
                             margins: cell.margins,
                             column_span: cell.column_span,
                             row_span: cell.row_span,
+                            fill: cell.fill.clone(),
+                            effects: cell.effects.clone(),
                         }
                     })
                     .collect::<Vec<_>>();
@@ -3171,6 +3202,8 @@ pub struct KicadCanvasTableCell {
     pub margins: Option<KicadMargins>,
     pub column_span: usize,
     pub row_span: usize,
+    pub fill: Option<KicadFill>,
+    pub effects: Option<KicadTextEffects>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4280,6 +4313,8 @@ impl KicadImage {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadTable {
     pub column_count: usize,
+    pub border: Option<KicadTableBorder>,
+    pub separators: Option<KicadTableSeparators>,
     pub column_widths: Vec<f64>,
     pub row_heights: Vec<f64>,
     pub cells: Vec<KicadTableCell>,
@@ -4304,14 +4339,8 @@ impl KicadTable {
             "{}(table\n{}  (column_count {})\n",
             pad, pad, self.column_count
         ));
-        output.push_str(&format!(
-            "{}  (border (external yes) (header yes) (stroke (width 0) (type solid)))\n",
-            pad
-        ));
-        output.push_str(&format!(
-            "{}  (separators (rows yes) (cols yes) (stroke (width 0) (type solid)))\n",
-            pad
-        ));
+        write_table_border_sexpr(output, indent + 2, self.border.as_ref());
+        write_table_separators_sexpr(output, indent + 2, self.separators.as_ref());
         output.push_str(&format!("{}  (column_widths", pad));
         for width in &self.column_widths {
             output.push_str(&format!(" {}", format_number(*width)));
@@ -4338,6 +4367,20 @@ impl KicadTable {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct KicadTableBorder {
+    pub external: Option<bool>,
+    pub header: Option<bool>,
+    pub stroke: Option<KicadStroke>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadTableSeparators {
+    pub rows: Option<bool>,
+    pub cols: Option<bool>,
+    pub stroke: Option<KicadStroke>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct KicadTableCell {
     pub text: String,
     pub at: Option<KicadAt>,
@@ -4345,6 +4388,8 @@ pub struct KicadTableCell {
     pub margins: Option<KicadMargins>,
     pub column_span: usize,
     pub row_span: usize,
+    pub fill: Option<KicadFill>,
+    pub effects: Option<KicadTextEffects>,
     pub exclude_from_sim: Option<bool>,
     pub uuid: Option<String>,
     pub locked: Option<bool>,
@@ -4408,8 +4453,10 @@ impl KicadTableCell {
             "{}  (span {} {})\n",
             pad, self.column_span, self.row_span
         ));
-        output.push_str(&format!("{}  (fill (type none))\n", pad));
-        output.push_str(&format!("{}  (effects (font (size 1.27 1.27)))\n", pad));
+        output.push_str(&format!("{} ", pad));
+        write_inline_fill(output, self.fill.as_ref());
+        output.push('\n');
+        write_text_effects_line(output, indent + 2, self.effects.as_ref());
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
         }
@@ -5768,6 +5815,38 @@ fn write_inline_fill(output: &mut String, fill: Option<&KicadFill>) {
     }
 }
 
+fn write_table_border_sexpr(output: &mut String, indent: usize, border: Option<&KicadTableBorder>) {
+    let pad = " ".repeat(indent);
+    output.push_str(&format!("{}(border", pad));
+    match border {
+        Some(border) => {
+            write_inline_optional_bool_sexpr(output, "external", border.external);
+            write_inline_optional_bool_sexpr(output, "header", border.header);
+            write_inline_stroke(output, border.stroke.as_ref(), 0.0);
+        }
+        None => output.push_str(" (external yes) (header yes) (stroke (width 0) (type solid))"),
+    }
+    output.push_str(")\n");
+}
+
+fn write_table_separators_sexpr(
+    output: &mut String,
+    indent: usize,
+    separators: Option<&KicadTableSeparators>,
+) {
+    let pad = " ".repeat(indent);
+    output.push_str(&format!("{}(separators", pad));
+    match separators {
+        Some(separators) => {
+            write_inline_optional_bool_sexpr(output, "rows", separators.rows);
+            write_inline_optional_bool_sexpr(output, "cols", separators.cols);
+            write_inline_stroke(output, separators.stroke.as_ref(), 0.0);
+        }
+        None => output.push_str(" (rows yes) (cols yes) (stroke (width 0) (type solid))"),
+    }
+    output.push_str(")\n");
+}
+
 fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     let items = list_items(node);
     Some(KicadSymbolDef {
@@ -5937,6 +6016,8 @@ fn parse_table(node: &Sexp) -> Option<KicadTable> {
         column_count: child_value(items, "column_count")
             .and_then(|value| value.parse().ok())
             .unwrap_or(0),
+        border: child(items, "border").map(parse_table_border),
+        separators: child(items, "separators").map(parse_table_separators),
         column_widths: child(items, "column_widths")
             .map(parse_number_list)
             .unwrap_or_default(),
@@ -5965,10 +6046,30 @@ fn parse_table_cell(node: &Sexp) -> Option<KicadTableCell> {
         margins: child(items, "margins").and_then(parse_margins),
         column_span,
         row_span,
+        fill: child(items, "fill").map(parse_fill),
+        effects: child(items, "effects").map(parse_text_effects),
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
         uuid: child_value(items, "uuid"),
-        locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
+        locked: parse_optional_bool_child(items, "locked"),
     })
+}
+
+fn parse_table_border(node: &Sexp) -> KicadTableBorder {
+    let items = list_items(node);
+    KicadTableBorder {
+        external: child_value(items, "external").and_then(parse_kicad_bool_value),
+        header: child_value(items, "header").and_then(parse_kicad_bool_value),
+        stroke: child(items, "stroke").map(parse_stroke),
+    }
+}
+
+fn parse_table_separators(node: &Sexp) -> KicadTableSeparators {
+    let items = list_items(node);
+    KicadTableSeparators {
+        rows: child_value(items, "rows").and_then(parse_kicad_bool_value),
+        cols: child_value(items, "cols").and_then(parse_kicad_bool_value),
+        stroke: child(items, "stroke").map(parse_stroke),
+    }
 }
 
 fn parse_group(node: &Sexp) -> Option<KicadGroup> {
@@ -7824,8 +7925,8 @@ mod tests {
   (lib_symbols)
   (table
     (column_count 2)
-    (border (external yes) (header yes) (stroke (width 0) (type solid)))
-    (separators (rows yes) (cols yes) (stroke (width 0) (type solid)))
+    (border (external yes) (header yes) (stroke (width 0.127) (type dash) (color 10 20 30 1)))
+    (separators (rows yes) (cols no) (stroke (width 0.0508) (type dot) (color 40 50 60 0.5)))
     (column_widths 26.67 21.59)
     (row_heights 2.54 2.54)
     (uuid "67676767-6767-4767-8767-676767676767")
@@ -7836,8 +7937,8 @@ mod tests {
         (size 26.67 2.54)
         (margins 0.9525 0.9525 0.9525 0.9525)
         (span 1 1)
-        (fill (type none))
-        (effects (font (size 1.27 1.27)) (justify left top))
+        (fill (type color) (color 255 228 206 0.5))
+        (effects (font (size 1.27 1.27) (color 10 9 37 1)) (justify left top))
         (uuid "68686868-6868-4868-8868-686868686868")
       )
       (table_cell "Expected net"
@@ -7849,6 +7950,7 @@ mod tests {
         (fill (type none))
         (effects (font (size 1.27 1.27)) (justify left top))
         (uuid "69696969-6969-4969-8969-696969696969")
+        (locked)
       )
     )
   )
@@ -7861,6 +7963,40 @@ mod tests {
         assert_eq!(schematic.tables[0].column_count, 2);
         assert_eq!(schematic.tables[0].cells.len(), 2);
         assert_eq!(schematic.tables[0].cells[0].text, "LED pin");
+        assert_close(
+            schematic.tables[0]
+                .border
+                .as_ref()
+                .unwrap()
+                .stroke
+                .as_ref()
+                .unwrap()
+                .width
+                .unwrap(),
+            0.127,
+        );
+        assert_eq!(
+            schematic.tables[0].separators.as_ref().unwrap().cols,
+            Some(false)
+        );
+        assert_eq!(
+            schematic.tables[0].cells[0]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("color")
+        );
+        assert_eq!(
+            schematic.tables[0].cells[0]
+                .effects
+                .as_ref()
+                .unwrap()
+                .justify,
+            vec!["left".to_string(), "top".to_string()]
+        );
+        assert_eq!(schematic.tables[0].cells[1].locked, Some(true));
         assert_close(schematic.tables[0].column_widths[0], 26.67);
         assert_close(schematic.tables[0].row_heights[0], 2.54);
         assert_eq!(
@@ -7877,10 +8013,34 @@ mod tests {
                 .to_summary_json()
                 .contains("\"table_cell_count\": 2")
         );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_table_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_table_cell_count\": 2")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"locked_table_cell_count\": 1")
+        );
 
         let scene = schematic.canvas_scene();
         assert_eq!(scene.tables.len(), 1);
         assert_eq!(scene.tables[0].cells.len(), 2);
+        assert_eq!(
+            scene.tables[0].cells[0]
+                .fill
+                .as_ref()
+                .unwrap()
+                .fill_type
+                .as_deref(),
+            Some("color")
+        );
         assert!(scene.to_summary_json().contains("\"table_count\": 1"));
         assert!(scene.to_summary_json().contains("\"table_cell_count\": 2"));
         assert_close(scene.bounds.unwrap().width(), 48.26);
@@ -7888,13 +8048,39 @@ mod tests {
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(table"));
         assert!(roundtrip.contains("(column_count 2)"));
+        assert!(roundtrip.contains(
+            "(border (external yes) (header yes) (stroke (width 0.127) (type dash) (color 10 20 30 1)))"
+        ));
+        assert!(roundtrip.contains(
+            "(separators (rows yes) (cols no) (stroke (width 0.0508) (type dot) (color 40 50 60 0.5)))"
+        ));
         assert!(roundtrip.contains("(column_widths 26.67 21.59)"));
+        assert!(roundtrip.contains("(fill (type color) (color 255 228 206 0.5))"));
+        assert!(
+            roundtrip
+                .contains("(effects (font (size 1.27 1.27) (color 10 9 37 1)) (justify left top))")
+        );
+        assert!(roundtrip.contains("(locked yes)"));
         assert!(roundtrip.contains("(table_cell \"LED pin\""));
         assert!(roundtrip.contains("(uuid \"67676767-6767-4767-8767-676767676767\")"));
         assert!(roundtrip.contains("(uuid \"68686868-6868-4868-8868-686868686868\")"));
         let reparsed = parse_kicad_schematic(&roundtrip, "table_roundtrip.kicad_sch").unwrap();
         assert_eq!(reparsed.tables.len(), 1);
         assert_eq!(reparsed.tables[0].cells.len(), 2);
+        assert_eq!(reparsed.tables[0].cells[1].locked, Some(true));
+        assert_eq!(
+            reparsed.tables[0].cells[0]
+                .effects
+                .as_ref()
+                .unwrap()
+                .font_color,
+            Some(KicadColor {
+                red: 10.0,
+                green: 9.0,
+                blue: 37.0,
+                alpha: 1.0,
+            })
+        );
         assert_eq!(reparsed.canvas_scene().tables.len(), 1);
     }
 

@@ -436,22 +436,33 @@ fn render_table(output: &mut String, viewport: &SvgViewport, table: &KicadCanvas
         let origin = viewport.project(at_point(at));
         let width = size.width * viewport.scale;
         let height = size.height * viewport.scale;
+        let fill = svg_fill_color(cell.fill.as_ref(), "#ffffff");
+        let fill_opacity = if fill == "none" { "1" } else { "0.55" };
         output.push_str(&format!(
-            "      <rect data-table-cell=\"true\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"#64748b\" stroke-width=\"1\" fill=\"#ffffff\" fill-opacity=\"0.55\"/>\n",
+            "      <rect data-table-cell=\"true\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"#64748b\" stroke-width=\"1\" fill=\"{}\" fill-opacity=\"{}\"/>\n",
             fmt(origin.x),
             fmt(origin.y),
             fmt(width),
-            fmt(height)
+            fmt(height),
+            fill,
+            fill_opacity
         ));
         if !cell.text.is_empty() {
             let margin = cell
                 .margins
                 .map(|margins| margins.left.max(0.0) * viewport.scale)
                 .unwrap_or(4.0);
+            let text_fill = cell
+                .effects
+                .as_ref()
+                .and_then(|effects| effects.font_color)
+                .map(svg_color)
+                .unwrap_or_else(|| "#334155".to_string());
             output.push_str(&format!(
-                "      <text x=\"{}\" y=\"{}\" fill=\"#334155\" stroke=\"none\">{}</text>\n",
+                "      <text x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\">{}</text>\n",
                 fmt(origin.x + margin),
                 fmt(origin.y + margin + 10.0),
+                text_fill,
                 html_escape(&cell.text)
             ));
         }
