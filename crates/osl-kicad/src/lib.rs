@@ -151,6 +151,14 @@ pub enum KicadSchematicEdit {
         value: String,
         at: Option<KicadAt>,
     },
+    PlaceSymbol {
+        definition: KicadSymbolDef,
+        reference: String,
+        value: String,
+        at: KicadAt,
+        unit: Option<u32>,
+        uuid: Option<String>,
+    },
     AddWire {
         points: Vec<KicadPoint>,
         uuid: Option<String>,
@@ -188,6 +196,14 @@ impl KicadSchematic {
                 value,
                 at,
             } => self.set_symbol_property(&reference, &name, &value, at),
+            KicadSchematicEdit::PlaceSymbol {
+                definition,
+                reference,
+                value,
+                at,
+                unit,
+                uuid,
+            } => self.place_symbol(definition, &reference, &value, at, unit, uuid),
             KicadSchematicEdit::AddWire { points, uuid } => self.add_wire(points, uuid),
             KicadSchematicEdit::AddLabel {
                 text,
@@ -272,6 +288,85 @@ impl KicadSchematic {
         Ok(KicadEditSummary {
             operation: "set-property".to_string(),
             target: format!("{reference}.{name}"),
+        })
+    }
+
+    pub fn place_symbol(
+        &mut self,
+        definition: KicadSymbolDef,
+        reference: &str,
+        value: &str,
+        at: KicadAt,
+        unit: Option<u32>,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        validate_at(at, "symbol placement")?;
+        if reference.trim().is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad placed symbol reference must not be empty".to_string(),
+            ));
+        }
+        if self
+            .symbols
+            .iter()
+            .any(|symbol| symbol.reference() == Some(reference))
+        {
+            return Err(OslError::InvalidInput(format!(
+                "KiCad symbol reference '{reference}' already exists"
+            )));
+        }
+
+        let lib_id = definition.name.clone();
+        match self
+            .library_symbols
+            .iter()
+            .find(|symbol| symbol.name == lib_id)
+        {
+            Some(existing) if existing != &definition => {
+                return Err(OslError::InvalidInput(format!(
+                    "KiCad embedded library symbol '{lib_id}' already exists with different content"
+                )));
+            }
+            Some(_) => {}
+            None => self.library_symbols.push(definition.clone()),
+        }
+
+        let instance_payload = format!(
+            "{}:{}:{}@{},{},{}",
+            lib_id, reference, value, at.x, at.y, at.rotation
+        );
+        let instance_uuid = self.edit_uuid(uuid, "symbol", &instance_payload)?;
+        let properties = symbol_instance_properties(&definition, reference, value, at);
+        let mut sorted_pins = definition.pins.iter().collect::<Vec<_>>();
+        sorted_pins.sort_by(compare_pin_numbers);
+        let mut generated_pin_uuids = BTreeSet::new();
+        let mut pins = Vec::new();
+        for (index, pin) in sorted_pins.into_iter().enumerate() {
+            let pin_uuid = self.edit_uuid_excluding(
+                None,
+                "symbol-pin",
+                &format!("{instance_uuid}:{}:{index}", pin.number),
+                &generated_pin_uuids,
+            )?;
+            generated_pin_uuids.insert(pin_uuid.clone());
+            pins.push(KicadSymbolPinRef {
+                number: Some(pin.number.clone()),
+                uuid: Some(pin_uuid),
+            });
+        }
+
+        self.symbols.push(KicadSymbolInstance {
+            lib_id: lib_id.clone(),
+            at: Some(at),
+            unit: Some(unit.unwrap_or(1)),
+            uuid: Some(instance_uuid),
+            properties,
+            pins,
+        });
+
+        Ok(KicadEditSummary {
+            operation: "place-symbol".to_string(),
+            target: format!("{reference} {lib_id}"),
         })
     }
 
@@ -522,9 +617,19 @@ impl KicadSchematic {
     }
 
     fn edit_uuid(&self, uuid: Option<String>, namespace: &str, payload: &str) -> OslResult<String> {
+        self.edit_uuid_excluding(uuid, namespace, payload, &BTreeSet::new())
+    }
+
+    fn edit_uuid_excluding(
+        &self,
+        uuid: Option<String>,
+        namespace: &str,
+        payload: &str,
+        reserved: &BTreeSet<String>,
+    ) -> OslResult<String> {
         let used = self.used_uuids();
         if let Some(uuid) = uuid.filter(|uuid| !uuid.trim().is_empty()) {
-            if used.contains(&uuid) {
+            if used.contains(&uuid) || reserved.contains(&uuid) {
                 return Err(OslError::InvalidInput(format!(
                     "KiCad UUID '{uuid}' is already used in this schematic"
                 )));
@@ -541,7 +646,7 @@ impl KicadSchematic {
                 self.labels.len()
             );
             let candidate = uuid_from_hashes(fnv1a64(&seed), fnv1a64(&format!("{seed}:b")));
-            if !used.contains(&candidate) {
+            if !used.contains(&candidate) && !reserved.contains(&candidate) {
                 return Ok(candidate);
             }
         }
@@ -2500,6 +2605,57 @@ fn preferred_net_label(labels: Option<&BTreeSet<String>>) -> Option<String> {
         .or_else(|| labels.iter().find(|label| !label.is_empty()).cloned())
 }
 
+fn symbol_instance_properties(
+    definition: &KicadSymbolDef,
+    reference: &str,
+    value: &str,
+    symbol_at: KicadAt,
+) -> Vec<KicadProperty> {
+    let mut properties = definition
+        .properties
+        .iter()
+        .map(|property| KicadProperty {
+            name: property.name.clone(),
+            value: match property.name.as_str() {
+                "Reference" => reference.to_string(),
+                "Value" => value.to_string(),
+                _ => property.value.clone(),
+            },
+            at: property
+                .at
+                .map(|property_at| transform_local_at(property_at, symbol_at)),
+        })
+        .collect::<Vec<_>>();
+
+    if !properties
+        .iter()
+        .any(|property| property.name == "Reference")
+    {
+        properties.push(KicadProperty {
+            name: "Reference".to_string(),
+            value: reference.to_string(),
+            at: Some(KicadAt {
+                x: symbol_at.x,
+                y: symbol_at.y - 2.54,
+                rotation: symbol_at.rotation,
+            }),
+        });
+    }
+    if !properties.iter().any(|property| property.name == "Value") {
+        properties.push(KicadProperty {
+            name: "Value".to_string(),
+            value: value.to_string(),
+            at: Some(KicadAt {
+                x: symbol_at.x,
+                y: symbol_at.y + 2.54,
+                rotation: symbol_at.rotation,
+            }),
+        });
+    }
+
+    properties
+}
+
 fn validate_point(point: KicadPoint, context: &str) -> OslResult<()> {
     if point.x.is_finite() && point.y.is_finite() {
         Ok(())
@@ -2868,6 +3024,65 @@ mod tests {
                 .spice_directives()
                 .iter()
                 .any(|directive| directive.text == ".save v(sense)")
+        );
+    }
+
+    #[test]
+    fn places_symbol_from_kicad_library_into_schematic_ir() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let mut schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+        let library = read_kicad_symbol_library(
+            &workspace_root.join("examples/kicad_schematic/neko_spice.kicad_sym"),
+        )
+        .unwrap();
+        let capacitor = library.symbol("NekoSpice:C").unwrap().clone();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::PlaceSymbol {
+                definition: capacitor,
+                reference: "C2".to_string(),
+                value: "47n".to_string(),
+                at: KicadAt {
+                    x: 101.6,
+                    y: 53.34,
+                    rotation: 0.0,
+                },
+                unit: Some(1),
+                uuid: Some("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee".to_string()),
+            })
+            .unwrap();
+
+        let placed = schematic
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference() == Some("C2"))
+            .unwrap();
+        assert_eq!(placed.lib_id, "NekoSpice:C");
+        assert_eq!(placed.value(), Some("47n"));
+        assert_eq!(placed.pins.len(), 2);
+        assert!(placed.pins.iter().all(|pin| pin.uuid.is_some()));
+        assert!(
+            schematic
+                .library_symbols
+                .iter()
+                .any(|symbol| symbol.name == "NekoSpice:C")
+        );
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(property \"Reference\" \"C2\""));
+        assert!(exported.contains("(property \"Value\" \"47n\""));
+        let reparsed = parse_kicad_schematic(&exported, "placed.kicad_sch").unwrap();
+        assert!(
+            reparsed
+                .canvas_scene()
+                .symbols
+                .iter()
+                .any(|symbol| symbol.reference == "C2" && symbol.pins.len() == 2)
         );
     }
 

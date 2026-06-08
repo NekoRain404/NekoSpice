@@ -41,7 +41,7 @@ cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output re
 cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output reports/import_with_models_001
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output reports/kicad_schematic.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas --output reports/kicad_canvas_scene.json
-cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --output reports/rc_edited.kicad_sch move-symbol:R1:73.66,50.8 'add-wire:67.31,50.8;71.12,50.8' set-property:R1:Value=2k 'add-text:.save v(out):45.72,35.56'
+cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output reports/rc_edited.kicad_sch place-symbol:NekoSpice:C:C2:47n:101.6,53.34 'add-wire:101.6,50.8;88.9,50.8' 'add-wire:101.6,55.88;88.9,55.88' 'add-text:.save v(out):45.72,35.56'
 cargo run -p osl-cli -- kicad-render examples/kicad_schematic/rc.kicad_sch --output reports/kicad_canvas_scene.svg
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output reports/kicad_symbol_library.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --output reports/kicad_symbol_index.json
@@ -111,7 +111,7 @@ cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.os
 ```bash
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas
-cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/rc_edited.kicad_sch move-symbol:R1:73.66,50.8 'add-wire:67.31,50.8;71.12,50.8' set-property:R1:Value=2k 'add-global-label:sense:88.9,45.72' 'add-text:.save v(out):45.72,35.56'
+cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/rc_edited.kicad_sch place-symbol:NekoSpice:C:C2:47n:101.6,53.34 'add-wire:101.6,50.8;88.9,50.8' 'add-wire:101.6,55.88;88.9,55.88' 'add-global-label:sense:101.6,50.8' 'add-text:.save v(out):45.72,35.56'
 cargo run -p osl-cli -- kicad-render examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_canvas_scene.svg
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index
@@ -119,7 +119,7 @@ cargo run -p osl-cli -- kicad-export examples/kicad_schematic/rc.kicad_sch --out
 cargo run -p osl-cli -- kicad-export examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/neko_spice_roundtrip.kicad_sym
 ```
 
-`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, a symbol library index for later GUI library browsing and schematic symbol resolution, a schematic canvas scene with transformed symbol graphics, pins, wires, labels, junctions, and scene bounds, schematic edit commands for moving symbols, setting symbol properties, adding wires, adding labels, and adding text/SPICE directives, and `.kicad_sch` / `.kicad_sym` writer support for asset roundtrips. `osl-render` consumes the same canvas scene and produces SVG as a deterministic headless rendering baseline before the later wgpu/GUI renderer. Schematic roundtrips preserve paper size, schematic UUID, wire/label/text UUIDs, symbol instance UUIDs, and symbol pin number/UUID pairs for the supported IR. The local KiCad source mirror is treated only as reference material and is ignored by Git.
+`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, a symbol library index for later GUI library browsing and schematic symbol resolution, a schematic canvas scene with transformed symbol graphics, pins, wires, labels, junctions, and scene bounds, schematic edit commands for moving symbols, setting symbol properties, placing symbols from `.kicad_sym` libraries, adding wires, adding labels, and adding text/SPICE directives, and `.kicad_sch` / `.kicad_sym` writer support for asset roundtrips. `osl-render` consumes the same canvas scene and produces SVG as a deterministic headless rendering baseline before the later wgpu/GUI renderer. Schematic roundtrips preserve paper size, schematic UUID, wire/label/text UUIDs, symbol instance UUIDs, and symbol pin number/UUID pairs for the supported IR. The local KiCad source mirror is treated only as reference material and is ignored by Git.
 
 ## Validation
 
@@ -138,7 +138,7 @@ cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output /t
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_schematic/project/project.osl.yaml --output /tmp/nekospice_import/kicad_schematic_verify
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_schematic.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas --output /tmp/nekospice_import/kicad_canvas_scene.json
-cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/rc_edited.kicad_sch move-symbol:R1:73.66,50.8 'add-wire:67.31,50.8;71.12,50.8' set-property:R1:Value=2k 'add-global-label:sense:88.9,45.72' 'add-text:.save v(out):45.72,35.56'
+cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/rc_edited.kicad_sch place-symbol:NekoSpice:C:C2:47n:101.6,53.34 'add-wire:101.6,50.8;88.9,50.8' 'add-wire:101.6,55.88;88.9,55.88' 'add-global-label:sense:101.6,50.8' 'add-text:.save v(out):45.72,35.56'
 cargo run -p osl-cli -- import /tmp/nekospice_import/rc_edited.kicad_sch --output /tmp/nekospice_import/rc_edited_import
 cargo run -p osl-cli -- verify /tmp/nekospice_import/rc_edited_import/project/project.osl.yaml --output /tmp/nekospice_import/rc_edited_verify
 cargo run -p osl-cli -- kicad-render examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_canvas_scene.svg

@@ -3,7 +3,7 @@ use osl_core::{
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_kicad::{
-    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, read_kicad_schematic,
+    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSymbolDef, read_kicad_schematic,
     read_kicad_symbol_library, read_kicad_symbol_library_index, read_kicad_symbol_library_table,
     write_kicad_schematic, write_kicad_symbol_library,
 };
@@ -81,7 +81,7 @@ Usage:
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
   osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
-  osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> <ops...>
+  osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
   osl kicad-render <file.kicad_sch> --output <file.svg>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
@@ -439,14 +439,20 @@ fn kicad_edit_command(args: &[String]) -> OslResult<i32> {
         )));
     }
 
-    let edits = parse_kicad_edit_ops(args)?;
+    let mut schematic = read_kicad_schematic(input_path)?;
+    let mut symbol_definitions = schematic.library_symbols.clone();
+    for library_path in flag_values(args, "--library") {
+        let library = read_kicad_symbol_library(Path::new(&library_path))?;
+        symbol_definitions.extend(library.symbols);
+    }
+
+    let edits = parse_kicad_edit_ops(args, &symbol_definitions)?;
     if edits.is_empty() {
         return Err(OslError::InvalidInput(
             "kicad-edit requires at least one edit op".to_string(),
         ));
     }
 
-    let mut schematic = read_kicad_schematic(input_path)?;
     let mut summaries = Vec::new();
     for edit in edits {
         summaries.push(schematic.apply_edit(edit)?);
@@ -1570,6 +1576,22 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
     None
 }
 
+fn flag_values(args: &[String], flag: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        if args[index] == flag
+            && let Some(value) = args.get(index + 1)
+        {
+            values.push(value.clone());
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+    values
+}
+
 fn has_flag(args: &[String], flag: &str) -> bool {
     args.iter().any(|arg| arg == flag)
 }
@@ -1596,6 +1618,7 @@ fn flag_takes_value(flag: &str) -> bool {
             | "--ngspice"
             | "--output"
             | "--points"
+            | "--library"
             | "--signal"
             | "--symbol"
             | "--to"
@@ -1625,14 +1648,20 @@ fn parse_positive_usize(value: &str, flag: &str) -> OslResult<usize> {
     Ok(jobs)
 }
 
-fn parse_kicad_edit_ops(args: &[String]) -> OslResult<Vec<KicadSchematicEdit>> {
+fn parse_kicad_edit_ops(
+    args: &[String],
+    symbol_definitions: &[KicadSymbolDef],
+) -> OslResult<Vec<KicadSchematicEdit>> {
     trailing_positionals(args, 1)
         .into_iter()
-        .map(parse_kicad_edit_op)
+        .map(|op| parse_kicad_edit_op(op, symbol_definitions))
         .collect()
 }
 
-fn parse_kicad_edit_op(op: &str) -> OslResult<KicadSchematicEdit> {
+fn parse_kicad_edit_op(
+    op: &str,
+    symbol_definitions: &[KicadSymbolDef],
+) -> OslResult<KicadSchematicEdit> {
     let (name, payload) = op.split_once(':').ok_or_else(|| {
         OslError::InvalidInput(format!(
             "invalid kicad-edit op '{op}', expected <op>:<payload>"
@@ -1641,6 +1670,7 @@ fn parse_kicad_edit_op(op: &str) -> OslResult<KicadSchematicEdit> {
     match name {
         "move-symbol" => parse_kicad_move_symbol_edit(payload),
         "set-property" => parse_kicad_set_property_edit(payload),
+        "place-symbol" => parse_kicad_place_symbol_edit(payload, symbol_definitions),
         "add-wire" => parse_kicad_add_wire_edit(payload),
         "add-label" => parse_kicad_add_label_edit(payload),
         "add-global-label" => parse_kicad_add_label_edit_with_kind(payload, KicadLabelKind::Global),
@@ -1698,6 +1728,49 @@ fn parse_kicad_set_property_edit(payload: &str) -> OslResult<KicadSchematicEdit>
         name: name.to_string(),
         value: value.to_string(),
         at,
+    })
+}
+
+fn parse_kicad_place_symbol_edit(
+    payload: &str,
+    symbol_definitions: &[KicadSymbolDef],
+) -> OslResult<KicadSchematicEdit> {
+    let (payload, uuid) = split_payload_uuid(payload);
+    let (rest, at) = payload.rsplit_once(':').ok_or_else(|| {
+        OslError::InvalidInput(
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>"
+                .to_string(),
+        )
+    })?;
+    let (rest, value) = rest.rsplit_once(':').ok_or_else(|| {
+        OslError::InvalidInput(
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>"
+                .to_string(),
+        )
+    })?;
+    let (lib_id, reference) = rest.rsplit_once(':').ok_or_else(|| {
+        OslError::InvalidInput(
+            "place-symbol expects place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>"
+                .to_string(),
+        )
+    })?;
+    let definition = symbol_definitions
+        .iter()
+        .find(|definition| definition.name == lib_id || definition.local_name() == lib_id)
+        .cloned()
+        .ok_or_else(|| {
+            OslError::InvalidInput(format!(
+                "KiCad symbol definition '{lib_id}' was not found; pass --library <file.kicad_sym>"
+            ))
+        })?;
+
+    Ok(KicadSchematicEdit::PlaceSymbol {
+        definition,
+        reference: reference.to_string(),
+        value: value.to_string(),
+        at: parse_kicad_at(at, "symbol placement")?,
+        unit: Some(1),
+        uuid,
     })
 }
 
@@ -2019,7 +2092,7 @@ mod tests {
     use super::{
         SweepDimension, VerifyConfig, VerifyRun, parse_kicad_edit_ops, parse_number, positionals,
     };
-    use osl_kicad::{KicadLabelKind, KicadSchematicEdit};
+    use osl_kicad::{KicadLabelKind, KicadSchematicEdit, parse_kicad_symbol_library};
     use std::path::PathBuf;
 
     #[test]
@@ -2082,7 +2155,7 @@ mod tests {
             ]
         );
 
-        let edits = parse_kicad_edit_ops(&args).unwrap();
+        let edits = parse_kicad_edit_ops(&args, &[]).unwrap();
         assert_eq!(edits.len(), 3);
         match &edits[0] {
             KicadSchematicEdit::MoveSymbol { reference, to, .. } => {
@@ -2097,6 +2170,63 @@ mod tests {
                 assert_eq!(*kind, KicadLabelKind::Global);
             }
             edit => panic!("expected add-label edit, got {edit:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_kicad_place_symbol_edit_with_library_definition() {
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (symbol "NekoSpice:C"
+    (property "Reference" "C" (at 0 0 0))
+    (property "Value" "100n" (at 0 -2.54 0))
+    (symbol "C_0_1"
+      (pin passive line (at 0 -2.54 90) (length 2.54) (name "~") (number "1"))
+      (pin passive line (at 0 2.54 270) (length 2.54) (name "~") (number "2"))
+    )
+  )
+)"#,
+            "inline.kicad_sym",
+        )
+        .unwrap();
+        let args = [
+            "input.kicad_sch",
+            "--output",
+            "placed.kicad_sch",
+            "--library",
+            "neko_spice.kicad_sym",
+            "place-symbol:NekoSpice:C:C2:47n:101.6,53.34",
+        ]
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>();
+
+        assert_eq!(
+            positionals(&args),
+            vec![
+                "input.kicad_sch",
+                "place-symbol:NekoSpice:C:C2:47n:101.6,53.34",
+            ]
+        );
+
+        let edits = parse_kicad_edit_ops(&args, &library.symbols).unwrap();
+        assert_eq!(edits.len(), 1);
+        match &edits[0] {
+            KicadSchematicEdit::PlaceSymbol {
+                definition,
+                reference,
+                value,
+                at,
+                ..
+            } => {
+                assert_eq!(definition.name, "NekoSpice:C");
+                assert_eq!(reference, "C2");
+                assert_eq!(value, "47n");
+                assert_close(at.x, 101.6);
+                assert_close(at.y, 53.34);
+            }
+            edit => panic!("expected place-symbol edit, got {edit:?}"),
         }
     }
 
