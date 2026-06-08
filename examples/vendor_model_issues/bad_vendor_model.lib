@@ -1,0 +1,5 @@
+* NekoSpice model-check example: intentionally problematic vendor model
+.subckt BADAMP IN+ IN- OUT VCC VEE
+B1 OUT 0 V=LIMIT(V(IN+)-V(IN-), -1, 1)
+.step param gain list 1 10
+.protect

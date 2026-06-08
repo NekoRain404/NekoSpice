@@ -50,9 +50,11 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output repor
 目标：
 
 - 实现 `osl bench <directory>`。
+- 实现 `osl model-check <netlist-or-directory>` 的最小模型诊断闭环。
+- 输出 `.subckt` pin list、`.model` 索引、unsupported directive、方言风险和兼容性评分。
 - 补充文档和使用命令。
 - 建立 Git 工程。
-- 固化三天后下一步任务：measurement、sweep、模型诊断、波形数据层。
+- 固化三天后下一步任务：measurement、sweep、pin mapping、波形数据层。
 
 验收：
 
@@ -60,6 +62,7 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output repor
 cargo fmt --check
 cargo test --workspace
 cargo run -p osl-cli -- bench examples --output bench-results/basic_001
+cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
 ```
 
 ## 三天后继续做什么
@@ -67,5 +70,5 @@ cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 优先级从高到低：
 
 1. richer YAML parser：替换当前最小子集解析器。
-2. model-check：`.subckt` pin list、方言检测、unsupported directive。
+2. pin mapping：导入 KiCad / LTspice symbol pin 信息并与 `.subckt` pin list 对齐。
 3. waveform data layer：LOD、mmap、viewport query。

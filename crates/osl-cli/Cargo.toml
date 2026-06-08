@@ -10,5 +10,6 @@ path = "src/main.rs"
 
 [dependencies]
 osl-core = { path = "../osl-core" }
+osl-model = { path = "../osl-model" }
 osl-sim = { path = "../osl-sim" }
 osl-waveform = { path = "../osl-waveform" }

@@ -2,6 +2,7 @@ use osl_core::{
     OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape, json_escape,
     make_run_id, parameters_json, read_text, write_text,
 };
+use osl_model::ModelCheckReport;
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
 use osl_waveform::{MeasurementKind, WaveformSummary, measure, read_ngspice_raw};
 use std::env;
@@ -43,6 +44,7 @@ fn run_cli() -> OslResult<i32> {
         "run" => run_command(&args),
         "verify" => verify_command(&args),
         "bench" => bench_command(&args),
+        "model-check" => model_check_command(&args),
         "report" => report_command(&args),
         unknown => Err(OslError::InvalidInput(format!(
             "unknown command '{unknown}'. Run 'osl help'."
@@ -59,6 +61,7 @@ Usage:
   osl run <netlist.cir> [--output <dir>] [--ngspice <path>]
   osl verify <project.osl.yaml> [--output <dir>] [--ngspice <path>] [--jobs <n>]
   osl bench <directory> [--output <dir>] [--ngspice <path>]
+  osl model-check <netlist-or-directory> [--output <dir>]
   osl report <run-or-verify-dir>
   osl --version
 
@@ -201,11 +204,42 @@ fn bench_command(args: &[String]) -> OslResult<i32> {
     Ok(if report.failed_count() == 0 { 0 } else { 2 })
 }
 
+fn model_check_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing path for 'osl model-check'")?;
+    let output_dir = flag_value(args, "--output")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("reports").join(make_run_id("model-check")));
+
+    fs::create_dir_all(&output_dir)
+        .map_err(|err| OslError::io(format!("create {}", output_dir.display()), err))?;
+
+    let report = ModelCheckReport::scan(Path::new(input))?;
+    write_text(&output_dir.join("model-check.json"), &report.to_json())?;
+    write_text(
+        &output_dir.join("report.html"),
+        &report.to_html(report_css()),
+    )?;
+
+    println!(
+        "model-check: {} files, {} subckts, {} models, {} diagnostics ({} errors, {} warnings) -> {}",
+        report.files.len(),
+        report.subckts.len(),
+        report.models.len(),
+        report.diagnostics.len(),
+        report.error_count(),
+        report.warning_count(),
+        output_dir.display()
+    );
+
+    Ok(if report.error_count() == 0 { 0 } else { 2 })
+}
+
 fn report_command(args: &[String]) -> OslResult<i32> {
     let dir = PathBuf::from(positional(args, 0, "missing directory for 'osl report'")?);
     let run_json = dir.join("run.json");
     let verify_json = dir.join("verify.json");
     let bench_json = dir.join("bench.json");
+    let model_check_json = dir.join("model-check.json");
 
     if run_json.is_file() {
         let content = read_text(&run_json)?;
@@ -223,9 +257,11 @@ fn report_command(args: &[String]) -> OslResult<i32> {
         return Ok(0);
     }
 
-    if verify_json.is_file() || bench_json.is_file() {
+    if verify_json.is_file() || bench_json.is_file() || model_check_json.is_file() {
         let source = if verify_json.is_file() {
             verify_json
+        } else if model_check_json.is_file() {
+            model_check_json
         } else {
             bench_json
         };
@@ -245,7 +281,7 @@ fn report_command(args: &[String]) -> OslResult<i32> {
     }
 
     Err(OslError::InvalidInput(format!(
-        "{} does not contain run.json, verify.json, or bench.json",
+        "{} does not contain run.json, verify.json, bench.json, or model-check.json",
         dir.display()
     )))
 }
@@ -1175,6 +1211,7 @@ fn report_css() -> &'static str {
         "th,td{padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}",
         "th{background:#ecefeb;font-weight:700}",
         "tr.passed td:first-child{color:#0f766e;font-weight:700}",
+        "tr.warning td:first-child{color:#b45309;font-weight:700}",
         "tr.failed td:first-child{color:#b91c1c;font-weight:700}",
         "code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}",
         "pre{white-space:pre-wrap;background:#fff;border:1px solid #d9ded7;border-radius:6px;padding:16px;overflow:auto}",
