@@ -3988,13 +3988,7 @@ impl KicadCanvasPin {
             "alternate_count": self.alternates.len(),
             "name_effects": self.name_effects.as_ref().map(kicad_text_effects_value),
             "number_effects": self.number_effects.as_ref().map(kicad_text_effects_value),
-            "alternates": self.alternates.iter().map(|alternate| {
-                serde_json::json!({
-                    "name": alternate.name,
-                    "electrical_type": alternate.electrical_type,
-                    "shape": alternate.shape,
-                })
-            }).collect::<Vec<_>>(),
+            "alternates": self.alternates.iter().map(kicad_pin_alternate_value).collect::<Vec<_>>(),
         })
     }
 
@@ -4639,6 +4633,8 @@ impl KicadSymbolLibraryIndex {
                             graphic_count: resolved_symbol.graphics.len(),
                             unit_count: resolved_symbol.unit_count(),
                             units: resolved_symbol.indexed_units(),
+                            body_styles: resolved_symbol.indexed_body_styles(),
+                            pins: resolved_symbol.indexed_pins(),
                             extends: symbol.extends.clone(),
                             power: symbol.power.map(|power| power.as_str().to_string()),
                             bounding_box: resolved_symbol.bounding_box(),
@@ -4911,6 +4907,8 @@ pub struct KicadIndexedSymbol {
     pub graphic_count: usize,
     pub unit_count: usize,
     pub units: Vec<KicadIndexedSymbolUnit>,
+    pub body_styles: Vec<KicadIndexedSymbolBodyStyle>,
+    pub pins: Vec<KicadIndexedSymbolPin>,
     pub extends: Option<String>,
     pub power: Option<String>,
     pub bounding_box: Option<KicadBoundingBox>,
@@ -4930,6 +4928,8 @@ impl KicadIndexedSymbol {
             "graphic_count": self.graphic_count,
             "unit_count": self.unit_count,
             "units": self.units.iter().map(KicadIndexedSymbolUnit::to_json_value).collect::<Vec<_>>(),
+            "body_styles": self.body_styles.iter().map(KicadIndexedSymbolBodyStyle::to_json_value).collect::<Vec<_>>(),
+            "pins": self.pins.iter().map(KicadIndexedSymbolPin::to_json_value).collect::<Vec<_>>(),
             "extends": self.extends,
             "power": self.power,
             "bounding_box": self.bounding_box.map(kicad_bounding_box_value),
@@ -4948,6 +4948,47 @@ impl KicadIndexedSymbolUnit {
         serde_json::json!({
             "unit": self.unit,
             "name": self.name,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KicadIndexedSymbolBodyStyle {
+    pub body_style: u32,
+    pub name: Option<String>,
+}
+
+impl KicadIndexedSymbolBodyStyle {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "body_style": self.body_style,
+            "name": self.name,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KicadIndexedSymbolPin {
+    pub number: String,
+    pub name: String,
+    pub electrical_type: String,
+    pub shape: String,
+    pub unit: u32,
+    pub body_style: u32,
+    pub alternates: Vec<KicadPinAlternate>,
+}
+
+impl KicadIndexedSymbolPin {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "number": self.number,
+            "name": self.name,
+            "electrical_type": self.electrical_type,
+            "shape": self.shape,
+            "unit": self.unit,
+            "body_style": self.body_style,
+            "alternate_count": self.alternates.len(),
+            "alternates": self.alternates.iter().map(kicad_pin_alternate_value).collect::<Vec<_>>(),
         })
     }
 }
@@ -5402,6 +5443,7 @@ impl KicadSymbolPropertySource for KicadSymbolDef {
 struct KicadResolvedSymbolDef {
     name: String,
     exclude_from_sim: Option<bool>,
+    body_styles: Option<KicadSymbolBodyStyles>,
     pin_names: Option<KicadPinDisplay>,
     pin_numbers: Option<KicadPinDisplay>,
     unit_names: BTreeMap<u32, String>,
@@ -5415,6 +5457,7 @@ impl KicadResolvedSymbolDef {
         Self {
             name: symbol.name.clone(),
             exclude_from_sim: symbol.exclude_from_sim,
+            body_styles: symbol.body_styles.clone(),
             pin_names: symbol.pin_names.clone(),
             pin_numbers: symbol.pin_numbers.clone(),
             unit_names: symbol.unit_names.clone(),
@@ -5490,6 +5533,56 @@ impl KicadResolvedSymbolDef {
 
     fn unit_count(&self) -> usize {
         self.indexed_units().len()
+    }
+
+    fn indexed_body_styles(&self) -> Vec<KicadIndexedSymbolBodyStyle> {
+        let mut body_styles = self
+            .pins
+            .iter()
+            .map(|pin| pin.body_style)
+            .chain(self.graphics.iter().map(|graphic| graphic.body_style))
+            .filter(|body_style| *body_style != 0)
+            .collect::<BTreeSet<_>>();
+        if let Some(declared_body_styles) = &self.body_styles {
+            body_styles.extend(declared_body_styles.body_style_numbers());
+        }
+
+        body_styles
+            .into_iter()
+            .map(|body_style| KicadIndexedSymbolBodyStyle {
+                body_style,
+                name: self.body_style_name(body_style),
+            })
+            .collect()
+    }
+
+    fn body_style_name(&self, body_style: u32) -> Option<String> {
+        match &self.body_styles {
+            Some(KicadSymbolBodyStyles::Demorgan) => match body_style {
+                1 => Some("normal".to_string()),
+                2 => Some("demorgan".to_string()),
+                _ => None,
+            },
+            Some(KicadSymbolBodyStyles::Names(names)) => {
+                names.get(body_style.saturating_sub(1) as usize).cloned()
+            }
+            None => None,
+        }
+    }
+
+    fn indexed_pins(&self) -> Vec<KicadIndexedSymbolPin> {
+        self.pins
+            .iter()
+            .map(|pin| KicadIndexedSymbolPin {
+                number: pin.number().to_string(),
+                name: pin.name().to_string(),
+                electrical_type: pin.electrical_type.clone(),
+                shape: pin.shape.clone(),
+                unit: pin.unit,
+                body_style: pin.body_style,
+                alternates: pin.alternates.clone(),
+            })
+            .collect()
     }
 
     fn scoped_graphics(
@@ -5595,6 +5688,10 @@ fn apply_symbol_inheritance_overrides(
         .pin_numbers
         .clone()
         .or_else(|| resolved.pin_numbers.clone());
+    resolved.body_styles = derived
+        .body_styles
+        .clone()
+        .or_else(|| resolved.body_styles.clone());
     for (unit, name) in &derived.unit_names {
         resolved.unit_names.insert(*unit, name.clone());
     }
@@ -5663,6 +5760,13 @@ pub enum KicadSymbolBodyStyles {
 }
 
 impl KicadSymbolBodyStyles {
+    fn body_style_numbers(&self) -> Vec<u32> {
+        match self {
+            Self::Demorgan => vec![1, 2],
+            Self::Names(names) => (1..=names.len() as u32).collect(),
+        }
+    }
+
     fn write_body_styles_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(body_styles", pad));
@@ -9276,6 +9380,14 @@ fn kicad_fill_value(fill: &KicadFill) -> serde_json::Value {
     })
 }
 
+fn kicad_pin_alternate_value(alternate: &KicadPinAlternate) -> serde_json::Value {
+    serde_json::json!({
+        "name": alternate.name,
+        "electrical_type": alternate.electrical_type,
+        "shape": alternate.shape,
+    })
+}
+
 fn kicad_text_effects_value(effects: &KicadTextEffects) -> serde_json::Value {
     serde_json::json!({
         "font_size": effects.font_size.map(kicad_size_value),
@@ -10020,12 +10132,13 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 mod tests {
     use super::{
         KicadAt, KicadCanvasScene, KicadColor, KicadDiagnosticSeverity, KicadGraphic,
-        KicadIndexedSymbolUnit, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
-        KicadSize, KicadSymbolBodyStyles, KicadSymbolLibraryIndexQuery, KicadSymbolPlacement,
-        KicadSymbolPower, parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
-        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
-        read_kicad_schematic_with_libraries, read_kicad_symbol_library,
-        read_kicad_symbol_library_index, read_kicad_symbol_library_table,
+        KicadIndexedSymbolBodyStyle, KicadIndexedSymbolUnit, KicadLabelKind, KicadPoint,
+        KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolBodyStyles,
+        KicadSymbolLibraryIndexQuery, KicadSymbolPlacement, KicadSymbolPower, parse_kicad_project,
+        parse_kicad_schematic, parse_kicad_symbol_library, parse_kicad_symbol_library_table,
+        parse_sexpr, read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
+        read_kicad_symbol_library, read_kicad_symbol_library_index,
+        read_kicad_symbol_library_table,
     };
     use std::collections::BTreeMap;
     use std::fs;
@@ -14337,16 +14450,26 @@ mod tests {
   )
   (symbol "Derived"
     (extends "Parent")
+    (body_styles "normal" "alternate-body" "unused-body")
     (property "Reference" "U" (at 0 0 0))
     (property "Value" "Derived" (at 0 -2.54 0))
     (property "ki_keywords" "" (at 0 -5.08 0) (hide yes))
     (symbol "Derived_1_1"
       (unit_name "Logic")
-      (pin passive line (at -2.54 0 0) (length 2.54) (name "A") (number "1"))
+      (pin passive line
+        (at -2.54 0 0)
+        (length 2.54)
+        (name "A")
+        (number "1")
+        (alternate "A_ALT" bidirectional line)
+      )
     )
     (symbol "Derived_2_1"
       (unit_name "Power")
       (pin power_in line (at 2.54 0 180) (length 2.54) (name "VCC") (number "2"))
+    )
+    (symbol "Derived_1_2"
+      (pin passive inverted (at -2.54 2.54 0) (length 2.54) (name "A2") (number "3"))
     )
   )
   (symbol "PWR" (power global)
@@ -14378,7 +14501,7 @@ mod tests {
                 "Connector Foo:*".to_string()
             ]
         );
-        assert_eq!(derived.pin_count, 2);
+        assert_eq!(derived.pin_count, 3);
         assert_eq!(derived.graphic_count, 1);
         assert_eq!(derived.unit_count, 2);
         assert_eq!(
@@ -14394,6 +14517,27 @@ mod tests {
                 }
             ]
         );
+        assert_eq!(
+            derived.body_styles,
+            vec![
+                KicadIndexedSymbolBodyStyle {
+                    body_style: 1,
+                    name: Some("normal".to_string())
+                },
+                KicadIndexedSymbolBodyStyle {
+                    body_style: 2,
+                    name: Some("alternate-body".to_string())
+                },
+                KicadIndexedSymbolBodyStyle {
+                    body_style: 3,
+                    name: Some("unused-body".to_string())
+                }
+            ]
+        );
+        assert_eq!(derived.pins.len(), 3);
+        assert_eq!(derived.pins[0].number, "1");
+        assert_eq!(derived.pins[0].alternates[0].name, "A_ALT");
+        assert_eq!(derived.pins[2].body_style, 2);
         assert_eq!(derived.extends.as_deref(), Some("Parent"));
         assert_eq!(power.power.as_deref(), Some("global"));
         assert!(index.to_summary_json().contains("\"unit_count\": 4"));
@@ -14436,6 +14580,18 @@ mod tests {
             "Connector Foo:*"
         );
         assert_eq!(index_json["symbols"][1]["units"][0]["name"], "Logic");
+        assert_eq!(
+            index_json["symbols"][1]["body_styles"][1]["name"],
+            "alternate-body"
+        );
+        assert_eq!(
+            index_json["symbols"][1]["body_styles"][2]["name"],
+            "unused-body"
+        );
+        assert_eq!(
+            index_json["symbols"][1]["pins"][0]["alternates"][0]["name"],
+            "A_ALT"
+        );
         assert_eq!(index_json["symbols"][1]["bounding_box"]["min"]["x"], -2.54);
         assert_eq!(index_json["diagnostic_count"], 0);
         assert!(index_json["diagnostics"].as_array().unwrap().is_empty());
