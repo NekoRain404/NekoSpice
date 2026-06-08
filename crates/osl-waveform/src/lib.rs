@@ -1,5 +1,7 @@
 use osl_core::{OslError, OslResult, read_text};
+use std::fs;
 use std::path::Path;
+use std::str;
 
 #[derive(Debug, Clone)]
 pub struct Waveform {
@@ -193,58 +195,43 @@ pub fn measure(kind: MeasurementKind, values: &[f64]) -> OslResult<f64> {
     }
 }
 
+#[derive(Debug)]
+struct RawHeader {
+    title: String,
+    plot_name: String,
+    flags: Vec<String>,
+    expected_point_count: Option<usize>,
+    variables: Vec<WaveformVariable>,
+}
+
+pub fn read_ngspice_raw(path: &Path) -> OslResult<Waveform> {
+    let content =
+        fs::read(path).map_err(|err| OslError::io(format!("read {}", path.display()), err))?;
+    parse_ngspice_raw(&content, &path.display().to_string())
+}
+
+pub fn parse_ngspice_raw(input: &[u8], source_name: &str) -> OslResult<Waveform> {
+    if find_section_payload_offset(input, b"Binary:").is_some() {
+        return parse_ngspice_binary_raw(input, source_name);
+    }
+
+    let content = str::from_utf8(input).map_err(|err| {
+        OslError::InvalidInput(format!(
+            "{} is not valid UTF-8 ASCII raw data: {}",
+            source_name, err
+        ))
+    })?;
+    parse_ngspice_ascii_raw(content, source_name)
+}
+
 pub fn read_ngspice_ascii_raw(path: &Path) -> OslResult<Waveform> {
     let content = read_text(path)?;
     parse_ngspice_ascii_raw(&content, &path.display().to_string())
 }
 
 pub fn parse_ngspice_ascii_raw(input: &str, source_name: &str) -> OslResult<Waveform> {
-    let mut title = String::new();
-    let mut plot_name = String::new();
-    let mut expected_variable_count = None;
-    let mut expected_point_count = None;
-    let mut variables = Vec::new();
     let mut lines = input.lines().enumerate().peekable();
-
-    while let Some((line_index, raw_line)) = lines.next() {
-        let line = raw_line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        if let Some(value) = strip_header(line, "Title:") {
-            title = value.to_string();
-            continue;
-        }
-        if let Some(value) = strip_header(line, "Plotname:") {
-            plot_name = value.to_string();
-            continue;
-        }
-        if let Some(value) = strip_header(line, "No. Variables:") {
-            expected_variable_count = Some(parse_usize(value, source_name, line_index + 1)?);
-            continue;
-        }
-        if let Some(value) = strip_header(line, "No. Points:") {
-            expected_point_count = Some(parse_usize(value, source_name, line_index + 1)?);
-            continue;
-        }
-        if line == "Variables:" {
-            parse_variables(
-                &mut lines,
-                source_name,
-                expected_variable_count,
-                &mut variables,
-            )?;
-            break;
-        }
-    }
-
-    if variables.is_empty() {
-        return Err(OslError::InvalidInput(format!(
-            "{} does not contain ngspice Variables section",
-            source_name
-        )));
-    }
+    let header = parse_header(&mut lines, source_name)?;
 
     let mut found_values = false;
     while let Some((_, raw_line)) = lines.peek() {
@@ -266,15 +253,159 @@ pub fn parse_ngspice_ascii_raw(input: &str, source_name: &str) -> OslResult<Wave
     let columns = parse_values(
         &mut lines,
         source_name,
-        variables.len(),
-        expected_point_count,
+        header.variables.len(),
+        header.expected_point_count,
     )?;
 
     Ok(Waveform {
+        title: header.title,
+        plot_name: header.plot_name,
+        variables: header.variables,
+        columns,
+    })
+}
+
+pub fn parse_ngspice_binary_raw(input: &[u8], source_name: &str) -> OslResult<Waveform> {
+    let payload_offset = find_section_payload_offset(input, b"Binary:").ok_or_else(|| {
+        OslError::InvalidInput(format!(
+            "{} does not contain ngspice Binary section",
+            source_name
+        ))
+    })?;
+    let header_text = str::from_utf8(&input[..payload_offset]).map_err(|err| {
+        OslError::InvalidInput(format!(
+            "{} header is not valid UTF-8 before binary payload: {}",
+            source_name, err
+        ))
+    })?;
+    let mut lines = header_text.lines().enumerate().peekable();
+    let header = parse_header(&mut lines, source_name)?;
+
+    if header.flags.iter().any(|flag| flag == "complex") {
+        return Err(OslError::InvalidInput(format!(
+            "{} contains complex binary raw data, which is not supported yet",
+            source_name
+        )));
+    }
+
+    let variable_count = header.variables.len();
+    if variable_count == 0 {
+        return Err(OslError::InvalidInput(format!(
+            "{} does not declare any binary raw variables",
+            source_name
+        )));
+    }
+
+    let payload = &input[payload_offset..];
+    if payload.len() % 8 != 0 {
+        return Err(OslError::InvalidInput(format!(
+            "{} binary payload length {} at byte offset {} is not aligned to f64 values",
+            source_name,
+            payload.len(),
+            payload_offset
+        )));
+    }
+
+    let value_count = payload.len() / 8;
+    if value_count % variable_count != 0 {
+        return Err(OslError::InvalidInput(format!(
+            "{} binary payload contains {} f64 values, which is not divisible by {} variables",
+            source_name, value_count, variable_count
+        )));
+    }
+
+    let point_count = value_count / variable_count;
+    if let Some(expected) = header.expected_point_count
+        && expected != point_count
+    {
+        return Err(OslError::InvalidInput(format!(
+            "{} declares {} points but binary payload contains {}",
+            source_name, expected, point_count
+        )));
+    }
+
+    let mut columns = vec![Vec::<f64>::with_capacity(point_count); variable_count];
+    for point_index in 0..point_count {
+        for (variable_index, column) in columns.iter_mut().enumerate() {
+            let value_index = point_index * variable_count + variable_index;
+            let byte_offset = payload_offset + value_index * 8;
+            let bytes = input[byte_offset..byte_offset + 8]
+                .try_into()
+                .expect("binary payload was checked for f64 alignment");
+            column.push(f64::from_le_bytes(bytes));
+        }
+    }
+
+    Ok(Waveform {
+        title: header.title,
+        plot_name: header.plot_name,
+        variables: header.variables,
+        columns,
+    })
+}
+
+fn parse_header<'a, I>(
+    lines: &mut std::iter::Peekable<I>,
+    source_name: &str,
+) -> OslResult<RawHeader>
+where
+    I: Iterator<Item = (usize, &'a str)>,
+{
+    let mut title = String::new();
+    let mut plot_name = String::new();
+    let mut flags = Vec::new();
+    let mut expected_variable_count = None;
+    let mut expected_point_count = None;
+    let mut variables = Vec::new();
+
+    while let Some((line_index, raw_line)) = lines.next() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Some(value) = strip_header(line, "Title:") {
+            title = value.to_string();
+            continue;
+        }
+        if let Some(value) = strip_header(line, "Plotname:") {
+            plot_name = value.to_string();
+            continue;
+        }
+        if let Some(value) = strip_header(line, "Flags:") {
+            flags = value
+                .split_whitespace()
+                .map(|flag| flag.to_ascii_lowercase())
+                .collect();
+            continue;
+        }
+        if let Some(value) = strip_header(line, "No. Variables:") {
+            expected_variable_count = Some(parse_usize(value, source_name, line_index + 1)?);
+            continue;
+        }
+        if let Some(value) = strip_header(line, "No. Points:") {
+            expected_point_count = Some(parse_usize(value, source_name, line_index + 1)?);
+            continue;
+        }
+        if line == "Variables:" {
+            parse_variables(lines, source_name, expected_variable_count, &mut variables)?;
+            break;
+        }
+    }
+
+    if variables.is_empty() {
+        return Err(OslError::InvalidInput(format!(
+            "{} does not contain ngspice Variables section",
+            source_name
+        )));
+    }
+
+    Ok(RawHeader {
         title,
         plot_name,
+        flags,
+        expected_point_count,
         variables,
-        columns,
     })
 }
 
@@ -293,7 +424,7 @@ where
             lines.next();
             continue;
         }
-        if line == "Values:" {
+        if line == "Values:" || line == "Binary:" {
             break;
         }
 
@@ -414,6 +545,37 @@ fn strip_header<'a>(line: &'a str, key: &str) -> Option<&'a str> {
     line.strip_prefix(key).map(str::trim)
 }
 
+fn find_section_payload_offset(input: &[u8], marker: &[u8]) -> Option<usize> {
+    let mut line_start = 0;
+    while line_start < input.len() {
+        let line_end = input[line_start..]
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map(|offset| line_start + offset)
+            .unwrap_or(input.len());
+        let line = trim_ascii(&input[line_start..line_end]);
+        if line == marker {
+            return Some((line_end + 1).min(input.len()));
+        }
+        line_start = line_end.saturating_add(1);
+    }
+    None
+}
+
+fn trim_ascii(mut input: &[u8]) -> &[u8] {
+    while let Some((first, rest)) = input.split_first()
+        && first.is_ascii_whitespace()
+    {
+        input = rest;
+    }
+    while let Some((last, rest)) = input.split_last()
+        && last.is_ascii_whitespace()
+    {
+        input = rest;
+    }
+    input
+}
+
 fn parse_usize(input: &str, source_name: &str, line: usize) -> OslResult<usize> {
     input.parse::<usize>().map_err(|_| {
         OslError::InvalidInput(format!(
@@ -491,5 +653,57 @@ Values:
         assert_eq!(summary.min, 2.0);
         assert_eq!(summary.max, 4.0);
         assert_eq!(summary.peak_to_peak, 2.0);
+    }
+
+    #[test]
+    fn parses_ngspice_binary_raw() {
+        let mut raw = b"Title: demo\n\
+Date: today\n\
+Plotname: Transient Analysis\n\
+Flags: real\n\
+No. Variables: 3\n\
+No. Points: 2\n\
+Variables:\n\
+\t0\ttime\ttime\n\
+\t1\tv(in)\tvoltage\n\
+\t2\tv(out)\tvoltage\n\
+Binary:\n"
+            .to_vec();
+        for value in [0.0_f64, 1.0, 2.0, 1.0e-6, 3.0, 4.0] {
+            raw.extend_from_slice(&value.to_le_bytes());
+        }
+
+        let waveform = parse_ngspice_raw(&raw, "binary.raw").unwrap();
+
+        assert_eq!(waveform.title(), "demo");
+        assert_eq!(waveform.plot_name(), "Transient Analysis");
+        assert_eq!(waveform.point_count(), 2);
+        assert_eq!(waveform.signal_values("time").unwrap(), &[0.0, 1.0e-6]);
+        assert_eq!(waveform.signal_values("v(in)").unwrap(), &[1.0, 3.0]);
+        assert_eq!(waveform.signal_values("v(out)").unwrap(), &[2.0, 4.0]);
+        assert_eq!(
+            waveform
+                .signal_values_in_window("v(out)", Some(0.5e-6), None)
+                .unwrap(),
+            vec![4.0]
+        );
+    }
+
+    #[test]
+    fn rejects_misaligned_binary_payload() {
+        let mut raw = b"Title: demo\n\
+Plotname: Transient Analysis\n\
+Flags: real\n\
+No. Variables: 1\n\
+No. Points: 1\n\
+Variables:\n\
+\t0\ttime\ttime\n\
+Binary:\n"
+            .to_vec();
+        raw.extend_from_slice(&[1, 2, 3]);
+
+        let error = parse_ngspice_binary_raw(&raw, "bad.raw").unwrap_err();
+
+        assert!(error.to_string().contains("not aligned to f64 values"));
     }
 }

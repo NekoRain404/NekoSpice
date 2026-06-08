@@ -11,7 +11,7 @@ use std::time::Instant;
 pub struct BackendCapabilities {
     pub batch: bool,
     pub process_isolated: bool,
-    pub writes_ascii_waveform: bool,
+    pub writes_binary_waveform: bool,
 }
 
 pub trait SimulatorBackend {
@@ -58,7 +58,7 @@ impl SimulatorBackend for NgspiceCliBackend {
         BackendCapabilities {
             batch: true,
             process_isolated: true,
-            writes_ascii_waveform: true,
+            writes_binary_waveform: true,
         }
     }
 
@@ -200,7 +200,7 @@ fn ensure_ngspice_control_exports(source: &str) -> String {
     for line in &lines {
         let trimmed = line.trim().to_ascii_lowercase();
         if !inserted && trimmed == ".endc" {
-            output.push_str("set filetype=ascii\n");
+            output.push_str("set filetype=binary\n");
             output.push_str("write waveform.raw all\n");
             inserted = true;
         }
@@ -223,7 +223,7 @@ fn ensure_ngspice_control_exports(source: &str) -> String {
         }
 
         without_end.push_str(".control\n");
-        without_end.push_str("set filetype=ascii\n");
+        without_end.push_str("set filetype=binary\n");
         without_end.push_str("run\n");
         without_end.push_str("write waveform.raw all\n");
         without_end.push_str(".endc\n");
@@ -303,7 +303,7 @@ mod tests {
         let output = ensure_ngspice_control_exports(source);
 
         assert!(output.contains("write waveform.raw all\n.endc"));
-        assert!(output.contains("set filetype=ascii"));
+        assert!(output.contains("set filetype=binary"));
     }
 
     #[test]
@@ -312,8 +312,9 @@ mod tests {
         let output = ensure_ngspice_control_exports(source);
 
         assert!(
-            output
-                .contains(".control\nset filetype=ascii\nrun\nwrite waveform.raw all\n.endc\n.end")
+            output.contains(
+                ".control\nset filetype=binary\nrun\nwrite waveform.raw all\n.endc\n.end"
+            )
         );
     }
 

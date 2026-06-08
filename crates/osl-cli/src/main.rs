@@ -3,7 +3,7 @@ use osl_core::{
     make_run_id, parameters_json, read_text, write_text,
 };
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
-use osl_waveform::{MeasurementKind, WaveformSummary, measure, read_ngspice_ascii_raw};
+use osl_waveform::{MeasurementKind, WaveformSummary, measure, read_ngspice_raw};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -707,7 +707,7 @@ fn evaluate_checks(run_dir: &Path, checks: &[VerifyCheck]) -> Vec<CheckResult> {
 
 fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
     let waveform_path = run_dir.join("waveform.raw");
-    let waveform = match read_ngspice_ascii_raw(&waveform_path) {
+    let waveform = match read_ngspice_raw(&waveform_path) {
         Ok(waveform) => waveform,
         Err(error) => {
             return CheckResult {
