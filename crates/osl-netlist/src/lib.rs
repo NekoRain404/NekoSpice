@@ -1,5 +1,5 @@
 use osl_core::{OslError, OslResult, html_escape, json_escape, read_text};
-use osl_kicad::read_kicad_schematic_with_libraries;
+use osl_kicad::{KicadProject, read_kicad_project, read_kicad_schematic_with_libraries};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
@@ -53,10 +53,15 @@ pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
 
 fn resolve_import_source_path(path: &Path) -> OslResult<PathBuf> {
     if path.is_dir() {
-        return discover_kicad_project_source(path);
+        let hints = kicad_project_source_hints_for_dir(path);
+        return discover_kicad_project_source(path, &hints);
     }
     if is_kicad_project_file(path) {
-        return discover_kicad_project_source(path.parent().unwrap_or_else(|| Path::new(".")));
+        let hints = kicad_project_source_hints_for_file(path);
+        return discover_kicad_project_source(
+            path.parent().unwrap_or_else(|| Path::new(".")),
+            &hints,
+        );
     }
     Ok(path.to_path_buf())
 }
@@ -67,17 +72,23 @@ fn is_kicad_project_file(path: &Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("kicad_pro"))
 }
 
-fn discover_kicad_project_source(project_dir: &Path) -> OslResult<PathBuf> {
-    discover_kicad_project_schematic(project_dir)
+fn discover_kicad_project_source(
+    project_dir: &Path,
+    hints: &KicadProjectSourceHints,
+) -> OslResult<PathBuf> {
+    discover_kicad_project_schematic(project_dir, hints)
         .or_else(|_| discover_kicad_project_netlist(project_dir))
 }
 
-fn discover_kicad_project_schematic(project_dir: &Path) -> OslResult<PathBuf> {
+fn discover_kicad_project_schematic(
+    project_dir: &Path,
+    hints: &KicadProjectSourceHints,
+) -> OslResult<PathBuf> {
     let mut candidates = Vec::new();
     collect_kicad_schematic_candidates(project_dir, project_dir, &mut candidates)?;
     candidates.sort_by(|left, right| {
-        kicad_schematic_candidate_score(project_dir, right)
-            .cmp(&kicad_schematic_candidate_score(project_dir, left))
+        kicad_schematic_candidate_score(project_dir, hints, right)
+            .cmp(&kicad_schematic_candidate_score(project_dir, hints, left))
             .then_with(|| left.display().to_string().cmp(&right.display().to_string()))
     });
     candidates.into_iter().next().ok_or_else(|| {
@@ -203,7 +214,64 @@ fn kicad_candidate_score(path: &Path) -> usize {
     score
 }
 
-fn kicad_schematic_candidate_score(project_dir: &Path, path: &Path) -> usize {
+#[derive(Debug, Default)]
+struct KicadProjectSourceHints {
+    schematic_stems: Vec<String>,
+}
+
+impl KicadProjectSourceHints {
+    fn push_stem(&mut self, value: Option<&str>) {
+        let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+            return;
+        };
+        let normalized = value.to_ascii_lowercase();
+        if !self.schematic_stems.contains(&normalized) {
+            self.schematic_stems.push(normalized);
+        }
+    }
+
+    fn push_path_stem(&mut self, path: &Path) {
+        self.push_stem(path.file_stem().and_then(|stem| stem.to_str()));
+    }
+
+    fn push_project(&mut self, project: &KicadProject) {
+        for candidate in project.schematic_stem_candidates() {
+            self.push_stem(Some(&candidate));
+        }
+    }
+}
+
+fn kicad_project_source_hints_for_file(path: &Path) -> KicadProjectSourceHints {
+    let mut hints = KicadProjectSourceHints::default();
+    hints.push_path_stem(path);
+    if let Ok(project) = read_kicad_project(path) {
+        hints.push_project(&project);
+    }
+    hints
+}
+
+fn kicad_project_source_hints_for_dir(project_dir: &Path) -> KicadProjectSourceHints {
+    let mut hints = KicadProjectSourceHints::default();
+    hints.push_path_stem(project_dir);
+    if let Ok(entries) = fs::read_dir(project_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if is_kicad_project_file(&path) {
+                hints.push_path_stem(&path);
+                if let Ok(project) = read_kicad_project(&path) {
+                    hints.push_project(&project);
+                }
+            }
+        }
+    }
+    hints
+}
+
+fn kicad_schematic_candidate_score(
+    project_dir: &Path,
+    hints: &KicadProjectSourceHints,
+    path: &Path,
+) -> usize {
     let project_name = project_dir
         .file_name()
         .and_then(|name| name.to_str())
@@ -218,10 +286,19 @@ fn kicad_schematic_candidate_score(project_dir: &Path, path: &Path) -> usize {
     if !project_name.is_empty() && stem == project_name {
         score += 50;
     }
+    if hints.schematic_stems.iter().any(|hint| hint == &stem) {
+        score += 120;
+    }
+    if path.parent() == Some(project_dir) {
+        score += 10;
+    }
     if let Ok(content) = read_text(path) {
         let lowered = content.to_ascii_lowercase();
         if lowered.contains("(kicad_sch") {
             score += 50;
+        }
+        if lowered.contains("(sheet ") {
+            score += 5;
         }
         if lowered.contains("(symbol") {
             score += 10;
@@ -2546,6 +2623,106 @@ XU1 in out vcc vee GOODAMP
         assert!(from_dir.source_netlist.contains("R1 in out 1k"));
         assert!(from_dir.source_netlist.contains("C1 out 0 100n"));
         assert!(from_dir.source_netlist.contains(".tran 1u 1m"));
+        assert_eq!(from_project_file.source_netlist, from_dir.source_netlist);
+
+        let _ = fs::remove_dir_all(project_dir);
+    }
+
+    #[test]
+    fn prefers_kicad_project_named_schematic_over_other_sheets() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let project_dir = std::env::temp_dir().join(format!(
+            "nekospice_kicad_project_source_select_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project_dir);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::copy(
+            workspace_root.join("examples/kicad_schematic/neko_spice.kicad_sym"),
+            project_dir.join("neko_spice.kicad_sym"),
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("sym-lib-table"),
+            r#"(sym_lib_table
+  (version 7)
+  (lib (name "NekoSpice")(type "KiCad")(uri "${KIPRJMOD}/neko_spice.kicad_sym")(options "")(descr ""))
+)"#,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("root_project.kicad_pro"),
+            r#"{
+  "meta": { "filename": "root_project.kicad_pro", "version": 1 },
+  "project": { "name": "root_project" },
+  "sheets": [
+    [ "root-sheet-uuid", "Root" ],
+    [ "child-sheet-uuid", "aaa_sheet" ]
+  ],
+  "text_variables": {}
+}"#,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("aaa_sheet.kicad_sch"),
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (wire (pts (xy 7 10) (xy 10 10)))
+  (wire (pts (xy 15.08 10) (xy 18 10)))
+  (label "child" (at 7 10 0))
+  (label "0" (at 18 10 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 12.54 10 0)
+    (property "Reference" "Rchild" (at 12.54 8 0))
+    (property "Value" "9k" (at 12.54 12 0))
+  )
+)"#,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("root_project.kicad_sch"),
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (wire (pts (xy 7 10) (xy 10 10)))
+  (wire (pts (xy 15.08 10) (xy 18 10)))
+  (label "in" (at 7 10 0))
+  (label "0" (at 18 10 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 12.54 10 0)
+    (property "Reference" "R1" (at 12.54 8 0))
+    (property "Value" "2k" (at 12.54 12 0))
+  )
+)"#,
+        )
+        .unwrap();
+
+        let from_dir = read_import_input(&project_dir).unwrap();
+        let from_project_file =
+            read_import_input(&project_dir.join("root_project.kicad_pro")).unwrap();
+
+        assert_eq!(
+            from_dir.source_path,
+            project_dir.join("root_project.kicad_sch")
+        );
+        assert_eq!(
+            from_project_file.source_path,
+            project_dir.join("root_project.kicad_sch")
+        );
+        assert!(from_dir.source_netlist.contains("R1 in 0 2k"));
+        assert!(!from_dir.source_netlist.contains("Rchild"));
         assert_eq!(from_project_file.source_netlist, from_dir.source_netlist);
 
         let _ = fs::remove_dir_all(project_dir);

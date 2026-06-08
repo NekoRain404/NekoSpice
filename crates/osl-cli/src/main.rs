@@ -3,7 +3,7 @@ use osl_core::{
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_kicad::{
-    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSymbolDef,
+    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSymbolDef, read_kicad_project,
     read_kicad_schematic_with_libraries, read_kicad_symbol_library,
     read_kicad_symbol_library_index, read_kicad_symbol_library_table, write_kicad_schematic,
     write_kicad_symbol_library,
@@ -81,7 +81,7 @@ Usage:
   osl bench <directory> [--output <dir>] [--ngspice <path>]
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
-  osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
+  osl kicad-inspect <file.kicad_pro-or-file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
   osl kicad-check <file.kicad_sch> [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
@@ -368,6 +368,7 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
             .canvas_scene()
             .to_summary_json(),
         ("kicad_sch", _) => read_kicad_schematic_with_libraries(path)?.to_summary_json(),
+        ("kicad_pro", _) => read_kicad_project(path)?.to_summary_json(),
         ("kicad_sym", _) => read_kicad_symbol_library(path)?.to_summary_json(),
         (_, Some("sym-lib-table")) if should_index => {
             read_kicad_symbol_library_index(path)?.to_summary_json()
@@ -375,7 +376,7 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
         (_, Some("sym-lib-table")) => read_kicad_symbol_library_table(path)?.to_summary_json(),
         _ => {
             return Err(OslError::InvalidInput(format!(
-                "{} is not a supported KiCad schematic/library file (.kicad_sch, .kicad_sym, sym-lib-table)",
+                "{} is not a supported KiCad project/schematic/library file (.kicad_pro, .kicad_sch, .kicad_sym, sym-lib-table)",
                 path.display()
             )));
         }
