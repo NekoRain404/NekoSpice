@@ -241,7 +241,8 @@ impl KicadSchematic {
                 "  \"wire_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"text_count\": {},\n",
-                "  \"spice_directive_count\": {}\n",
+                "  \"spice_directive_count\": {},\n",
+                "  \"library_graphic_count\": {}\n",
                 "}}"
             ),
             json_escape(&self.source),
@@ -252,7 +253,11 @@ impl KicadSchematic {
             self.wires.len(),
             self.labels.len(),
             self.text_items.len(),
-            self.spice_directives().len()
+            self.spice_directives().len(),
+            self.library_symbols
+                .iter()
+                .map(|symbol| symbol.graphics.len())
+                .sum::<usize>()
         )
     }
 }
@@ -413,13 +418,18 @@ impl KicadSymbolLibrary {
                 "  \"source\": \"{}\",\n",
                 "  \"version\": {},\n",
                 "  \"generator\": {},\n",
-                "  \"symbol_count\": {}\n",
+                "  \"symbol_count\": {},\n",
+                "  \"graphic_count\": {}\n",
                 "}}"
             ),
             json_escape(&self.source),
             json_option(self.version.as_deref()),
             json_option(self.generator.as_deref()),
-            self.symbols.len()
+            self.symbols.len(),
+            self.symbols
+                .iter()
+                .map(|symbol| symbol.graphics.len())
+                .sum::<usize>()
         )
     }
 }
@@ -455,6 +465,7 @@ impl KicadSymbolInstance {
 pub struct KicadSymbolDef {
     pub name: String,
     pub properties: Vec<KicadProperty>,
+    pub graphics: Vec<KicadGraphic>,
     pub pins: Vec<KicadPinDef>,
 }
 
@@ -464,6 +475,132 @@ impl KicadSymbolDef {
             .iter()
             .find(|property| property.name == name)
             .map(|property| property.value.as_str())
+    }
+
+    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
+        let mut bounds = KicadBoundingBoxBuilder::default();
+        for graphic in &self.graphics {
+            graphic.include_in_bounds(&mut bounds);
+        }
+        for pin in &self.pins {
+            if let Some(at) = pin.at {
+                bounds.include(at.point());
+                if let Some(length) = pin.length {
+                    bounds.include(pin_body_end(at, length));
+                }
+            }
+        }
+        bounds.finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum KicadGraphic {
+    Polyline {
+        points: Vec<KicadPoint>,
+    },
+    Rectangle {
+        start: KicadPoint,
+        end: KicadPoint,
+    },
+    Circle {
+        center: KicadPoint,
+        radius: f64,
+    },
+    Arc {
+        start: KicadPoint,
+        mid: Option<KicadPoint>,
+        end: KicadPoint,
+    },
+    Text {
+        text: String,
+        at: Option<KicadAt>,
+    },
+}
+
+impl KicadGraphic {
+    fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
+        match self {
+            Self::Polyline { points } => {
+                for point in points {
+                    bounds.include(*point);
+                }
+            }
+            Self::Rectangle { start, end } => {
+                bounds.include(*start);
+                bounds.include(*end);
+            }
+            Self::Circle { center, radius } => {
+                bounds.include(KicadPoint {
+                    x: center.x - radius,
+                    y: center.y - radius,
+                });
+                bounds.include(KicadPoint {
+                    x: center.x + radius,
+                    y: center.y + radius,
+                });
+            }
+            Self::Arc { start, mid, end } => {
+                bounds.include(*start);
+                if let Some(mid) = mid {
+                    bounds.include(*mid);
+                }
+                bounds.include(*end);
+            }
+            Self::Text { at, .. } => {
+                if let Some(at) = at {
+                    bounds.include(at.point());
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KicadBoundingBox {
+    pub min: KicadPoint,
+    pub max: KicadPoint,
+}
+
+impl KicadBoundingBox {
+    pub fn width(self) -> f64 {
+        self.max.x - self.min.x
+    }
+
+    pub fn height(self) -> f64 {
+        self.max.y - self.min.y
+    }
+}
+
+#[derive(Debug, Default)]
+struct KicadBoundingBoxBuilder {
+    min: Option<KicadPoint>,
+    max: Option<KicadPoint>,
+}
+
+impl KicadBoundingBoxBuilder {
+    fn include(&mut self, point: KicadPoint) {
+        self.min = Some(match self.min {
+            Some(min) => KicadPoint {
+                x: min.x.min(point.x),
+                y: min.y.min(point.y),
+            },
+            None => point,
+        });
+        self.max = Some(match self.max {
+            Some(max) => KicadPoint {
+                x: max.x.max(point.x),
+                y: max.y.max(point.y),
+            },
+            None => point,
+        });
+    }
+
+    fn finish(self) -> Option<KicadBoundingBox> {
+        Some(KicadBoundingBox {
+            min: self.min?,
+            max: self.max?,
+        })
     }
 }
 
@@ -738,6 +875,7 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
+        graphics: collect_graphics(node),
         pins: collect_pin_defs(node),
     })
 }
@@ -844,6 +982,58 @@ fn collect_pin_defs_into(node: &Sexp, pins: &mut Vec<KicadPinDef>) {
     }
 }
 
+fn collect_graphics(node: &Sexp) -> Vec<KicadGraphic> {
+    let mut graphics = Vec::new();
+    collect_graphics_into(node, &mut graphics);
+    graphics
+}
+
+fn collect_graphics_into(node: &Sexp, graphics: &mut Vec<KicadGraphic>) {
+    if let Some(graphic) = parse_graphic(node) {
+        graphics.push(graphic);
+    }
+    for child in list_items(node) {
+        if matches!(child, Sexp::List(_)) {
+            collect_graphics_into(child, graphics);
+        }
+    }
+}
+
+fn parse_graphic(node: &Sexp) -> Option<KicadGraphic> {
+    let items = list_items(node);
+    match head(node)? {
+        "polyline" => {
+            let points = child(items, "pts").map(parse_points).unwrap_or_default();
+            (!points.is_empty()).then_some(KicadGraphic::Polyline { points })
+        }
+        "rectangle" => Some(KicadGraphic::Rectangle {
+            start: child(items, "start").and_then(parse_xy)?,
+            end: child(items, "end").and_then(parse_xy)?,
+        }),
+        "circle" => {
+            let center = child(items, "center").and_then(parse_xy)?;
+            let radius = child_value(items, "radius")
+                .and_then(|value| value.parse().ok())
+                .or_else(|| {
+                    child(items, "end")
+                        .and_then(parse_xy)
+                        .map(|end| ((end.x - center.x).powi(2) + (end.y - center.y).powi(2)).sqrt())
+                })?;
+            Some(KicadGraphic::Circle { center, radius })
+        }
+        "arc" => Some(KicadGraphic::Arc {
+            start: child(items, "start").and_then(parse_xy)?,
+            mid: child(items, "mid").and_then(parse_xy),
+            end: child(items, "end").and_then(parse_xy)?,
+        }),
+        "text" => Some(KicadGraphic::Text {
+            text: list_value(node, 1)?,
+            at: child(items, "at").and_then(parse_at),
+        }),
+        _ => None,
+    }
+}
+
 fn direct_children<'a>(items: &'a [Sexp], name: &str) -> impl Iterator<Item = &'a Sexp> + 'a {
     let name = name.to_string();
     items
@@ -900,6 +1090,14 @@ fn transform_symbol_point(pin_at: KicadAt, symbol_at: KicadAt) -> KicadPoint {
     KicadPoint {
         x: symbol_at.x + rotated.x,
         y: symbol_at.y + rotated.y,
+    }
+}
+
+fn pin_body_end(at: KicadAt, length: f64) -> KicadPoint {
+    let radians = at.rotation.to_radians();
+    KicadPoint {
+        x: at.x + length * radians.cos(),
+        y: at.y + length * radians.sin(),
     }
 }
 
@@ -996,6 +1194,14 @@ mod tests {
         assert_eq!(schematic.version.as_deref(), Some("20230121"));
         assert_eq!(schematic.symbols.len(), 3);
         assert_eq!(schematic.library_symbols.len(), 3);
+        assert_eq!(
+            schematic
+                .library_symbols
+                .iter()
+                .map(|symbol| symbol.graphics.len())
+                .sum::<usize>(),
+            6
+        );
         assert_eq!(schematic.wires.len(), 3);
         assert_eq!(schematic.labels.len(), 3);
         assert_eq!(schematic.spice_directives()[0].text, ".tran 1u 1m");
@@ -1008,6 +1214,11 @@ mod tests {
                 .any(|label| label.text == "out" && label.kind == KicadLabelKind::Local)
         );
         assert!(schematic.to_summary_json().contains("\"symbol_count\": 3"));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"library_graphic_count\": 6")
+        );
     }
 
     #[test]
@@ -1051,10 +1262,16 @@ mod tests {
 
         let resistor = library.symbol("NekoSpice:R").unwrap();
         assert_eq!(resistor.property("Reference"), Some("R"));
+        assert_eq!(resistor.graphics.len(), 1);
         assert_eq!(resistor.pins.len(), 2);
         assert_eq!(resistor.pins[0].number, "1");
         assert_eq!(resistor.pins[0].electrical_type, "passive");
+        let bounds = resistor.bounding_box().unwrap();
+        assert_eq!(bounds.min.x, -2.54);
+        assert_eq!(bounds.max.x, 2.54);
+        assert!(bounds.width() > 5.0);
         assert!(library.to_summary_json().contains("\"symbol_count\": 3"));
+        assert!(library.to_summary_json().contains("\"graphic_count\": 6"));
     }
 
     #[test]

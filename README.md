@@ -104,7 +104,7 @@ cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym
 ```
 
-`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, and placement metadata. The local KiCad source mirror is treated only as reference material and is ignored by Git.
+`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, and placement metadata. The local KiCad source mirror is treated only as reference material and is ignored by Git.
 
 ## Validation
 
