@@ -5,9 +5,6 @@ Rload out 0 1k
 .model D4148 D(Is=2.52n Rs=0.568 N=1.906 Cjo=1p M=0.03 Eg=1.11)
 .tran 10u 5m
 .control
-set filetype=ascii
 run
-wrdata waveform.csv time v(in) v(out)
 .endc
 .end
-

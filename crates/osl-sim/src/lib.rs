@@ -1,5 +1,6 @@
 use osl_core::{
-    Artifact, OslError, OslResult, RunMetadata, RunStatus, make_run_id, now_unix_ms, write_text,
+    Artifact, OslError, OslResult, RunMetadata, RunStatus, make_run_id, now_unix_ms, read_text,
+    write_text,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -73,16 +74,9 @@ impl SimulatorBackend for NgspiceCliBackend {
             .map_err(|err| OslError::io(format!("canonicalize {}", output_dir.display()), err))?;
         let working_netlist = output_abs.join("input.cir");
 
-        fs::copy(&source_abs, &working_netlist).map_err(|err| {
-            OslError::io(
-                format!(
-                    "copy {} to {}",
-                    source_abs.display(),
-                    working_netlist.display()
-                ),
-                err,
-            )
-        })?;
+        let source = read_text(&source_abs)?;
+        let working_source = ensure_ngspice_control_exports(&source);
+        write_text(&working_netlist, &working_source)?;
 
         let started_unix_ms = now_unix_ms();
         let timer = Instant::now();
@@ -166,7 +160,7 @@ fn collect_artifacts(output_dir: &Path) -> OslResult<Vec<Artifact>> {
 }
 
 fn artifact_kind(file_name: &str) -> &'static str {
-    if file_name.ends_with(".csv") {
+    if file_name.ends_with(".raw") || file_name.ends_with(".csv") {
         "waveform"
     } else if file_name.ends_with(".log") || file_name.ends_with(".txt") {
         "log"
@@ -174,5 +168,75 @@ fn artifact_kind(file_name: &str) -> &'static str {
         "netlist"
     } else {
         "file"
+    }
+}
+
+fn ensure_ngspice_control_exports(source: &str) -> String {
+    if source.to_ascii_lowercase().contains("waveform.raw") {
+        return source.to_string();
+    }
+
+    let lines = source.lines().collect::<Vec<_>>();
+    let mut output = String::new();
+    let mut inserted = false;
+
+    for line in &lines {
+        let trimmed = line.trim().to_ascii_lowercase();
+        if !inserted && trimmed == ".endc" {
+            output.push_str("set filetype=ascii\n");
+            output.push_str("write waveform.raw all\n");
+            inserted = true;
+        }
+        output.push_str(line);
+        output.push('\n');
+    }
+
+    if inserted {
+        output
+    } else {
+        let mut without_end = String::new();
+        let mut end_line = None::<&str>;
+        for line in lines {
+            if line.trim().eq_ignore_ascii_case(".end") {
+                end_line = Some(line);
+            } else {
+                without_end.push_str(line);
+                without_end.push('\n');
+            }
+        }
+
+        without_end.push_str(".control\n");
+        without_end.push_str("set filetype=ascii\n");
+        without_end.push_str("run\n");
+        without_end.push_str("write waveform.raw all\n");
+        without_end.push_str(".endc\n");
+        without_end.push_str(end_line.unwrap_or(".end"));
+        without_end.push('\n');
+        without_end
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_ngspice_control_exports;
+
+    #[test]
+    fn injects_raw_export_before_endc() {
+        let source = ".tran 1n 1u\n.control\nrun\n.endc\n.end\n";
+        let output = ensure_ngspice_control_exports(source);
+
+        assert!(output.contains("write waveform.raw all\n.endc"));
+        assert!(output.contains("set filetype=ascii"));
+    }
+
+    #[test]
+    fn adds_control_block_when_missing() {
+        let source = ".tran 1n 1u\n.end\n";
+        let output = ensure_ngspice_control_exports(source);
+
+        assert!(
+            output
+                .contains(".control\nset filetype=ascii\nrun\nwrite waveform.raw all\n.endc\n.end")
+        );
     }
 }

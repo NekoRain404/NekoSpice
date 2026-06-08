@@ -4,9 +4,6 @@ R1 in out 1k
 C1 out 0 1n
 .tran 10n 10u
 .control
-set filetype=ascii
 run
-wrdata waveform.csv time v(in) v(out)
 .endc
 .end
-

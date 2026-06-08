@@ -8,7 +8,7 @@ The current three-day build is a vertical slice:
 - `osl verify`: run a small YAML verification plan.
 - `osl bench`: run every `.cir` under a directory and collect timings.
 - HTML and JSON reports for runs and verification batches.
-- Measurement checks over `waveform.csv`: `final_value`, `avg`, `min`, `max`, `pp`, `rms`.
+- Measurement checks over ngspice ASCII `waveform.raw`: `final_value`, `avg`, `min`, `max`, `pp`, `rms`.
 
 ## Requirements
 
@@ -40,13 +40,14 @@ runs:
         max: 0.50
 ```
 
-The current waveform reader assumes each example writes:
+The ngspice runner automatically injects an ASCII raw export into the working netlist:
 
 ```spice
-wrdata waveform.csv time v(in) v(out)
+set filetype=ascii
+write waveform.raw all
 ```
 
-This keeps the first build fast and deterministic. The next implementation step is a real ngspice raw parser so checks no longer depend on that `wrdata` convention.
+Checks can target any signal present in the raw variable table, such as `v(out)` or `i(v1)`.
 
 ## Validation
 
@@ -55,4 +56,3 @@ cargo fmt --check
 cargo test --workspace
 cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output /tmp/nekospice_reports/basic
 ```
-

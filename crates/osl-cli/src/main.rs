@@ -3,6 +3,7 @@ use osl_core::{
     write_text,
 };
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
+use osl_waveform::{MeasurementKind, measure, read_ngspice_ascii_raw};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -454,8 +455,8 @@ fn evaluate_checks(run_dir: &Path, checks: &[VerifyCheck]) -> Vec<CheckResult> {
 }
 
 fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
-    let waveform_path = run_dir.join("waveform.csv");
-    let waveform = match WaveformTable::read(&waveform_path) {
+    let waveform_path = run_dir.join("waveform.raw");
+    let waveform = match read_ngspice_ascii_raw(&waveform_path) {
         Ok(waveform) => waveform,
         Err(error) => {
             return CheckResult {
@@ -485,7 +486,22 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
             };
         }
     };
-    let value = match measure_values(&check.kind, values) {
+    let kind = match MeasurementKind::parse(&check.kind) {
+        Ok(kind) => kind,
+        Err(error) => {
+            return CheckResult {
+                name: check.name.clone(),
+                kind: check.kind.clone(),
+                signal: check.signal.clone(),
+                value: None,
+                min: check.min,
+                max: check.max,
+                passed: false,
+                message: error.to_string(),
+            };
+        }
+    };
+    let value = match measure(kind, values) {
         Ok(value) => value,
         Err(error) => {
             return CheckResult {
@@ -520,113 +536,6 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
         max: check.max,
         passed,
         message,
-    }
-}
-
-fn measure_values(kind: &str, values: &[f64]) -> OslResult<f64> {
-    if values.is_empty() {
-        return Err(OslError::InvalidInput(
-            "waveform signal has no samples".to_string(),
-        ));
-    }
-
-    match kind {
-        "final_value" => values
-            .last()
-            .copied()
-            .ok_or_else(|| OslError::InvalidInput("waveform signal has no samples".to_string())),
-        "avg" => Ok(values.iter().sum::<f64>() / values.len() as f64),
-        "min" => Ok(values
-            .iter()
-            .copied()
-            .fold(f64::INFINITY, |best, value| best.min(value))),
-        "max" => Ok(values
-            .iter()
-            .copied()
-            .fold(f64::NEG_INFINITY, |best, value| best.max(value))),
-        "pp" => {
-            let min = measure_values("min", values)?;
-            let max = measure_values("max", values)?;
-            Ok(max - min)
-        }
-        "rms" => {
-            let mean_square =
-                values.iter().map(|value| value * value).sum::<f64>() / values.len() as f64;
-            Ok(mean_square.sqrt())
-        }
-        _ => Err(OslError::InvalidInput(format!(
-            "unsupported check kind '{}'; supported: final_value, avg, min, max, pp, rms",
-            kind
-        ))),
-    }
-}
-
-#[derive(Debug)]
-struct WaveformTable {
-    columns: Vec<Vec<f64>>,
-}
-
-impl WaveformTable {
-    fn read(path: &Path) -> OslResult<Self> {
-        let content = read_text(path)?;
-        let mut columns = Vec::<Vec<f64>>::new();
-
-        for (line_index, line) in content.lines().enumerate() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            let values = line
-                .split_whitespace()
-                .map(|value| parse_f64(value, "waveform value"))
-                .collect::<OslResult<Vec<_>>>()?;
-            if columns.is_empty() {
-                columns.resize_with(values.len(), Vec::new);
-            }
-            if values.len() != columns.len() {
-                return Err(OslError::InvalidInput(format!(
-                    "{} line {} has {} columns, expected {}",
-                    path.display(),
-                    line_index + 1,
-                    values.len(),
-                    columns.len()
-                )));
-            }
-            for (column, value) in columns.iter_mut().zip(values) {
-                column.push(value);
-            }
-        }
-
-        if columns.is_empty() {
-            return Err(OslError::InvalidInput(format!(
-                "{} is empty",
-                path.display()
-            )));
-        }
-
-        Ok(Self { columns })
-    }
-
-    fn signal_values(&self, signal: &str) -> OslResult<&[f64]> {
-        let column = waveform_value_column(signal)?;
-        self.columns.get(column).map(Vec::as_slice).ok_or_else(|| {
-            OslError::InvalidInput(format!(
-                "waveform does not contain column {} for signal '{}'",
-                column, signal
-            ))
-        })
-    }
-}
-
-fn waveform_value_column(signal: &str) -> OslResult<usize> {
-    let normalized = signal.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "time" => Ok(1),
-        "v(in)" => Ok(3),
-        "v(out)" => Ok(5),
-        _ => Err(OslError::InvalidInput(format!(
-            "unknown signal '{}'; three-day build supports time, v(in), and v(out)",
-            signal
-        ))),
     }
 }
 

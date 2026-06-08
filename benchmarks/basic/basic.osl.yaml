@@ -14,6 +14,11 @@ runs:
         signal: v(out)
         min: 0.45
         max: 0.50
+      - name: source_current_rms
+        kind: rms
+        signal: i(v1)
+        min: 0.0004
+        max: 0.0007
   - name: diode_rectifier
     netlist: ../../examples/diode_rectifier/rectifier.cir
     checks:

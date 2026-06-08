@@ -29,7 +29,9 @@ cargo run -p osl-cli -- run examples/rc_filter/rc.cir --output runs/rc_001
 - 实现 `osl verify <project.osl.yaml>`。
 - 支持一个最小 YAML 子集：`project` 和 `runs`。
 - 批量运行多个 netlist。
+- 支持 ngspice ASCII raw 解析。
 - 支持最小测量检查：`final_value`、`avg`、`min`、`max`、`pp`、`rms`。
+- checks 可以读取 raw 变量表中的任意信号，例如 `v(out)`、`i(v1)`。
 - 输出 `verify.json` 和 `report.html`。
 - 失败时返回非零退出码。
 
@@ -60,8 +62,8 @@ cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 
 优先级从高到低：
 
-1. measurement engine：`avg`、`min`、`max`、`pp`、`rms`。
-2. sweep expansion：参数矩阵批量仿真。
-3. raw parser：不再依赖 netlist 内的 `wrdata`。
+1. sweep expansion：参数矩阵批量仿真。
+2. measurement window：支持 `from` / `to` 时间窗口。
+3. binary raw parser：提升大型波形解析速度。
 4. model-check：`.subckt` pin list、方言检测、unsupported directive。
 5. waveform data layer：LOD、mmap、viewport query。
