@@ -13,6 +13,7 @@ osl-core = { path = "../osl-core" }
 osl-kicad = { path = "../osl-kicad" }
 osl-model = { path = "../osl-model" }
 osl-netlist = { path = "../osl-netlist" }
+osl-render = { path = "../osl-render" }
 osl-sim = { path = "../osl-sim" }
 osl-waveform = { path = "../osl-waveform" }
 serde = { version = "1", features = ["derive"] }

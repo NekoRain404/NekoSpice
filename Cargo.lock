@@ -38,6 +38,7 @@ dependencies = [
  "osl-kicad",
  "osl-model",
  "osl-netlist",
+ "osl-render",
  "osl-sim",
  "osl-waveform",
  "serde",
@@ -64,6 +65,14 @@ dependencies = [
 
 [[package]]
 name = "osl-netlist"
+version = "0.1.0"
+dependencies = [
+ "osl-core",
+ "osl-kicad",
+]
+
+[[package]]
+name = "osl-render"
 version = "0.1.0"
 dependencies = [
  "osl-core",

@@ -8,6 +8,7 @@ use osl_kicad::{
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
+use osl_render::render_kicad_scene_svg;
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
 use osl_waveform::{
     MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
@@ -56,6 +57,7 @@ fn run_cli() -> OslResult<i32> {
         "import" => import_command(&args),
         "kicad-inspect" => kicad_inspect_command(&args),
         "kicad-export" => kicad_export_command(&args),
+        "kicad-render" => kicad_render_command(&args),
         "waveform" => waveform_command(&args),
         "report" => report_command(&args),
         unknown => Err(OslError::InvalidInput(format!(
@@ -77,6 +79,7 @@ Usage:
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
   osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
+  osl kicad-render <file.kicad_sch> --output <file.svg>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
@@ -412,6 +415,31 @@ fn kicad_export_command(args: &[String]) -> OslResult<i32> {
     }
 
     println!("kicad-export -> {output}");
+    Ok(0)
+}
+
+fn kicad_render_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing KiCad path for 'osl kicad-render'")?;
+    let output = flag_value(args, "--output").ok_or_else(|| {
+        OslError::InvalidInput("missing --output <file.svg> for 'osl kicad-render'".to_string())
+    })?;
+    let input_path = Path::new(input);
+    let extension = input_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if extension != "kicad_sch" {
+        return Err(OslError::InvalidInput(format!(
+            "{} is not a supported KiCad render input (.kicad_sch)",
+            input_path.display()
+        )));
+    }
+
+    let schematic = read_kicad_schematic(input_path)?;
+    let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+    write_text(Path::new(&output), &svg)?;
+    println!("kicad-render -> {output}");
     Ok(0)
 }
 

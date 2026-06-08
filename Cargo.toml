@@ -4,6 +4,7 @@ members = [
     "crates/osl-kicad",
     "crates/osl-model",
     "crates/osl-netlist",
+    "crates/osl-render",
     "crates/osl-waveform",
     "crates/osl-sim",
     "crates/osl-cli",
