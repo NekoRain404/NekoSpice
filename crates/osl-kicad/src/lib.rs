@@ -3823,6 +3823,21 @@ impl KicadSymbolLibrary {
             .iter()
             .filter(|symbol| symbol.duplicate_pin_numbers_are_jumpers == Some(true))
             .count();
+        let extended_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.extends.is_some())
+            .count();
+        let body_style_symbol_count = self
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.body_styles.is_some())
+            .count();
+        let jumper_pin_group_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.jumper_pin_groups.len())
+            .sum::<usize>();
 
         format!(
             concat!(
@@ -3839,7 +3854,10 @@ impl KicadSymbolLibrary {
                 "  \"symbol_in_bom_setting_count\": {},\n",
                 "  \"symbol_on_board_setting_count\": {},\n",
                 "  \"symbol_in_pos_files_setting_count\": {},\n",
-                "  \"duplicate_pin_numbers_are_jumpers_count\": {}\n",
+                "  \"duplicate_pin_numbers_are_jumpers_count\": {},\n",
+                "  \"extended_symbol_count\": {},\n",
+                "  \"body_style_symbol_count\": {},\n",
+                "  \"jumper_pin_group_count\": {}\n",
                 "}}"
             ),
             json_escape(&self.source),
@@ -3857,7 +3875,10 @@ impl KicadSymbolLibrary {
             symbol_in_bom_setting_count,
             symbol_on_board_setting_count,
             symbol_in_pos_files_setting_count,
-            duplicate_pin_numbers_are_jumpers_count
+            duplicate_pin_numbers_are_jumpers_count,
+            extended_symbol_count,
+            body_style_symbol_count,
+            jumper_pin_group_count
         )
     }
 }
@@ -4251,12 +4272,15 @@ impl KicadSymbolPinRef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadSymbolDef {
     pub name: String,
+    pub extends: Option<String>,
     pub power: Option<KicadSymbolPower>,
+    pub body_styles: Option<KicadSymbolBodyStyles>,
     pub exclude_from_sim: Option<bool>,
     pub in_bom: Option<bool>,
     pub on_board: Option<bool>,
     pub in_pos_files: Option<bool>,
     pub duplicate_pin_numbers_are_jumpers: Option<bool>,
+    pub jumper_pin_groups: Vec<Vec<String>>,
     pub pin_names: Option<KicadPinDisplay>,
     pub pin_numbers: Option<KicadPinDisplay>,
     pub properties: Vec<KicadProperty>,
@@ -4298,12 +4322,18 @@ impl KicadSymbolDef {
     fn write_symbol_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(symbol {}\n", pad, sexpr_string(&self.name)));
+        if let Some(extends) = &self.extends {
+            output.push_str(&format!("{}  (extends {})\n", pad, sexpr_string(extends)));
+        }
         if let Some(power) = self.power {
             match power {
                 KicadSymbolPower::Bare => output.push_str(&format!("{}  (power)\n", pad)),
                 KicadSymbolPower::Global => output.push_str(&format!("{}  (power global)\n", pad)),
                 KicadSymbolPower::Local => output.push_str(&format!("{}  (power local)\n", pad)),
             }
+        }
+        if let Some(body_styles) = &self.body_styles {
+            body_styles.write_body_styles_sexpr(output, indent + 2);
         }
         if let Some(exclude_from_sim) = self.exclude_from_sim {
             output.push_str(&format!(
@@ -4321,6 +4351,21 @@ impl KicadSymbolDef {
             "duplicate_pin_numbers_are_jumpers",
             self.duplicate_pin_numbers_are_jumpers,
         );
+        if !self.jumper_pin_groups.is_empty() {
+            output.push_str(&format!("{}  (jumper_pin_groups", pad));
+            for group in &self.jumper_pin_groups {
+                output.push('\n');
+                output.push_str(&format!("{}    (", pad));
+                for (index, pin_name) in group.iter().enumerate() {
+                    if index > 0 {
+                        output.push(' ');
+                    }
+                    output.push_str(&sexpr_string(pin_name));
+                }
+                output.push(')');
+            }
+            output.push_str(&format!("\n{}  )\n", pad));
+        }
         if let Some(pin_numbers) = &self.pin_numbers {
             pin_numbers.write_pin_numbers_sexpr(output, indent + 2);
         }
@@ -4351,6 +4396,29 @@ pub enum KicadSymbolPower {
     Bare,
     Global,
     Local,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KicadSymbolBodyStyles {
+    Demorgan,
+    Names(Vec<String>),
+}
+
+impl KicadSymbolBodyStyles {
+    fn write_body_styles_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(body_styles", pad));
+        match self {
+            Self::Demorgan => output.push_str(" demorgan"),
+            Self::Names(names) => {
+                for name in names {
+                    output.push(' ');
+                    output.push_str(&sexpr_atom_or_string(name));
+                }
+            }
+        }
+        output.push_str(")\n");
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6666,13 +6734,18 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     let items = list_items(node);
     Some(KicadSymbolDef {
         name: list_value(node, 1)?,
+        extends: child_value(items, "extends"),
         power: child(items, "power").map(parse_symbol_power),
+        body_styles: child(items, "body_styles").and_then(parse_symbol_body_styles),
         exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
         in_bom: child_value(items, "in_bom").and_then(parse_kicad_bool_value),
         on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
         in_pos_files: child_value(items, "in_pos_files").and_then(parse_kicad_bool_value),
         duplicate_pin_numbers_are_jumpers: child_value(items, "duplicate_pin_numbers_are_jumpers")
             .and_then(parse_kicad_bool_value),
+        jumper_pin_groups: child(items, "jumper_pin_groups")
+            .map(parse_jumper_pin_groups)
+            .unwrap_or_default(),
         pin_names: child(items, "pin_names").map(parse_pin_display),
         pin_numbers: child(items, "pin_numbers").map(parse_pin_display),
         properties: direct_children(items, "property")
@@ -6694,6 +6767,37 @@ fn parse_symbol_power(node: &Sexp) -> KicadSymbolPower {
         Some("local") => KicadSymbolPower::Local,
         _ => KicadSymbolPower::Bare,
     }
+}
+
+fn parse_symbol_body_styles(node: &Sexp) -> Option<KicadSymbolBodyStyles> {
+    let names = list_items(node)
+        .iter()
+        .skip(1)
+        .filter_map(atom_text)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if names.iter().any(|name| name == "demorgan") {
+        Some(KicadSymbolBodyStyles::Demorgan)
+    } else if names.is_empty() {
+        None
+    } else {
+        Some(KicadSymbolBodyStyles::Names(names))
+    }
+}
+
+fn parse_jumper_pin_groups(node: &Sexp) -> Vec<Vec<String>> {
+    list_items(node)
+        .iter()
+        .skip(1)
+        .filter_map(|group| {
+            let pins = list_items(group)
+                .iter()
+                .filter_map(atom_text)
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            (!pins.is_empty()).then_some(pins)
+        })
+        .collect()
 }
 
 fn parse_symbol_library_table_row(node: &Sexp) -> Option<KicadSymbolLibraryTableRow> {
@@ -8268,11 +8372,11 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 mod tests {
     use super::{
         KicadAt, KicadColor, KicadDiagnosticSeverity, KicadGraphic, KicadLabelKind, KicadPoint,
-        KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolPower, parse_kicad_project,
-        parse_kicad_schematic, parse_kicad_symbol_library, parse_kicad_symbol_library_table,
-        parse_sexpr, read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
-        read_kicad_symbol_library, read_kicad_symbol_library_index,
-        read_kicad_symbol_library_table,
+        KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolBodyStyles, KicadSymbolPower,
+        parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
+        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
+        read_kicad_schematic_with_libraries, read_kicad_symbol_library,
+        read_kicad_symbol_library_index, read_kicad_symbol_library_table,
     };
     use std::fs;
     use std::path::Path;
@@ -11394,6 +11498,89 @@ mod tests {
         assert_eq!(
             reparsed.symbol("NekoSpice:PowerLocal").unwrap().power,
             Some(KicadSymbolPower::Local)
+        );
+    }
+
+    #[test]
+    fn preserves_kicad_symbol_inheritance_body_styles_and_jumpers() {
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "NekoSpice:Parent"
+    (body_styles demorgan)
+    (duplicate_pin_numbers_are_jumpers yes)
+    (jumper_pin_groups
+      ("A1" "A2")
+      ("B1" "B2" "B3")
+    )
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Parent" (at 0 -2.54 0))
+  )
+  (symbol "NekoSpice:Derived"
+    (extends "NekoSpice:Parent")
+    (body_styles "logic" "analog-front-end")
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Derived" (at 0 -2.54 0))
+  )
+)"#,
+            "symbol_inheritance.kicad_sym",
+        )
+        .unwrap();
+
+        let parent = library.symbol("NekoSpice:Parent").unwrap();
+        assert_eq!(parent.body_styles, Some(KicadSymbolBodyStyles::Demorgan));
+        assert_eq!(parent.duplicate_pin_numbers_are_jumpers, Some(true));
+        assert_eq!(
+            parent.jumper_pin_groups,
+            vec![
+                vec!["A1".to_string(), "A2".to_string()],
+                vec!["B1".to_string(), "B2".to_string(), "B3".to_string()]
+            ]
+        );
+
+        let derived = library.symbol("NekoSpice:Derived").unwrap();
+        assert_eq!(derived.extends.as_deref(), Some("NekoSpice:Parent"));
+        assert_eq!(
+            derived.body_styles,
+            Some(KicadSymbolBodyStyles::Names(vec![
+                "logic".to_string(),
+                "analog-front-end".to_string()
+            ]))
+        );
+
+        let summary = library.to_summary_json();
+        assert!(summary.contains("\"extended_symbol_count\": 1"));
+        assert!(summary.contains("\"body_style_symbol_count\": 2"));
+        assert!(summary.contains("\"jumper_pin_group_count\": 2"));
+
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(body_styles demorgan)"));
+        assert!(exported.contains("(duplicate_pin_numbers_are_jumpers yes)"));
+        assert!(exported.contains("(jumper_pin_groups"));
+        assert!(exported.contains("(\"A1\" \"A2\")"));
+        assert!(exported.contains("(\"B1\" \"B2\" \"B3\")"));
+        assert!(exported.contains("(extends \"NekoSpice:Parent\")"));
+        assert!(exported.contains("(body_styles logic analog-front-end)"));
+
+        let reparsed =
+            parse_kicad_symbol_library(&exported, "symbol_inheritance_roundtrip.kicad_sym")
+                .unwrap();
+        assert_eq!(
+            reparsed
+                .symbol("NekoSpice:Derived")
+                .unwrap()
+                .extends
+                .as_deref(),
+            Some("NekoSpice:Parent")
+        );
+        assert_eq!(
+            reparsed
+                .symbol("NekoSpice:Parent")
+                .unwrap()
+                .jumper_pin_groups
+                .len(),
+            2
         );
     }
 
