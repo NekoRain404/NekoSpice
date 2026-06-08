@@ -451,6 +451,7 @@ impl KicadSchematic {
             at: Some(at),
             unit: Some(unit.unwrap_or(1)),
             uuid: Some(instance_uuid),
+            exclude_from_sim: None,
             properties,
             pins,
         });
@@ -584,14 +585,24 @@ impl KicadSchematic {
         let graph = self.connectivity_graph();
         let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
 
+        lines.extend(self.spice_include_directives());
+
         for symbol in &self.symbols {
             match self.symbol_to_spice_line(symbol, &graph) {
                 Some(line) => lines.push(line),
-                None => lines.push(format!(
-                    "* Unsupported KiCad symbol {} {}",
-                    symbol.reference().unwrap_or("<no-reference>"),
-                    symbol.lib_id
-                )),
+                None if symbol.sim_enabled(self.symbol_definition(&symbol.lib_id))
+                    == Some(false) => {}
+                None => {
+                    if let Some(line) = self.symbol_to_spice_line_legacy(symbol, &graph) {
+                        lines.push(line);
+                    } else {
+                        lines.push(format!(
+                            "* Unsupported KiCad symbol {} {}",
+                            symbol.reference().unwrap_or("<no-reference>"),
+                            symbol.lib_id
+                        ));
+                    }
+                }
             }
         }
 
@@ -658,6 +669,119 @@ impl KicadSchematic {
         symbol: &KicadSymbolInstance,
         graph: &KicadNetGraph,
     ) -> Option<String> {
+        let definition = self.symbol_definition(&symbol.lib_id);
+        if symbol.sim_enabled(definition) == Some(false) {
+            return None;
+        }
+
+        let reference = symbol.reference()?.trim();
+        if reference.is_empty() || reference.starts_with('#') {
+            return None;
+        }
+
+        let has_explicit_sim_model = symbol.has_explicit_sim_model(definition);
+        let model = symbol.sim_model_value(definition);
+        let params = symbol.sim_params_value(definition);
+        let value = compose_spice_model_value(
+            model.as_deref(),
+            params.as_deref(),
+            has_explicit_sim_model.then(|| symbol.value().unwrap_or_default().trim()),
+        );
+        let explicit_device = symbol.sim_device(definition);
+        let device = explicit_device
+            .clone()
+            .or_else(|| {
+                has_explicit_sim_model.then(|| {
+                    reference
+                        .chars()
+                        .next()
+                        .map(|character| character.to_ascii_uppercase().to_string())
+                        .unwrap_or_default()
+                })
+            })?
+            .to_ascii_uppercase();
+        let nodes = self.symbol_pin_nets(symbol, graph)?;
+        let primitive = if explicit_device.is_some() {
+            spice_primitive_for_device(&device)?
+        } else {
+            reference
+                .chars()
+                .next()
+                .map(|character| character.to_ascii_uppercase().to_string())
+                .unwrap_or_default()
+        };
+        if primitive.is_empty() {
+            return None;
+        }
+        let spice_reference = spice_item_name(reference, &primitive);
+
+        if primitive == "X" || device == "SUBCKT" {
+            if nodes.is_empty() || value.is_empty() {
+                return None;
+            }
+            return Some(format!("{} {} {}", spice_reference, nodes.join(" "), value));
+        }
+        if primitive == "SPICE" {
+            if value.is_empty() {
+                return None;
+            }
+            return Some(expand_spice_template(&value, &spice_reference, &nodes));
+        }
+
+        match primitive.as_str() {
+            "R" | "C" | "L" | "V" | "I" | "D" if nodes.len() >= 2 && !value.is_empty() => Some(
+                format!("{spice_reference} {} {} {value}", nodes[0], nodes[1]),
+            ),
+            "Q" | "J" if nodes.len() >= 3 && !value.is_empty() => Some(format!(
+                "{spice_reference} {} {} {} {value}",
+                nodes[0], nodes[1], nodes[2]
+            )),
+            "M" if nodes.len() >= 4 && !value.is_empty() => Some(format!(
+                "{spice_reference} {} {} {} {} {value}",
+                nodes[0], nodes[1], nodes[2], nodes[3]
+            )),
+            "S" | "W" if nodes.len() >= 4 && !value.is_empty() => Some(format!(
+                "{spice_reference} {} {} {} {} {value}",
+                nodes[0], nodes[1], nodes[2], nodes[3]
+            )),
+            "E" | "F" | "G" | "H" if nodes.len() >= 4 && !value.is_empty() => Some(format!(
+                "{spice_reference} {} {} {} {} {value}",
+                nodes[0], nodes[1], nodes[2], nodes[3]
+            )),
+            "T" if nodes.len() >= 4 && !value.is_empty() => Some(format!(
+                "{spice_reference} {} {} {} {} {value}",
+                nodes[0], nodes[1], nodes[2], nodes[3]
+            )),
+            "K" if !value.is_empty() => Some(format!("{spice_reference} {value}")),
+            _ => None,
+        }
+    }
+
+    pub fn spice_include_directives(&self) -> Vec<String> {
+        let mut includes = BTreeSet::new();
+        for symbol in &self.symbols {
+            let definition = self.symbol_definition(&symbol.lib_id);
+            if symbol.sim_enabled(definition) == Some(false) {
+                continue;
+            }
+            if let Some(path) = symbol
+                .sim_library(definition)
+                .filter(|path| !path.trim().is_empty())
+            {
+                includes.insert(path.trim().to_string());
+            }
+        }
+        includes
+            .into_iter()
+            .map(|path| format!(".include {}", quote_spice_path(&path)))
+            .collect()
+    }
+
+    fn symbol_to_spice_line_legacy(
+        &self,
+        symbol: &KicadSymbolInstance,
+        graph: &KicadNetGraph,
+    ) -> Option<String> {
         let reference = symbol.reference()?.trim();
         if reference.is_empty() || reference.starts_with('#') {
             return None;
@@ -699,8 +823,7 @@ impl KicadSchematic {
     ) -> Option<Vec<String>> {
         let symbol_at = symbol.at?;
         let definition = self.symbol_definition(&symbol.lib_id)?;
-        let mut pins = definition.pins.iter().collect::<Vec<_>>();
-        pins.sort_by(compare_pin_numbers);
+        let pins = symbol_ordered_pins(symbol, definition);
 
         Some(
             pins.into_iter()
@@ -789,6 +912,29 @@ impl KicadSchematic {
                 ));
                 continue;
             };
+            if symbol.sim_enabled(Some(definition)) == Some(false) {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Info,
+                    "simulation-disabled",
+                    &format!("symbol '{reference}' is excluded from simulation"),
+                    Some(reference),
+                    None,
+                    None,
+                ));
+                continue;
+            }
+            if let Some(device) = symbol.sim_device(Some(definition))
+                && spice_primitive_for_device(&device).is_none()
+            {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "unsupported-sim-device",
+                    &format!("symbol '{reference}' uses unsupported Sim.Device '{device}'"),
+                    Some(reference.clone()),
+                    None,
+                    None,
+                ));
+            }
             let Some(symbol_at) = symbol.at else {
                 diagnostics.push(kicad_schematic_diagnostic(
                     KicadDiagnosticSeverity::Error,
@@ -812,6 +958,25 @@ impl KicadSchematic {
                     None,
                     None,
                 ));
+            }
+            let sim_pin_order = symbol_sim_pin_order(symbol, definition);
+            for pin_number in &sim_pin_order {
+                if !definition
+                    .pins
+                    .iter()
+                    .any(|pin| pin.number == *pin_number || pin.name == *pin_number)
+                {
+                    diagnostics.push(kicad_schematic_diagnostic(
+                        KicadDiagnosticSeverity::Error,
+                        "invalid-sim-pin",
+                        &format!(
+                            "symbol '{reference}' Sim.Pins entry '{pin_number}' does not match a library pin"
+                        ),
+                        Some(reference.clone()),
+                        None,
+                        Some(pin_number.clone()),
+                    ));
+                }
             }
             for pin in definition_pins {
                 let pin_label = format!("{}:{}", reference, pin.number);
@@ -1713,6 +1878,7 @@ pub struct KicadSymbolInstance {
     pub at: Option<KicadAt>,
     pub unit: Option<u32>,
     pub uuid: Option<String>,
+    pub exclude_from_sim: Option<bool>,
     pub properties: Vec<KicadProperty>,
     pub pins: Vec<KicadSymbolPinRef>,
 }
@@ -1731,6 +1897,80 @@ impl KicadSymbolInstance {
 
     pub fn value(&self) -> Option<&str> {
         self.property("Value")
+    }
+
+    fn inherited_property<'a>(
+        &'a self,
+        definition: Option<&'a KicadSymbolDef>,
+        name: &str,
+    ) -> Option<&'a str> {
+        self.property(name)
+            .or_else(|| definition.and_then(|definition| definition.property(name)))
+    }
+
+    fn sim_enabled(&self, definition: Option<&KicadSymbolDef>) -> Option<bool> {
+        if let Some(exclude_from_sim) = self.exclude_from_sim {
+            return Some(!exclude_from_sim);
+        }
+        if let Some(exclude_from_sim) =
+            definition.and_then(|definition| definition.exclude_from_sim)
+        {
+            return Some(!exclude_from_sim);
+        }
+        self.inherited_property(definition, "Sim.Enable")
+            .or_else(|| self.inherited_property(definition, "Spice_Netlist_Enabled"))
+            .and_then(parse_kicad_enable_value)
+    }
+
+    fn sim_device(&self, definition: Option<&KicadSymbolDef>) -> Option<String> {
+        self.inherited_property(definition, "Sim.Device")
+            .or_else(|| self.inherited_property(definition, "Spice_Primitive"))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    }
+
+    fn sim_model_value(&self, definition: Option<&KicadSymbolDef>) -> Option<String> {
+        if let Some(value) = self
+            .inherited_property(definition, "Sim.Name")
+            .or_else(|| self.inherited_property(definition, "Spice_Model"))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Some(value.to_string());
+        }
+        self.inherited_property(definition, "Sim.Params")
+            .and_then(|value| extract_named_sim_param(value, "model"))
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    }
+
+    fn sim_params_value(&self, definition: Option<&KicadSymbolDef>) -> Option<String> {
+        self.inherited_property(definition, "Sim.Params")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(strip_kicad_sim_model_params)
+            .filter(|value| !value.is_empty())
+    }
+
+    fn sim_library<'a>(&'a self, definition: Option<&'a KicadSymbolDef>) -> Option<&'a str> {
+        self.inherited_property(definition, "Sim.Library")
+            .or_else(|| self.inherited_property(definition, "Spice_Lib_File"))
+    }
+
+    fn sim_pins<'a>(&'a self, definition: Option<&'a KicadSymbolDef>) -> Option<&'a str> {
+        self.inherited_property(definition, "Sim.Pins")
+            .or_else(|| self.inherited_property(definition, "Spice_Node_Sequence"))
+    }
+
+    fn has_explicit_sim_model(&self, definition: Option<&KicadSymbolDef>) -> bool {
+        self.inherited_property(definition, "Sim.Device").is_some()
+            || self.inherited_property(definition, "Sim.Params").is_some()
+            || self.inherited_property(definition, "Sim.Name").is_some()
+            || self
+                .inherited_property(definition, "Spice_Primitive")
+                .is_some()
+            || self.inherited_property(definition, "Spice_Model").is_some()
     }
 
     fn write_instance_sexpr(&self, output: &mut String, indent: usize) {
@@ -1755,6 +1995,13 @@ impl KicadSymbolInstance {
         }
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        if let Some(exclude_from_sim) = self.exclude_from_sim {
+            output.push_str(&format!(
+                "{}  (exclude_from_sim {})\n",
+                pad,
+                if exclude_from_sim { "yes" } else { "no" }
+            ));
         }
         for property in &self.properties {
             property.write_property_sexpr(output, indent + 2);
@@ -1791,6 +2038,7 @@ impl KicadSymbolPinRef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadSymbolDef {
     pub name: String,
+    pub exclude_from_sim: Option<bool>,
     pub properties: Vec<KicadProperty>,
     pub graphics: Vec<KicadGraphic>,
     pub pins: Vec<KicadPinDef>,
@@ -1830,6 +2078,13 @@ impl KicadSymbolDef {
     fn write_symbol_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(symbol {}\n", pad, sexpr_string(&self.name)));
+        if let Some(exclude_from_sim) = self.exclude_from_sim {
+            output.push_str(&format!(
+                "{}  (exclude_from_sim {})\n",
+                pad,
+                if exclude_from_sim { "yes" } else { "no" }
+            ));
+        }
         for property in &self.properties {
             property.write_property_sexpr(output, indent + 2);
         }
@@ -2437,6 +2692,7 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
         at: child(items, "at").and_then(parse_at),
         unit: child_value(items, "unit").and_then(|value| value.parse().ok()),
         uuid: child_value(items, "uuid"),
+        exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -2458,6 +2714,7 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     let items = list_items(node);
     Some(KicadSymbolDef {
         name: list_value(node, 1)?,
+        exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -2948,6 +3205,224 @@ fn kicad_schematic_diagnostic(
     }
 }
 
+fn spice_primitive_for_device(device: &str) -> Option<String> {
+    let device = device.to_ascii_uppercase();
+    let primitive = match device.as_str() {
+        "R" | "RES" | "RESISTOR" => "R",
+        "C" | "CAP" | "CAPACITOR" => "C",
+        "L" | "IND" | "INDUCTOR" => "L",
+        "V" | "VSOURCE" | "VOLTAGE" => "V",
+        "I" | "ISOURCE" | "CURRENT" => "I",
+        "D" | "DIODE" => "D",
+        "NPN" | "PNP" | "BJT" => "Q",
+        "NJFET" | "PJFET" | "JFET" => "J",
+        "NMOS" | "PMOS" | "NMES" | "PMES" | "MOSFET" => "M",
+        "SW" | "SWITCH" => "S",
+        "CSW" | "CURRENT_SWITCH" => "W",
+        "VCVS" => "E",
+        "CCCS" => "F",
+        "VCCS" => "G",
+        "CCVS" => "H",
+        "TLINE" | "TRANSMISSION_LINE" => "T",
+        "K" | "COUPLED_INDUCTOR" => "K",
+        "SUBCKT" => "X",
+        "SPICE" => "SPICE",
+        "" => return None,
+        other if other.len() == 1 => other,
+        _ => return None,
+    };
+    Some(primitive.to_string())
+}
+
+fn symbol_ordered_pins<'a>(
+    symbol: &'a KicadSymbolInstance,
+    definition: &'a KicadSymbolDef,
+) -> Vec<&'a KicadPinDef> {
+    let mut by_number = definition
+        .pins
+        .iter()
+        .map(|pin| (pin.number.as_str(), pin))
+        .collect::<BTreeMap<_, _>>();
+    let by_name = definition
+        .pins
+        .iter()
+        .map(|pin| (pin.name.as_str(), pin))
+        .collect::<BTreeMap<_, _>>();
+    let mut ordered = Vec::new();
+
+    for pin_number in symbol_sim_pin_order(symbol, definition) {
+        if let Some(pin) = by_number.remove(pin_number.as_str()) {
+            ordered.push(pin);
+        } else if let Some(pin) = by_name.get(pin_number.as_str()) {
+            ordered.push(*pin);
+        }
+    }
+
+    if ordered.is_empty() {
+        ordered = definition.pins.iter().collect::<Vec<_>>();
+        ordered.sort_by(compare_pin_numbers);
+    }
+
+    ordered
+}
+
+fn symbol_sim_pin_order(symbol: &KicadSymbolInstance, definition: &KicadSymbolDef) -> Vec<String> {
+    let Some(pins) = symbol.sim_pins(Some(definition)) else {
+        return Vec::new();
+    };
+    parse_sim_pin_order(pins)
+}
+
+fn parse_sim_pin_order(value: &str) -> Vec<String> {
+    value
+        .split(|character: char| character.is_ascii_whitespace() || character == ',')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .filter_map(|token| {
+            let symbol_pin = token.split_once('=').map(|(left, _)| left).unwrap_or(token);
+            let symbol_pin = symbol_pin.trim();
+            (!symbol_pin.is_empty()).then(|| symbol_pin.to_string())
+        })
+        .collect()
+}
+
+fn parse_kicad_bool_value(value: String) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "yes" | "true" | "1" => Some(true),
+        "no" | "false" | "0" => Some(false),
+        _ => None,
+    }
+}
+
+fn parse_kicad_enable_value(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "y" | "yes" | "true" | "1" | "on" => Some(true),
+        "n" | "no" | "false" | "0" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn compose_spice_model_value(
+    model: Option<&str>,
+    params: Option<&str>,
+    fallback: Option<&str>,
+) -> String {
+    match (
+        model.filter(|value| !value.is_empty()),
+        params.filter(|value| !value.is_empty()),
+    ) {
+        (Some(model), Some(params)) => format!("{model} {params}"),
+        (Some(model), None) => model.to_string(),
+        (None, Some(params)) => params.to_string(),
+        (None, None) => fallback.unwrap_or_default().to_string(),
+    }
+}
+
+fn strip_kicad_sim_model_params(value: &str) -> String {
+    split_spice_tokens(value)
+        .into_iter()
+        .filter(|token| {
+            token
+                .split_once('=')
+                .map(|(name, _)| {
+                    !matches!(name.trim().to_ascii_lowercase().as_str(), "model" | "lib")
+                })
+                .unwrap_or(true)
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn extract_named_sim_param(value: &str, name: &str) -> Option<String> {
+    for token in split_spice_tokens(value) {
+        let Some((left, right)) = token.split_once('=') else {
+            continue;
+        };
+        if left.trim().eq_ignore_ascii_case(name) {
+            return Some(unquote_spice_token(right.trim()).to_string());
+        }
+    }
+    None
+}
+
+fn split_spice_tokens(value: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut escaped = false;
+
+    for character in value.chars() {
+        if escaped {
+            current.push(character);
+            escaped = false;
+            continue;
+        }
+        if character == '\\' {
+            current.push(character);
+            escaped = true;
+            continue;
+        }
+        if character == '"' {
+            current.push(character);
+            in_quotes = !in_quotes;
+            continue;
+        }
+        if character.is_ascii_whitespace() && !in_quotes {
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+        } else {
+            current.push(character);
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+}
+
+fn spice_item_name(reference: &str, primitive: &str) -> String {
+    let Some(first) = primitive.chars().next() else {
+        return reference.to_string();
+    };
+    if reference
+        .chars()
+        .next()
+        .is_some_and(|character| character.eq_ignore_ascii_case(&first))
+    {
+        reference.to_string()
+    } else {
+        format!("{first}{reference}")
+    }
+}
+
+fn unquote_spice_token(value: &str) -> &str {
+    value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .unwrap_or(value)
+}
+
+fn expand_spice_template(template: &str, reference: &str, nodes: &[String]) -> String {
+    let mut expanded = template.replace("${REFERENCE}", reference);
+    for (index, node) in nodes.iter().enumerate() {
+        expanded = expanded.replace(&format!("${{N{}}}", index + 1), node);
+    }
+    expanded
+}
+
+fn quote_spice_path(path: &str) -> String {
+    if path
+        .bytes()
+        .any(|byte| byte.is_ascii_whitespace() || byte == b'"')
+    {
+        format!("\"{}\"", path.replace('"', "\\\""))
+    } else {
+        format!("\"{}\"", path)
+    }
+}
+
 fn symbol_instance_properties(
     definition: &KicadSymbolDef,
     reference: &str,
@@ -3229,6 +3704,168 @@ mod tests {
         assert!(codes.contains(&"missing-value"));
         assert!(codes.contains(&"missing-spice-directive"));
         assert!(report.to_json().contains("\"diagnostic_count\""));
+    }
+
+    #[test]
+    fn exports_kicad_sim_fields_to_spice_netlist() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:Dual"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "unused" (at 0 -2.54 0))
+      (property "Sim.Device" "SUBCKT" (at 0 0 0))
+      (property "Sim.Library" "models/opamp.lib" (at 0 0 0))
+      (symbol "Dual_0_1"
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "IN") (number "1"))
+        (pin passive line (at 0 -2.54 90) (length 2.54) (name "OUT") (number "2"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "VCC") (number "3"))
+      )
+    )
+    (symbol "NekoSpice:R"
+      (property "Reference" "R" (at 0 0 0))
+      (property "Value" "1k" (at 0 -2.54 0))
+      (symbol "R_0_1"
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "~") (number "1"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "~") (number "2"))
+      )
+    )
+  )
+  (wire (pts (xy 10 10) (xy 17.46 10)))
+  (wire (pts (xy 20 0) (xy 20 7.46)))
+  (wire (pts (xy 22.54 10) (xy 30 10)))
+  (label "in" (at 10 10 0))
+  (label "out" (at 20 0 0))
+  (label "vcc" (at 30 10 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:Dual")
+    (at 20 10 0)
+    (property "Reference" "U1" (at 20 8 0))
+    (property "Value" "opamp_model" (at 20 12 0))
+    (property "Sim.Pins" "2=OUT 1=IN 3=VCC" (at 20 10 0))
+    (property "Sim.Params" "model=\"opamp_model\" gain=100k" (at 20 10 0))
+  )
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 50 50 0)
+    (exclude_from_sim yes)
+    (property "Reference" "Rskip" (at 50 48 0))
+    (property "Value" "1k" (at 50 52 0))
+  )
+)"#,
+            "sim_fields.kicad_sch",
+        )
+        .unwrap();
+
+        let netlist = schematic.to_spice_netlist().unwrap();
+
+        assert!(netlist.contains(".include \"models/opamp.lib\""));
+        assert!(netlist.contains("XU1 out in vcc opamp_model gain=100k"));
+        assert!(!netlist.contains("Rskip"));
+        assert!(netlist.contains(".op"));
+        let reparsed = parse_kicad_schematic(
+            &schematic.to_kicad_schematic_sexpr(),
+            "sim_fields_roundtrip.kicad_sch",
+        )
+        .unwrap();
+        assert_eq!(
+            reparsed
+                .symbols
+                .iter()
+                .find(|symbol| symbol.reference() == Some("Rskip"))
+                .unwrap()
+                .exclude_from_sim,
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn exports_legacy_kicad_spice_fields_to_spice_netlist() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:LegacyD"
+      (property "Reference" "D" (at 0 0 0))
+      (property "Value" "unused" (at 0 -2.54 0))
+      (property "Spice_Primitive" "D" (at 0 0 0))
+      (property "Spice_Model" "Dfast" (at 0 0 0))
+      (symbol "LegacyD_0_1"
+        (pin passive line (at 0 -2.54 90) (length 2.54) (name "A") (number "1"))
+        (pin passive line (at 0 2.54 270) (length 2.54) (name "K") (number "2"))
+      )
+    )
+  )
+  (wire (pts (xy 40 37.46) (xy 35 37.46)))
+  (wire (pts (xy 40 42.54) (xy 45 42.54)))
+  (label "anode" (at 35 37.46 0))
+  (label "0" (at 45 42.54 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:LegacyD")
+    (at 40 40 0)
+    (property "Reference" "XD1" (at 40 38 0))
+    (property "Value" "ignored" (at 40 42 0))
+    (property "Spice_Node_Sequence" "2 1" (at 40 40 0))
+  )
+)"#,
+            "legacy_spice_fields.kicad_sch",
+        )
+        .unwrap();
+
+        let netlist = schematic.to_spice_netlist().unwrap();
+
+        assert!(netlist.contains("DXD1 0 anode Dfast"));
+    }
+
+    #[test]
+    fn reports_invalid_sim_pin_mapping() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:R"
+      (property "Reference" "R" (at 0 0 0))
+      (property "Value" "1k" (at 0 -2.54 0))
+      (property "Sim.Device" "R" (at 0 0 0))
+      (symbol "R_0_1"
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "~") (number "1"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "~") (number "2"))
+      )
+    )
+  )
+  (wire (pts (xy 10 10) (xy 20 10)))
+  (label "0" (at 10 10 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 12.54 10 0)
+    (property "Reference" "R1" (at 12.54 8 0))
+    (property "Value" "1k" (at 12.54 12 0))
+    (property "Sim.Pins" "1 99" (at 12.54 10 0))
+  )
+)"#,
+            "bad_sim_pins.kicad_sch",
+        )
+        .unwrap();
+
+        let report = schematic.check_report();
+
+        assert!(report.error_count() >= 1);
+        assert!(
+            report
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "invalid-sim-pin")
+        );
     }
 
     #[test]
