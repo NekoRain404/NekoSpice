@@ -68,7 +68,7 @@ Usage:
   osl verify <project.osl.yaml> [--output <dir>] [--ngspice <path>] [--jobs <n>]
   osl bench <directory> [--output <dir>] [--ngspice <path>]
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
-  osl import <spice-netlist-or-ltspice.asc> [--output <dir>]
+  osl import <spice-netlist-or-ltspice.asc-or-kicad-project> [--output <dir>]
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
@@ -259,6 +259,7 @@ fn import_command(args: &[String]) -> OslResult<i32> {
     let input_path = Path::new(input);
     let import = read_import_input(input_path)?;
     let source_netlist = import.source_netlist;
+    let source_path = import.source_path;
     let report = import.report;
     write_text(&output_dir.join("import.json"), &report.to_json())?;
     write_text(
@@ -266,7 +267,7 @@ fn import_command(args: &[String]) -> OslResult<i32> {
         &report.to_html(report_css()),
     )?;
     let project_dir = output_dir.join("project");
-    let dependencies = copy_import_dependencies(&report, input_path, &project_dir)?;
+    let dependencies = copy_import_dependencies(&report, &source_path, &project_dir)?;
     let project = report.normalized_project_with_dependencies(&source_netlist, &dependencies);
     write_text(&project_dir.join(&project.netlist_path), &project.netlist)?;
     write_text(

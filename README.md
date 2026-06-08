@@ -83,11 +83,13 @@ cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol
 
 ```bash
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
+cargo run -p osl-cli -- import examples/kicad_project --output /tmp/nekospice_import/kicad_project_dir
+cargo run -p osl-cli -- import examples/kicad_project/kicad_project.kicad_pro --output /tmp/nekospice_import/kicad_project_file
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output /tmp/nekospice_import/ltspice_rc
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.osl.yaml --output /tmp/nekospice_import/kicad_rc_verify
 ```
 
-`import` writes `import.json`, `report.html`, and a normalized `project/` directory. The project contains `input.cir`, `project.osl.yaml`, and `manifest.json`, so imported KiCad/LTspice/generic SPICE netlists can be handed directly to `osl verify`. KiCad/generic SPICE netlists are normalized directly. LTspice `.asc` schematics have a first-pass importer for `WIRE`, `FLAG`, `TEXT ... !<directive>`, local and searched `.asy` pin mapping, subcircuit symbols with `Prefix X`, and common primitive fallback symbols (`res`, `cap`, `ind`, `voltage`, `current`, diode-family, BJT, MOSFET, JFET, controlled-source, and switch symbols). Symbol search checks the schematic directory, `sym/` below it, `NEKOSPICE_LTSPICE_SYM_PATH`, and common LTspice installation paths. Unsupported symbols are reported with line-level diagnostics instead of silently producing a broken netlist. Relative `.include`, `.inc`, and `.lib` dependencies are copied into `project/models/` and referenced from the normalized netlist. The generated validation file keeps `checks: []` for a smoke run, then adds commented check templates derived from observable node voltages and voltage-source currents. The manifest stores the same `suggested_signals` and `suggested_checks` as machine-readable JSON for future GUI/project tooling. The compatibility report counts components, symbols, directives, includes, and emits diagnostics before the netlist is handed to ngspice.
+`import` writes `import.json`, `report.html`, and a normalized `project/` directory. The project contains `input.cir`, `project.osl.yaml`, and `manifest.json`, so imported KiCad/LTspice/generic SPICE netlists can be handed directly to `osl verify`. KiCad/generic SPICE netlists are normalized directly. KiCad project directories and `.kicad_pro` files are accepted when they contain an exported SPICE netlist (`.cir`, `.spice`, or `.sp`); relative `.include` paths are resolved from the discovered netlist. LTspice `.asc` schematics have a first-pass importer for `WIRE`, `FLAG`, `TEXT ... !<directive>`, local and searched `.asy` pin mapping, subcircuit symbols with `Prefix X`, and common primitive fallback symbols (`res`, `cap`, `ind`, `voltage`, `current`, diode-family, BJT, MOSFET, JFET, controlled-source, and switch symbols). Symbol search checks the schematic directory, `sym/` below it, `NEKOSPICE_LTSPICE_SYM_PATH`, and common LTspice installation paths. Unsupported symbols are reported with line-level diagnostics instead of silently producing a broken netlist. Relative `.include`, `.inc`, and `.lib` dependencies are copied into `project/models/` and referenced from the normalized netlist. The generated validation file keeps `checks: []` for a smoke run, then adds commented check templates derived from observable node voltages and voltage-source currents. The manifest stores the same `suggested_signals` and `suggested_checks` as machine-readable JSON for future GUI/project tooling. The compatibility report counts components, symbols, directives, includes, and emits diagnostics before the netlist is handed to ngspice.
 
 ## Validation
 
@@ -98,6 +100,10 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --out
 cargo run -p osl-cli -- verify examples/structured_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/structured
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.osl.yaml --output /tmp/nekospice_import/kicad_rc_verify
+cargo run -p osl-cli -- import examples/kicad_project --output /tmp/nekospice_import/kicad_project_dir
+cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_project_dir/project/project.osl.yaml --output /tmp/nekospice_import/kicad_project_dir_verify
+cargo run -p osl-cli -- import examples/kicad_project/kicad_project.kicad_pro --output /tmp/nekospice_import/kicad_project_file
+cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_project_file/project/project.osl.yaml --output /tmp/nekospice_import/kicad_project_file_verify
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output /tmp/nekospice_import/ltspice_rc
 cargo run -p osl-cli -- verify /tmp/nekospice_import/ltspice_rc/project/project.osl.yaml --output /tmp/nekospice_import/ltspice_rc_verify
 cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output /tmp/nekospice_import/kicad_with_models

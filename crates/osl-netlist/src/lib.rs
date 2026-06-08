@@ -1,18 +1,21 @@
-use osl_core::{OslResult, html_escape, json_escape, read_text};
+use osl_core::{OslError, OslResult, html_escape, json_escape, read_text};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct ImportInput {
     pub source_netlist: String,
+    pub source_path: PathBuf,
     pub report: ImportReport,
 }
 
 pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
-    let content = read_text(path)?;
+    let path = resolve_import_source_path(path)?;
+    let content = read_text(&path)?;
     let source = path.display().to_string();
-    if is_ltspice_schematic(path) {
+    if is_ltspice_schematic(&path) {
         let imported = import_ltspice_asc(
             &content,
             &source,
@@ -23,15 +26,119 @@ pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
         report.diagnostics.extend(imported.diagnostics);
         Ok(ImportInput {
             source_netlist: imported.netlist,
+            source_path: path,
             report,
         })
     } else {
         let report = parse_netlist(&content, &source)?;
         Ok(ImportInput {
             source_netlist: content,
+            source_path: path,
             report,
         })
     }
+}
+
+fn resolve_import_source_path(path: &Path) -> OslResult<PathBuf> {
+    if path.is_dir() {
+        return discover_kicad_project_netlist(path);
+    }
+    if is_kicad_project_file(path) {
+        return discover_kicad_project_netlist(path.parent().unwrap_or_else(|| Path::new(".")));
+    }
+    Ok(path.to_path_buf())
+}
+
+fn is_kicad_project_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("kicad_pro"))
+}
+
+fn discover_kicad_project_netlist(project_dir: &Path) -> OslResult<PathBuf> {
+    let mut candidates = Vec::new();
+    collect_kicad_netlist_candidates(project_dir, project_dir, &mut candidates)?;
+    candidates.sort_by(|left, right| {
+        kicad_candidate_score(right)
+            .cmp(&kicad_candidate_score(left))
+            .then_with(|| left.display().to_string().cmp(&right.display().to_string()))
+    });
+    candidates.into_iter().next().ok_or_else(|| {
+        OslError::InvalidInput(format!(
+            "{} does not contain an importable KiCad SPICE netlist (.cir, .spice, .sp)",
+            project_dir.display()
+        ))
+    })
+}
+
+fn collect_kicad_netlist_candidates(
+    root: &Path,
+    dir: &Path,
+    candidates: &mut Vec<PathBuf>,
+) -> OslResult<()> {
+    let entries =
+        fs::read_dir(dir).map_err(|err| OslError::io(format!("read {}", dir.display()), err))?;
+    for entry in entries {
+        let entry = entry.map_err(|err| OslError::io(format!("read {}", dir.display()), err))?;
+        let path = entry.path();
+        if path.is_dir() {
+            if path.file_name().and_then(|name| name.to_str()) == Some("project") {
+                continue;
+            }
+            if path
+                .strip_prefix(root)
+                .ok()
+                .is_some_and(|relative| relative.components().count() > 3)
+            {
+                continue;
+            }
+            collect_kicad_netlist_candidates(root, &path, candidates)?;
+        } else if is_spice_netlist_file(&path) {
+            candidates.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn is_spice_netlist_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "cir" | "spice" | "sp"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn kicad_candidate_score(path: &Path) -> usize {
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let mut score = 0;
+    if name.contains("kicad") {
+        score += 20;
+    }
+    if name.ends_with(".cir") {
+        score += 5;
+    }
+    if let Ok(content) = read_text(path) {
+        let lowered = content.to_ascii_lowercase();
+        if lowered.contains("kicad") || lowered.contains("eeschema") {
+            score += 50;
+        }
+        if lowered.contains(".tran")
+            || lowered.contains(".op")
+            || lowered.contains(".ac")
+            || lowered.contains(".dc")
+        {
+            score += 10;
+        }
+    }
+    score
 }
 
 #[derive(Debug)]
@@ -2199,6 +2306,32 @@ XU1 in out vcc vee GOODAMP
                 .contains("\"project_path\": \"models/models.lib\"")
         );
         assert_eq!(project.dependencies.len(), 1);
+    }
+
+    #[test]
+    fn discovers_kicad_project_netlist_from_directory_or_project_file() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let project_dir = workspace_root.join("examples/kicad_project");
+
+        let from_dir = read_import_input(&project_dir).unwrap();
+        let from_project_file =
+            read_import_input(&project_dir.join("kicad_project.kicad_pro")).unwrap();
+
+        assert_eq!(from_dir.report.flavor, NetlistFlavor::KiCad);
+        assert_eq!(from_project_file.report.flavor, NetlistFlavor::KiCad);
+        assert_eq!(from_dir.source_path, project_dir.join("kicad_project.cir"));
+        assert_eq!(
+            from_project_file.source_path,
+            project_dir.join("kicad_project.cir")
+        );
+        assert!(
+            from_dir
+                .source_netlist
+                .contains(".include \"models/ideal_diode.lib\"")
+        );
     }
 
     #[test]
