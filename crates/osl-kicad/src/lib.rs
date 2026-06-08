@@ -680,6 +680,7 @@ impl KicadSchematic {
             pins.push(KicadSymbolPinRef {
                 number: Some(pin.number().to_string()),
                 uuid: Some(pin_uuid),
+                alternate: None,
             });
         }
 
@@ -2165,6 +2166,7 @@ impl KicadSchematic {
                 "  \"spice_directive_count\": {},\n",
                 "  \"sheet_instance_count\": {},\n",
                 "  \"symbol_instance_count\": {},\n",
+                "  \"symbol_pin_alternate_count\": {},\n",
                 "  \"embedded_project_instance_count\": {},\n",
                 "  \"embedded_instance_path_count\": {},\n",
                 "  \"variant_instance_count\": {},\n",
@@ -2240,6 +2242,7 @@ impl KicadSchematic {
             self.spice_directives().len(),
             self.sheet_instances.len(),
             self.symbol_instances.len(),
+            self.symbol_pin_alternate_count(),
             self.embedded_project_instance_count(),
             self.embedded_instance_path_count(),
             self.variant_instance_count(),
@@ -2270,6 +2273,14 @@ impl KicadSchematic {
                 .iter()
                 .map(|sheet| sheet.instances.len())
                 .sum::<usize>()
+    }
+
+    fn symbol_pin_alternate_count(&self) -> usize {
+        self.symbols
+            .iter()
+            .flat_map(|symbol| &symbol.pins)
+            .filter(|pin| pin.alternate.is_some())
+            .count()
     }
 
     fn embedded_instance_path_count(&self) -> usize {
@@ -4261,6 +4272,7 @@ impl KicadSymbolInstance {
 pub struct KicadSymbolPinRef {
     pub number: Option<String>,
     pub uuid: Option<String>,
+    pub alternate: Option<String>,
 }
 
 impl KicadSymbolPinRef {
@@ -4274,6 +4286,9 @@ impl KicadSymbolPinRef {
         output.push_str(&format!("{}(pin {}", pad, sexpr_string(number)));
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        if let Some(alternate) = &self.alternate {
+            output.push_str(&format!(" (alternate {})", sexpr_string(alternate)));
         }
         output.push_str(")\n");
     }
@@ -6416,6 +6431,7 @@ fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
     Some(KicadSymbolPinRef {
         number: list_value(node, 1),
         uuid: child_value(items, "uuid"),
+        alternate: child_value(items, "alternate"),
     })
 }
 
@@ -9741,6 +9757,59 @@ mod tests {
         assert_eq!(reparsed.sheet_instances.len(), 2);
         assert_eq!(reparsed.symbol_instances.len(), 1);
         assert_eq!(reparsed.embedded_fonts, Some(false));
+    }
+
+    #[test]
+    fn preserves_symbol_instance_pin_alternates_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (symbol
+    (lib_id "NekoSpice:AltPin")
+    (at 10 20 0)
+    (unit 1)
+    (uuid "20202020-2020-4020-8020-202020202020")
+    (property "Reference" "U1" (at 10 17.46 0))
+    (property "Value" "AltPin" (at 10 22.54 0))
+    (pin "G39"
+      (uuid "30303030-3030-4030-8030-303030303030")
+      (alternate "CAN0_DIN")
+    )
+    (pin "G38"
+      (uuid "40404040-4040-4040-8040-404040404040")
+      (alternate "CAN0_DOUT")
+    )
+  )
+)"#,
+            "symbol_pin_alternates.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.symbols.len(), 1);
+        assert_eq!(schematic.symbols[0].pins.len(), 2);
+        assert_eq!(
+            schematic.symbols[0].pins[0].alternate.as_deref(),
+            Some("CAN0_DIN")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"symbol_pin_alternate_count\": 2")
+        );
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(alternate \"CAN0_DIN\")"));
+        assert!(exported.contains("(alternate \"CAN0_DOUT\")"));
+
+        let reparsed =
+            parse_kicad_schematic(&exported, "symbol_pin_alternates_roundtrip.kicad_sch").unwrap();
+        assert_eq!(
+            reparsed.symbols[0].pins[1].alternate.as_deref(),
+            Some("CAN0_DOUT")
+        );
     }
 
     #[test]
