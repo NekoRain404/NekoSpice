@@ -3340,6 +3340,9 @@ pub enum KicadCanvasGraphic {
     Polyline {
         points: Vec<KicadPoint>,
     },
+    Bezier {
+        points: Vec<KicadPoint>,
+    },
     Rectangle {
         start: KicadPoint,
         end: KicadPoint,
@@ -3363,6 +3366,11 @@ impl KicadCanvasGraphic {
     fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
         match self {
             Self::Polyline { points } => {
+                for point in points {
+                    bounds.include(*point);
+                }
+            }
+            Self::Bezier { points } => {
                 for point in points {
                     bounds.include(*point);
                 }
@@ -4169,6 +4177,9 @@ pub enum KicadGraphic {
     Polyline {
         points: Vec<KicadPoint>,
     },
+    Bezier {
+        points: Vec<KicadPoint>,
+    },
     Rectangle {
         start: KicadPoint,
         end: KicadPoint,
@@ -4192,6 +4203,11 @@ impl KicadGraphic {
     fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
         match self {
             Self::Polyline { points } => {
+                for point in points {
+                    bounds.include(*point);
+                }
+            }
+            Self::Bezier { points } => {
                 for point in points {
                     bounds.include(*point);
                 }
@@ -4233,6 +4249,12 @@ impl KicadGraphic {
                     .map(|point| transform_local_point(*point, symbol_at))
                     .collect(),
             },
+            Self::Bezier { points } => KicadCanvasGraphic::Bezier {
+                points: points
+                    .iter()
+                    .map(|point| transform_local_point(*point, symbol_at))
+                    .collect(),
+            },
             Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
                 start: transform_local_point(*start, symbol_at),
                 end: transform_local_point(*end, symbol_at),
@@ -4256,6 +4278,9 @@ impl KicadGraphic {
     fn to_canvas_graphic(&self) -> KicadCanvasGraphic {
         match self {
             Self::Polyline { points } => KicadCanvasGraphic::Polyline {
+                points: points.clone(),
+            },
+            Self::Bezier { points } => KicadCanvasGraphic::Bezier {
                 points: points.clone(),
             },
             Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
@@ -4291,6 +4316,19 @@ impl KicadGraphic {
                     .join(" ");
                 output.push_str(&format!(
                     "{}(polyline (pts {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
+                    pad, points
+                ));
+            }
+            Self::Bezier { points } => {
+                let points = points
+                    .iter()
+                    .map(|point| {
+                        format!("(xy {} {})", format_number(point.x), format_number(point.y))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                output.push_str(&format!(
+                    "{}(bezier (pts {}) (stroke (width 0.254) (type default)) (fill (type none)))\n",
                     pad, points
                 ));
             }
@@ -4363,6 +4401,15 @@ impl KicadSchematicGraphic {
                 write_points_sexpr(output, points);
                 write_inline_stroke(output, self.stroke.as_ref(), 0.0);
                 write_inline_optional_fill(output, self.fill.as_ref());
+                self.write_uuid(output);
+                self.write_locked(output);
+                output.push_str(")\n");
+            }
+            KicadGraphic::Bezier { points } => {
+                output.push_str(&format!("{}(bezier", pad));
+                write_points_sexpr(output, points);
+                write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+                write_inline_fill(output, self.fill.as_ref());
                 self.write_uuid(output);
                 self.write_locked(output);
                 output.push_str(")\n");
@@ -6356,7 +6403,7 @@ fn parse_bus_entry(node: &Sexp) -> Option<KicadBusEntry> {
 
 fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
     match head(node)? {
-        "polyline" | "rectangle" | "circle" | "arc" => {
+        "polyline" | "bezier" | "rectangle" | "circle" | "arc" => {
             let items = list_items(node);
             Some(KicadSchematicGraphic {
                 graphic: parse_graphic(node)?,
@@ -6735,6 +6782,10 @@ fn parse_graphic(node: &Sexp) -> Option<KicadGraphic> {
         "polyline" => {
             let points = child(items, "pts").map(parse_points).unwrap_or_default();
             (!points.is_empty()).then_some(KicadGraphic::Polyline { points })
+        }
+        "bezier" => {
+            let points = child(items, "pts").map(parse_points).unwrap_or_default();
+            (points.len() == 4).then_some(KicadGraphic::Bezier { points })
         }
         "rectangle" => Some(KicadGraphic::Rectangle {
             start: child(items, "start").and_then(parse_xy)?,
@@ -8142,6 +8193,12 @@ mod tests {
     (stroke (width 0.3556) (type dot) (color 255 89 101 1))
     (uuid "41414141-4141-4141-8141-414141414141")
   )
+  (bezier
+    (pts (xy 12 16) (xy 16 8) (xy 24 8) (xy 28 16))
+    (stroke (width 0.2032) (type dash) (color 58 104 255 1))
+    (fill (type none))
+    (uuid "45454545-4545-4545-8545-454545454545")
+  )
   (rectangle
     (start 30 10)
     (end 45 20)
@@ -8170,21 +8227,25 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(schematic.graphics.len(), 4);
+        assert_eq!(schematic.graphics.len(), 5);
         assert!(matches!(
             &schematic.graphics[0].graphic,
             KicadGraphic::Polyline { .. }
         ));
         assert!(matches!(
             &schematic.graphics[1].graphic,
-            KicadGraphic::Rectangle { .. }
+            KicadGraphic::Bezier { .. }
         ));
         assert!(matches!(
             &schematic.graphics[2].graphic,
-            KicadGraphic::Circle { .. }
+            KicadGraphic::Rectangle { .. }
         ));
         assert!(matches!(
             &schematic.graphics[3].graphic,
+            KicadGraphic::Circle { .. }
+        ));
+        assert!(matches!(
+            &schematic.graphics[4].graphic,
             KicadGraphic::Arc { .. }
         ));
         assert_eq!(
@@ -8218,8 +8279,24 @@ mod tests {
                 alpha: 1.0,
             })
         );
+        if let KicadGraphic::Bezier { points } = &schematic.graphics[1].graphic {
+            assert_eq!(points.len(), 4);
+            assert_close(points[1].x, 16.0);
+            assert_close(points[2].y, 8.0);
+        } else {
+            panic!("expected bezier schematic graphic");
+        }
         assert_eq!(
             schematic.graphics[1]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash")
+        );
+        assert_eq!(
+            schematic.graphics[2]
                 .fill
                 .as_ref()
                 .unwrap()
@@ -8227,16 +8304,16 @@ mod tests {
                 .as_deref(),
             Some("hatch")
         );
-        assert_eq!(schematic.graphics[1].locked, Some(true));
+        assert_eq!(schematic.graphics[2].locked, Some(true));
         assert!(
             schematic
                 .to_summary_json()
-                .contains("\"schematic_graphic_count\": 4")
+                .contains("\"schematic_graphic_count\": 5")
         );
         assert!(
             schematic
                 .to_summary_json()
-                .contains("\"styled_schematic_graphic_count\": 4")
+                .contains("\"styled_schematic_graphic_count\": 5")
         );
         assert!(
             schematic
@@ -8245,17 +8322,24 @@ mod tests {
         );
 
         let scene = schematic.canvas_scene();
-        assert_eq!(scene.graphics.len(), 4);
-        assert!(scene.to_summary_json().contains("\"graphic_count\": 4"));
+        assert_eq!(scene.graphics.len(), 5);
+        assert!(matches!(
+            &scene.graphics[1],
+            super::KicadCanvasGraphic::Bezier { points } if points.len() == 4
+        ));
+        assert!(scene.to_summary_json().contains("\"graphic_count\": 5"));
         assert!(
             scene
                 .to_summary_json()
-                .contains("\"schematic_graphic_count\": 4")
+                .contains("\"schematic_graphic_count\": 5")
         );
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(polyline"));
         assert!(roundtrip.contains("(stroke (width 0.3556) (type dot) (color 255 89 101 1))"));
+        assert!(roundtrip.contains("(bezier"));
+        assert!(roundtrip.contains("(pts (xy 12 16) (xy 16 8) (xy 24 8) (xy 28 16))"));
+        assert!(roundtrip.contains("(stroke (width 0.2032) (type dash) (color 58 104 255 1))"));
         assert!(roundtrip.contains("(rectangle"));
         assert!(roundtrip.contains("(fill (type hatch) (color 255 64 87 1))"));
         assert!(roundtrip.contains("(locked yes)"));
@@ -8263,14 +8347,22 @@ mod tests {
         assert!(roundtrip.contains("(arc"));
         assert!(roundtrip.contains("(uuid \"44444444-4444-4444-8444-444444444444\")"));
         let reparsed = parse_kicad_schematic(&roundtrip, "graphics_roundtrip.kicad_sch").unwrap();
-        assert_eq!(reparsed.graphics.len(), 4);
+        assert_eq!(reparsed.graphics.len(), 5);
         assert_eq!(
-            reparsed.graphics[3].uuid.as_deref(),
+            reparsed.graphics[1].uuid.as_deref(),
+            Some("45454545-4545-4545-8545-454545454545")
+        );
+        assert!(matches!(
+            &reparsed.graphics[1].graphic,
+            KicadGraphic::Bezier { points } if points.len() == 4
+        ));
+        assert_eq!(
+            reparsed.graphics[4].uuid.as_deref(),
             Some("44444444-4444-4444-8444-444444444444")
         );
-        assert_eq!(reparsed.graphics[1].locked, Some(true));
+        assert_eq!(reparsed.graphics[2].locked, Some(true));
         assert_eq!(
-            reparsed.graphics[1]
+            reparsed.graphics[2]
                 .fill
                 .as_ref()
                 .unwrap()
@@ -8278,7 +8370,7 @@ mod tests {
                 .as_deref(),
             Some("hatch")
         );
-        assert_eq!(reparsed.canvas_scene().graphics.len(), 4);
+        assert_eq!(reparsed.canvas_scene().graphics.len(), 5);
     }
 
     #[test]
@@ -10379,6 +10471,54 @@ mod tests {
         let bounds = resistor.bounding_box().unwrap();
         assert_close(bounds.min.x, -2.54);
         assert_close(bounds.max.x, 2.54);
+    }
+
+    #[test]
+    fn parses_kicad_symbol_library_bezier_graphics_and_roundtrips() {
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "NekoSpice:Curve"
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Curve" (at 0 -2.54 0))
+    (symbol "Curve_0_1"
+      (bezier
+        (pts (xy -2.54 0) (xy -1.27 -2.54) (xy 1.27 2.54) (xy 2.54 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+    )
+  )
+)"#,
+            "curve.kicad_sym",
+        )
+        .unwrap();
+
+        let symbol = library.symbol("NekoSpice:Curve").unwrap();
+        assert_eq!(symbol.graphics.len(), 1);
+        if let KicadGraphic::Bezier { points } = &symbol.graphics[0] {
+            assert_eq!(points.len(), 4);
+            assert_close(points[0].x, -2.54);
+            assert_close(points[3].x, 2.54);
+        } else {
+            panic!("expected bezier symbol graphic");
+        }
+        let bounds = symbol.bounding_box().unwrap();
+        assert_close(bounds.min.x, -2.54);
+        assert_close(bounds.max.y, 2.54);
+
+        let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(exported.contains("(bezier"));
+        assert!(
+            exported.contains("(pts (xy -2.54 0) (xy -1.27 -2.54) (xy 1.27 2.54) (xy 2.54 0))")
+        );
+        let reparsed = parse_kicad_symbol_library(&exported, "curve_roundtrip.kicad_sym").unwrap();
+        let reparsed_symbol = reparsed.symbol("NekoSpice:Curve").unwrap();
+        assert!(matches!(
+            &reparsed_symbol.graphics[0],
+            KicadGraphic::Bezier { points } if points.len() == 4
+        ));
     }
 
     #[test]

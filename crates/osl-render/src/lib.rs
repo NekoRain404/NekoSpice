@@ -622,6 +622,9 @@ fn render_graphic(
         KicadCanvasGraphic::Polyline { points } => {
             render_polyline(output, viewport, points, stroke, 1.8);
         }
+        KicadCanvasGraphic::Bezier { points } => {
+            render_bezier(output, viewport, points, stroke, 1.8);
+        }
         KicadCanvasGraphic::Rectangle { start, end } => {
             let left_top = viewport.project(KicadPoint {
                 x: start.x.min(end.x),
@@ -672,6 +675,37 @@ fn render_graphic(
             }
         }
     }
+}
+
+fn render_bezier(
+    output: &mut String,
+    viewport: &SvgViewport,
+    points: &[KicadPoint],
+    color: &str,
+    stroke_width: f64,
+) {
+    if points.len() != 4 {
+        render_polyline(output, viewport, points, color, stroke_width);
+        return;
+    }
+
+    let start = viewport.project(points[0]);
+    let control_1 = viewport.project(points[1]);
+    let control_2 = viewport.project(points[2]);
+    let end = viewport.project(points[3]);
+    output.push_str(&format!(
+        "      <path data-bezier=\"true\" d=\"M {} {} C {} {}, {} {}, {} {}\" stroke=\"{}\" stroke-width=\"{}\" fill=\"none\"/>\n",
+        fmt(start.x),
+        fmt(start.y),
+        fmt(control_1.x),
+        fmt(control_1.y),
+        fmt(control_2.x),
+        fmt(control_2.y),
+        fmt(end.x),
+        fmt(end.y),
+        color,
+        fmt(stroke_width)
+    ));
 }
 
 fn render_polyline(
@@ -1000,6 +1034,7 @@ mod tests {
   (paper "A4")
   (lib_symbols)
   (polyline (pts (xy 10 10) (xy 20 10)) (uuid "11111111-1111-4111-8111-111111111111"))
+  (bezier (pts (xy 12 20) (xy 16 12) (xy 24 12) (xy 28 20)) (uuid "44444444-4444-4444-8444-444444444444"))
   (rectangle (start 25 10) (end 35 20) (uuid "22222222-2222-4222-8222-222222222222"))
   (circle (center 45 15) (radius 5) (uuid "33333333-3333-4333-8333-333333333333"))
 )"#,
@@ -1010,6 +1045,8 @@ mod tests {
         let svg = render_kicad_scene_svg(&schematic.canvas_scene());
 
         assert!(svg.contains("<polyline"));
+        assert!(svg.contains("<path data-bezier=\"true\""));
+        assert!(svg.contains(" C "));
         assert!(svg.contains("<rect"));
         assert!(svg.contains("<circle"));
         assert!(svg.contains("stroke=\"#64748b\""));
