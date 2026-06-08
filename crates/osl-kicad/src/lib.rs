@@ -660,6 +660,8 @@ impl KicadSchematic {
             None => self.library_symbols.push(definition.clone()),
         }
 
+        let resolved_definition = resolve_symbol_definition(&definition, &self.library_symbols)
+            .unwrap_or_else(|| KicadResolvedSymbolDef::from_symbol(&definition));
         let instance_payload = format!(
             "{}:{}:{}@{},{},{}",
             lib_id, reference, value, at.x, at.y, at.rotation
@@ -668,8 +670,9 @@ impl KicadSchematic {
         let properties = symbol_instance_properties(&definition, reference, value, at);
         let unit = unit.unwrap_or(1);
         let body_style = None;
-        let mut sorted_pins =
-            scoped_symbol_pins(&definition, Some(unit), body_style).collect::<Vec<_>>();
+        let mut sorted_pins = resolved_definition
+            .scoped_pins(Some(unit), body_style)
+            .collect::<Vec<_>>();
         sorted_pins.sort_by(compare_pin_numbers);
         let mut generated_pin_uuids = BTreeSet::new();
         let mut pins = Vec::new();
@@ -1105,10 +1108,10 @@ impl KicadSchematic {
         }
 
         for symbol in &self.symbols {
+            let definition = self.resolved_symbol_definition(&symbol.lib_id);
             match self.symbol_to_spice_line(symbol, &graph) {
                 Some(line) => lines.push(line),
-                None if symbol.sim_enabled(self.symbol_definition(&symbol.lib_id))
-                    == Some(false) => {}
+                None if symbol.sim_enabled(definition.as_ref()) == Some(false) => {}
                 None => {
                     if let Some(line) = self.symbol_to_spice_line_legacy(symbol, &graph) {
                         lines.push(line);
@@ -1300,8 +1303,8 @@ impl KicadSchematic {
         symbol: &KicadSymbolInstance,
         nodes: &[String],
     ) -> Option<String> {
-        let definition = self.symbol_definition(&symbol.lib_id);
-        if symbol.sim_enabled(definition) == Some(false) {
+        let definition = self.resolved_symbol_definition(&symbol.lib_id);
+        if symbol.sim_enabled(definition.as_ref()) == Some(false) {
             return None;
         }
 
@@ -1310,15 +1313,15 @@ impl KicadSchematic {
             return None;
         }
 
-        let has_explicit_sim_model = symbol.has_explicit_sim_model(definition);
-        let model = symbol.sim_model_value(definition);
-        let params = symbol.sim_params_value(definition);
+        let has_explicit_sim_model = symbol.has_explicit_sim_model(definition.as_ref());
+        let model = symbol.sim_model_value(definition.as_ref());
+        let params = symbol.sim_params_value(definition.as_ref());
         let value = compose_spice_model_value(
             model.as_deref(),
             params.as_deref(),
             has_explicit_sim_model.then(|| symbol.value().unwrap_or_default().trim()),
         );
-        let explicit_device = symbol.sim_device(definition);
+        let explicit_device = symbol.sim_device(definition.as_ref());
         let device = explicit_device
             .clone()
             .or_else(|| {
@@ -1390,12 +1393,12 @@ impl KicadSchematic {
     pub fn spice_include_directives(&self) -> Vec<String> {
         let mut includes = BTreeSet::new();
         for symbol in &self.symbols {
-            let definition = self.symbol_definition(&symbol.lib_id);
-            if symbol.sim_enabled(definition) == Some(false) {
+            let definition = self.resolved_symbol_definition(&symbol.lib_id);
+            if symbol.sim_enabled(definition.as_ref()) == Some(false) {
                 continue;
             }
             if let Some(path) = symbol
-                .sim_library(definition)
+                .sim_library(definition.as_ref())
                 .filter(|path| !path.trim().is_empty())
             {
                 includes.insert(path.trim().to_string());
@@ -1460,8 +1463,8 @@ impl KicadSchematic {
         graph: &KicadNetGraph,
     ) -> Option<Vec<String>> {
         let symbol_at = symbol.at?;
-        let definition = self.symbol_definition(&symbol.lib_id)?;
-        let pins = symbol_ordered_pins(symbol, definition);
+        let definition = self.resolved_symbol_definition(&symbol.lib_id)?;
+        let pins = symbol_ordered_pins(symbol, &definition);
 
         Some(
             pins.into_iter()
@@ -1479,6 +1482,11 @@ impl KicadSchematic {
         self.library_symbols
             .iter()
             .find(|symbol| symbol.name == lib_id)
+    }
+
+    fn resolved_symbol_definition(&self, lib_id: &str) -> Option<KicadResolvedSymbolDef> {
+        let definition = self.symbol_definition(lib_id)?;
+        resolve_symbol_definition(definition, &self.library_symbols)
     }
 
     pub fn resolve_project_symbol_libraries(
@@ -1530,7 +1538,7 @@ impl KicadSchematic {
                         if let Some(definition) =
                             library_symbol_definition_for_lib_id(&library, &row.name, lib_id)
                         {
-                            self.merge_library_symbol(definition);
+                            self.merge_library_symbol_with_parents(definition, &library, &row.name);
                             resolved.push(lib_id.clone());
                         }
                     }
@@ -1563,6 +1571,31 @@ impl KicadSchematic {
         }
         self.library_symbols.push(definition);
         true
+    }
+
+    fn merge_library_symbol_with_parents(
+        &mut self,
+        mut definition: KicadSymbolDef,
+        library: &KicadSymbolLibrary,
+        library_name: &str,
+    ) {
+        qualify_library_symbol_name(&mut definition, library_name);
+        let mut pending = vec![definition];
+        let mut visited = BTreeSet::new();
+        while let Some(definition) = pending.pop() {
+            if !visited.insert(definition.name.clone()) {
+                continue;
+            }
+            if let Some(parent_name) = definition.extends.as_deref()
+                && let Some(parent) =
+                    find_symbol_inheritance_parent(&definition, parent_name, &library.symbols)
+            {
+                let mut parent = parent.clone();
+                qualify_library_symbol_name(&mut parent, library_name);
+                pending.push(parent);
+            }
+            self.merge_library_symbol(definition);
+        }
     }
 
     fn check_duplicate_references(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
@@ -1634,7 +1667,10 @@ impl KicadSchematic {
                 ));
                 continue;
             };
-            if symbol.sim_enabled(Some(definition)) == Some(false) {
+            let definition = self
+                .resolved_symbol_definition(&symbol.lib_id)
+                .unwrap_or_else(|| KicadResolvedSymbolDef::from_symbol(definition));
+            if symbol.sim_enabled(Some(&definition)) == Some(false) {
                 diagnostics.push(kicad_schematic_diagnostic(
                     KicadDiagnosticSeverity::Info,
                     "simulation-disabled",
@@ -1645,7 +1681,7 @@ impl KicadSchematic {
                 ));
                 continue;
             }
-            if let Some(device) = symbol.sim_device(Some(definition))
+            if let Some(device) = symbol.sim_device(Some(&definition))
                 && spice_primitive_for_device(&device).is_none()
             {
                 diagnostics.push(kicad_schematic_diagnostic(
@@ -1669,8 +1705,9 @@ impl KicadSchematic {
                 continue;
             };
 
-            let mut definition_pins =
-                scoped_symbol_pins(definition, symbol.unit, symbol.body_style).collect::<Vec<_>>();
+            let mut definition_pins = definition
+                .scoped_pins(symbol.unit, symbol.body_style)
+                .collect::<Vec<_>>();
             definition_pins.sort_by(compare_pin_numbers);
             if !definition_pins.is_empty() && symbol.pins.is_empty() {
                 diagnostics.push(kicad_schematic_diagnostic(
@@ -1682,7 +1719,7 @@ impl KicadSchematic {
                     None,
                 ));
             }
-            let sim_pin_order = symbol_sim_pin_order(symbol, definition);
+            let sim_pin_order = symbol_sim_pin_order(symbol, &definition);
             for pin_number in &sim_pin_order {
                 if !definition
                     .pins
@@ -2635,10 +2672,10 @@ impl KicadHierarchyExport {
                 .map(|node| scoped_net_name(scope, node, net_aliases))
                 .collect::<Vec<_>>();
             let scoped_symbol = scoped_symbol_instance(symbol, scope);
+            let definition = schematic.resolved_symbol_definition(&symbol.lib_id);
             match schematic.symbol_to_spice_line_with_nodes(&scoped_symbol, &mapped_nodes) {
                 Some(line) => self.components.push(line),
-                None if scoped_symbol.sim_enabled(schematic.symbol_definition(&symbol.lib_id))
-                    == Some(false) => {}
+                None if scoped_symbol.sim_enabled(definition.as_ref()) == Some(false) => {}
                 None => {
                     if let Some(line) = schematic
                         .symbol_to_spice_line_legacy_with_nodes(&scoped_symbol, &mapped_nodes)
@@ -2955,17 +2992,18 @@ impl KicadCanvasScene {
             .symbols
             .iter()
             .filter_map(|symbol| {
-                let definition = schematic.symbol_definition(&symbol.lib_id)?;
+                let definition = schematic.resolved_symbol_definition(&symbol.lib_id)?;
                 let at = symbol.at.unwrap_or(KicadAt {
                     x: 0.0,
                     y: 0.0,
                     rotation: 0.0,
                 });
-                let graphics =
-                    scoped_definition_graphics(definition, symbol.unit, symbol.body_style)
-                        .map(|graphic| graphic.transformed(at))
-                        .collect::<Vec<_>>();
-                let pins = scoped_symbol_pins(definition, symbol.unit, symbol.body_style)
+                let graphics = definition
+                    .scoped_graphics(symbol.unit, symbol.body_style)
+                    .map(|graphic| graphic.transformed(at))
+                    .collect::<Vec<_>>();
+                let pins = definition
+                    .scoped_pins(symbol.unit, symbol.body_style)
                     .filter_map(|pin| KicadCanvasPin::from_pin_def(pin, at))
                     .collect::<Vec<_>>();
                 let symbol_bounds = canvas_symbol_bounds(&graphics, &pins);
@@ -4221,19 +4259,19 @@ impl KicadSymbolInstance {
 
     fn inherited_property<'a>(
         &'a self,
-        definition: Option<&'a KicadSymbolDef>,
+        definition: Option<&'a impl KicadSymbolPropertySource>,
         name: &str,
     ) -> Option<&'a str> {
         self.property(name)
-            .or_else(|| definition.and_then(|definition| definition.property(name)))
+            .or_else(|| definition.and_then(|definition| definition.property_value(name)))
     }
 
-    fn sim_enabled(&self, definition: Option<&KicadSymbolDef>) -> Option<bool> {
+    fn sim_enabled(&self, definition: Option<&impl KicadSymbolPropertySource>) -> Option<bool> {
         if let Some(exclude_from_sim) = self.exclude_from_sim {
             return Some(!exclude_from_sim);
         }
         if let Some(exclude_from_sim) =
-            definition.and_then(|definition| definition.exclude_from_sim)
+            definition.and_then(|definition| definition.exclude_from_sim_value())
         {
             return Some(!exclude_from_sim);
         }
@@ -4242,7 +4280,7 @@ impl KicadSymbolInstance {
             .and_then(parse_kicad_enable_value)
     }
 
-    fn sim_device(&self, definition: Option<&KicadSymbolDef>) -> Option<String> {
+    fn sim_device(&self, definition: Option<&impl KicadSymbolPropertySource>) -> Option<String> {
         self.inherited_property(definition, "Sim.Device")
             .or_else(|| self.inherited_property(definition, "Spice_Primitive"))
             .map(str::trim)
@@ -4250,7 +4288,10 @@ impl KicadSymbolInstance {
             .map(str::to_string)
     }
 
-    fn sim_model_value(&self, definition: Option<&KicadSymbolDef>) -> Option<String> {
+    fn sim_model_value(
+        &self,
+        definition: Option<&impl KicadSymbolPropertySource>,
+    ) -> Option<String> {
         if let Some(value) = self
             .inherited_property(definition, "Sim.Name")
             .or_else(|| self.inherited_property(definition, "Spice_Model"))
@@ -4265,7 +4306,10 @@ impl KicadSymbolInstance {
             .filter(|value| !value.is_empty())
     }
 
-    fn sim_params_value(&self, definition: Option<&KicadSymbolDef>) -> Option<String> {
+    fn sim_params_value(
+        &self,
+        definition: Option<&impl KicadSymbolPropertySource>,
+    ) -> Option<String> {
         self.inherited_property(definition, "Sim.Params")
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -4273,17 +4317,23 @@ impl KicadSymbolInstance {
             .filter(|value| !value.is_empty())
     }
 
-    fn sim_library<'a>(&'a self, definition: Option<&'a KicadSymbolDef>) -> Option<&'a str> {
+    fn sim_library<'a>(
+        &'a self,
+        definition: Option<&'a impl KicadSymbolPropertySource>,
+    ) -> Option<&'a str> {
         self.inherited_property(definition, "Sim.Library")
             .or_else(|| self.inherited_property(definition, "Spice_Lib_File"))
     }
 
-    fn sim_pins<'a>(&'a self, definition: Option<&'a KicadSymbolDef>) -> Option<&'a str> {
+    fn sim_pins<'a>(
+        &'a self,
+        definition: Option<&'a impl KicadSymbolPropertySource>,
+    ) -> Option<&'a str> {
         self.inherited_property(definition, "Sim.Pins")
             .or_else(|| self.inherited_property(definition, "Spice_Node_Sequence"))
     }
 
-    fn has_explicit_sim_model(&self, definition: Option<&KicadSymbolDef>) -> bool {
+    fn has_explicit_sim_model(&self, definition: Option<&impl KicadSymbolPropertySource>) -> bool {
         self.inherited_property(definition, "Sim.Device").is_some()
             || self.inherited_property(definition, "Sim.Params").is_some()
             || self.inherited_property(definition, "Sim.Name").is_some()
@@ -4528,13 +4578,190 @@ impl KicadSymbolDef {
                 body_style: pin.body_style,
             }))
             .collect::<BTreeSet<_>>();
-        if scopes.is_empty() {
+        if scopes.is_empty() && self.extends.is_none() {
             scopes.insert(KicadSymbolItemScope {
                 unit: 0,
                 body_style: 1,
             });
         }
         scopes.into_iter().collect()
+    }
+}
+
+trait KicadSymbolPropertySource {
+    fn property_value(&self, name: &str) -> Option<&str>;
+    fn exclude_from_sim_value(&self) -> Option<bool>;
+}
+
+impl KicadSymbolPropertySource for KicadSymbolDef {
+    fn property_value(&self, name: &str) -> Option<&str> {
+        self.property(name)
+    }
+
+    fn exclude_from_sim_value(&self) -> Option<bool> {
+        self.exclude_from_sim
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct KicadResolvedSymbolDef {
+    name: String,
+    exclude_from_sim: Option<bool>,
+    pin_names: Option<KicadPinDisplay>,
+    pin_numbers: Option<KicadPinDisplay>,
+    properties: Vec<KicadProperty>,
+    graphics: Vec<KicadSymbolGraphic>,
+    pins: Vec<KicadPinDef>,
+}
+
+impl KicadResolvedSymbolDef {
+    fn from_symbol(symbol: &KicadSymbolDef) -> Self {
+        Self {
+            name: symbol.name.clone(),
+            exclude_from_sim: symbol.exclude_from_sim,
+            pin_names: symbol.pin_names.clone(),
+            pin_numbers: symbol.pin_numbers.clone(),
+            properties: symbol.properties.clone(),
+            graphics: symbol.graphics.clone(),
+            pins: symbol.pins.clone(),
+        }
+    }
+
+    fn property(&self, name: &str) -> Option<&str> {
+        self.properties
+            .iter()
+            .find(|property| property.name == name)
+            .map(|property| property.value.as_str())
+    }
+
+    fn scoped_graphics(
+        &self,
+        unit: Option<u32>,
+        body_style: Option<u32>,
+    ) -> impl Iterator<Item = &KicadSymbolGraphic> {
+        scoped_symbol_items(&self.graphics, unit, body_style, |graphic| {
+            (graphic.unit, graphic.body_style)
+        })
+    }
+
+    fn scoped_pins(
+        &self,
+        unit: Option<u32>,
+        body_style: Option<u32>,
+    ) -> impl Iterator<Item = &KicadPinDef> {
+        scoped_symbol_items(&self.pins, unit, body_style, |pin| {
+            (pin.unit, pin.body_style)
+        })
+    }
+}
+
+impl KicadSymbolPropertySource for KicadResolvedSymbolDef {
+    fn property_value(&self, name: &str) -> Option<&str> {
+        self.property(name)
+    }
+
+    fn exclude_from_sim_value(&self) -> Option<bool> {
+        self.exclude_from_sim
+    }
+}
+
+fn resolve_symbol_definition(
+    symbol: &KicadSymbolDef,
+    library_symbols: &[KicadSymbolDef],
+) -> Option<KicadResolvedSymbolDef> {
+    let mut chain = Vec::new();
+    let mut current = symbol;
+    let mut visited = BTreeSet::new();
+
+    loop {
+        if !visited.insert(current.name.clone()) {
+            return Some(KicadResolvedSymbolDef::from_symbol(symbol));
+        }
+        chain.push(current);
+        let Some(parent_name) = current.extends.as_deref() else {
+            break;
+        };
+        let Some(parent) = find_symbol_inheritance_parent(current, parent_name, library_symbols)
+        else {
+            return Some(KicadResolvedSymbolDef::from_symbol(symbol));
+        };
+        current = parent;
+    }
+
+    let mut chain = chain.into_iter().rev();
+    let root = chain.next()?;
+    let mut resolved = KicadResolvedSymbolDef::from_symbol(root);
+    for derived in chain {
+        apply_symbol_inheritance_overrides(&mut resolved, derived);
+    }
+    resolved.name = symbol.name.clone();
+    Some(resolved)
+}
+
+fn find_symbol_inheritance_parent<'a>(
+    symbol: &KicadSymbolDef,
+    parent_name: &str,
+    library_symbols: &'a [KicadSymbolDef],
+) -> Option<&'a KicadSymbolDef> {
+    library_symbols
+        .iter()
+        .find(|candidate| candidate.name == parent_name)
+        .or_else(|| {
+            symbol
+                .name
+                .rsplit_once(':')
+                .map(|(library, _)| format!("{library}:{parent_name}"))
+                .and_then(|qualified_parent| {
+                    library_symbols
+                        .iter()
+                        .find(|candidate| candidate.name == qualified_parent)
+                })
+        })
+        .or_else(|| {
+            library_symbols
+                .iter()
+                .find(|candidate| candidate.local_name() == parent_name)
+        })
+}
+
+fn apply_symbol_inheritance_overrides(
+    resolved: &mut KicadResolvedSymbolDef,
+    derived: &KicadSymbolDef,
+) {
+    resolved.exclude_from_sim = derived.exclude_from_sim.or(resolved.exclude_from_sim);
+    resolved.pin_names = derived
+        .pin_names
+        .clone()
+        .or_else(|| resolved.pin_names.clone());
+    resolved.pin_numbers = derived
+        .pin_numbers
+        .clone()
+        .or_else(|| resolved.pin_numbers.clone());
+    for property in &derived.properties {
+        if is_effective_symbol_property_override(property) {
+            upsert_symbol_property(&mut resolved.properties, property.clone());
+        }
+    }
+    if !derived.graphics.is_empty() {
+        resolved.graphics.extend(derived.graphics.clone());
+    }
+    if !derived.pins.is_empty() {
+        resolved.pins.extend(derived.pins.clone());
+    }
+}
+
+fn is_effective_symbol_property_override(property: &KicadProperty) -> bool {
+    !matches!(property.name.as_str(), "Reference" | "Value") || !property.value.trim().is_empty()
+}
+
+fn upsert_symbol_property(properties: &mut Vec<KicadProperty>, property: KicadProperty) {
+    if let Some(existing) = properties
+        .iter_mut()
+        .find(|existing| existing.name == property.name)
+    {
+        *existing = property;
+    } else {
+        properties.push(property);
     }
 }
 
@@ -8179,9 +8406,15 @@ fn library_symbol_definition_for_lib_id(
         .find(|symbol| symbol.name == requested_name || symbol.local_name() == requested_name)
         .cloned()
         .map(|mut symbol| {
-            symbol.name = lib_id.to_string();
+            qualify_library_symbol_name(&mut symbol, library_name);
             symbol
         })
+}
+
+fn qualify_library_symbol_name(symbol: &mut KicadSymbolDef, library_name: &str) {
+    if !symbol.name.contains(':') {
+        symbol.name = format!("{library_name}:{}", symbol.name);
+    }
 }
 
 fn spice_primitive_for_device(device: &str) -> Option<String> {
@@ -8215,10 +8448,11 @@ fn spice_primitive_for_device(device: &str) -> Option<String> {
 
 fn symbol_ordered_pins<'a>(
     symbol: &'a KicadSymbolInstance,
-    definition: &'a KicadSymbolDef,
+    definition: &'a KicadResolvedSymbolDef,
 ) -> Vec<&'a KicadPinDef> {
-    let scoped_pins =
-        scoped_symbol_pins(definition, symbol.unit, symbol.body_style).collect::<Vec<_>>();
+    let scoped_pins = definition
+        .scoped_pins(symbol.unit, symbol.body_style)
+        .collect::<Vec<_>>();
     let mut by_number = scoped_pins
         .iter()
         .copied()
@@ -8272,6 +8506,20 @@ fn scoped_definition_graphics<'a>(
     })
 }
 
+fn scoped_symbol_items<'a, T>(
+    items: &'a [T],
+    unit: Option<u32>,
+    body_style: Option<u32>,
+    scope: impl Fn(&T) -> (u32, u32) + 'a,
+) -> impl Iterator<Item = &'a T> + 'a {
+    let unit = unit.unwrap_or(1);
+    let body_style = body_style.unwrap_or(1);
+    items.iter().filter(move |item| {
+        let (item_unit, item_body_style) = scope(item);
+        symbol_item_scope_matches(item_unit, item_body_style, unit, body_style)
+    })
+}
+
 fn symbol_item_scope_matches(
     item_unit: u32,
     item_body_style: u32,
@@ -8282,7 +8530,10 @@ fn symbol_item_scope_matches(
         && (item_body_style == 0 || item_body_style == selected_body_style)
 }
 
-fn symbol_sim_pin_order(symbol: &KicadSymbolInstance, definition: &KicadSymbolDef) -> Vec<String> {
+fn symbol_sim_pin_order(
+    symbol: &KicadSymbolInstance,
+    definition: &KicadResolvedSymbolDef,
+) -> Vec<String> {
     let Some(pins) = symbol.sim_pins(Some(definition)) else {
         return Vec::new();
     };
@@ -11034,6 +11285,81 @@ mod tests {
     }
 
     #[test]
+    fn resolves_external_derived_symbol_parent_from_library_table() {
+        let project_dir = std::env::temp_dir().join(format!(
+            "nekospice_kicad_derived_library_resolution_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project_dir);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::write(
+            project_dir.join("derived.kicad_sym"),
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "BaseR"
+    (property "Reference" "R" (at 0 0 0))
+    (property "Value" "1k" (at 0 -2.54 0))
+    (property "Sim.Device" "R" (at 0 0 0))
+    (symbol "BaseR_0_1"
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "~") (number "1"))
+      (pin passive line (at 2.54 0 180) (length 2.54) (name "~") (number "2"))
+    )
+  )
+  (symbol "DerivedR"
+    (extends "BaseR")
+    (property "Reference" "R" (at 0 0 0))
+    (property "Value" "10k" (at 0 -2.54 0))
+  )
+)"#,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("sym-lib-table"),
+            r#"(sym_lib_table
+  (version 7)
+  (lib (name "Demo")(type "KiCad")(uri "${KIPRJMOD}/derived.kicad_sym")(options "")(descr ""))
+)"#,
+        )
+        .unwrap();
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (wire (pts (xy 17.46 10) (xy 10 10)))
+  (wire (pts (xy 22.54 10) (xy 30 10)))
+  (label "in" (at 10 10 0))
+  (label "0" (at 30 10 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "Demo:DerivedR")
+    (at 20 10 0)
+    (property "Reference" "R1" (at 20 8 0))
+    (property "Value" "4.7k" (at 20 12 0))
+  )
+)"#,
+            "derived_library_resolution.kicad_sch",
+        )
+        .unwrap();
+
+        let diagnostics = schematic
+            .resolve_project_symbol_libraries(&project_dir)
+            .unwrap();
+        let scene = schematic.canvas_scene();
+        let netlist = schematic.to_spice_netlist().unwrap();
+
+        assert_eq!(diagnostics.len(), 0);
+        assert!(schematic.symbol_definition("Demo:DerivedR").is_some());
+        assert!(schematic.symbol_definition("Demo:BaseR").is_some());
+        assert_eq!(scene.symbols[0].pins.len(), 2);
+        assert!(netlist.contains("R1 in 0 4.7k"));
+
+        let _ = fs::remove_dir_all(project_dir);
+    }
+
+    #[test]
     fn builds_canvas_scene_from_kicad_schematic_fixture() {
         let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -12173,6 +12499,98 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[test]
+    fn resolves_kicad_symbol_inheritance_for_canvas_netlist_and_placement() {
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:ParentR"
+      (pin_names (offset 0.508))
+      (pin_numbers (hide yes))
+      (property "Reference" "R" (at 0 0 0))
+      (property "Value" "1k" (at 0 -2.54 0))
+      (property "Sim.Device" "R" (at 0 0 0))
+      (symbol "ParentR_0_1"
+        (rectangle
+          (start -1 -1)
+          (end 1 1)
+          (stroke (width 0.127) (type default))
+          (fill (type none))
+        )
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "~") (number "1"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "~") (number "2"))
+      )
+    )
+    (symbol "NekoSpice:DerivedR"
+      (extends "NekoSpice:ParentR")
+      (pin_names (offset 1.016))
+      (property "Reference" "R" (at 0 0 0))
+      (property "Value" "4.7k" (at 0 -2.54 0))
+    )
+  )
+  (wire (pts (xy 17.46 10) (xy 10 10)))
+  (wire (pts (xy 22.54 10) (xy 30 10)))
+  (label "in" (at 10 10 0))
+  (label "0" (at 30 10 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:DerivedR")
+    (at 20 10 0)
+    (property "Reference" "R1" (at 20 8 0))
+    (property "Value" "2.2k" (at 20 12 0))
+  )
+)"#,
+            "derived_symbol.kicad_sch",
+        )
+        .unwrap();
+
+        let scene = schematic.canvas_scene();
+        let symbol = scene
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference == "R1")
+            .unwrap();
+        assert_eq!(symbol.graphics.len(), 1);
+        assert_eq!(symbol.pins.len(), 2);
+        assert_close(symbol.pin_names.as_ref().unwrap().offset.unwrap(), 1.016);
+        assert_eq!(symbol.pin_numbers.as_ref().unwrap().hide, Some(true));
+
+        let netlist = schematic.to_spice_netlist().unwrap();
+        assert!(netlist.contains("R1 in 0 2.2k"));
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(extends \"NekoSpice:ParentR\")"));
+        assert!(!exported.contains("(symbol \"DerivedR_0_1\""));
+
+        let derived = schematic
+            .symbol_definition("NekoSpice:DerivedR")
+            .unwrap()
+            .clone();
+        schematic
+            .place_symbol(
+                derived,
+                "R2",
+                "3.3k",
+                KicadAt {
+                    x: 40.0,
+                    y: 10.0,
+                    rotation: 0.0,
+                },
+                Some(1),
+                None,
+            )
+            .unwrap();
+        let placed = schematic
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference() == Some("R2"))
+            .unwrap();
+        assert_eq!(placed.pins.len(), 2);
     }
 
     #[test]
