@@ -3,6 +3,7 @@ use osl_kicad::{
     KicadAt, KicadBoundingBox, KicadCanvasDirectiveLabel, KicadCanvasGraphic, KicadCanvasImage,
     KicadCanvasRuleArea, KicadCanvasScene, KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable,
     KicadCanvasTextBox, KicadColor, KicadFill, KicadLabelKind, KicadPoint, KicadStroke,
+    KicadTextEffects,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -448,6 +449,78 @@ fn render_text_box(output: &mut String, viewport: &SvgViewport, text_box: &Kicad
     output.push_str("    </g>\n");
 }
 
+fn svg_text_fill(
+    effects: Option<&KicadTextEffects>,
+    fill: Option<&KicadFill>,
+    stroke: Option<&KicadStroke>,
+    default: &str,
+) -> String {
+    if let Some(color) = effects.and_then(|effects| effects.font_color) {
+        return svg_color(color);
+    }
+    let text_fill = svg_fill_color(fill, default);
+    if text_fill == "none" {
+        svg_stroke_color(stroke, default)
+    } else {
+        text_fill
+    }
+}
+
+fn svg_text_effect_attrs(effects: Option<&KicadTextEffects>, viewport: &SvgViewport) -> String {
+    let Some(effects) = effects else {
+        return String::new();
+    };
+
+    let mut attrs = String::new();
+    if let Some(size) = effects.font_size
+        && size.height.is_finite()
+        && size.height > 0.0
+    {
+        attrs.push_str(&format!(
+            " font-size=\"{}\"",
+            fmt((size.height * viewport.scale).max(1.0))
+        ));
+    }
+    if effects.font_bold == Some(true) {
+        attrs.push_str(" font-weight=\"700\"");
+    }
+    if effects.font_italic == Some(true) {
+        attrs.push_str(" font-style=\"italic\"");
+    }
+    if let Some(anchor) = svg_text_anchor(effects) {
+        attrs.push_str(&format!(" text-anchor=\"{}\"", anchor));
+    }
+    if let Some(baseline) = svg_text_baseline(effects) {
+        attrs.push_str(&format!(" dominant-baseline=\"{}\"", baseline));
+    }
+    if let Some(href) = &effects.href {
+        attrs.push_str(&format!(" data-href=\"{}\"", html_escape(href)));
+    }
+    attrs
+}
+
+fn svg_text_anchor(effects: &KicadTextEffects) -> Option<&'static str> {
+    if effects.justify.iter().any(|token| token == "right") {
+        Some("end")
+    } else if effects.justify.iter().any(|token| token == "center") {
+        Some("middle")
+    } else if effects.justify.iter().any(|token| token == "left") {
+        Some("start")
+    } else {
+        None
+    }
+}
+
+fn svg_text_baseline(effects: &KicadTextEffects) -> Option<&'static str> {
+    if effects.justify.iter().any(|token| token == "top") {
+        Some("hanging")
+    } else if effects.justify.iter().any(|token| token == "bottom") {
+        Some("text-after-edge")
+    } else {
+        None
+    }
+}
+
 fn svg_color(color: KicadColor) -> String {
     format!(
         "rgba({},{},{},{})",
@@ -721,22 +794,39 @@ fn render_graphic(
         KicadCanvasGraphic::Text {
             text,
             at,
+            effects,
             stroke: graphic_stroke,
             fill: graphic_fill,
         } => {
+            if effects.as_ref().is_some_and(|effects| effects.hide) {
+                return;
+            }
             if let Some(at) = at {
                 let point = viewport.project(at_point(*at));
-                let text_fill = svg_fill_color(graphic_fill.as_ref(), stroke);
-                let text_fill = if text_fill == "none" {
-                    svg_stroke_color(graphic_stroke.as_ref(), stroke)
+                let text_fill = svg_text_fill(
+                    effects.as_ref(),
+                    graphic_fill.as_ref(),
+                    graphic_stroke.as_ref(),
+                    stroke,
+                );
+                let attrs = svg_text_effect_attrs(effects.as_ref(), viewport);
+                let transform = if at.rotation != 0.0 {
+                    format!(
+                        " transform=\"rotate({} {} {})\"",
+                        fmt(at.rotation),
+                        fmt(point.x),
+                        fmt(point.y)
+                    )
                 } else {
-                    text_fill
+                    String::new()
                 };
                 output.push_str(&format!(
-                    "      <text x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\">{}</text>\n",
+                    "      <text data-graphic-text=\"true\" x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\"{}{}>{}</text>\n",
                     fmt(point.x),
                     fmt(point.y),
                     text_fill,
+                    attrs,
+                    transform,
                     html_escape(text)
                 ));
             }
@@ -1128,6 +1218,14 @@ mod tests {
           (stroke (width 0.0254) (type dash_dot) (color 58 104 255 0.5))
           (fill (type outline))
         )
+        (text "ALT"
+          (at 1.27 2.54 90)
+          (effects
+            (font (size 1.524 1.016) bold italic (color 255 89 101 0.75))
+            (justify right bottom)
+            (href "https://nekospice.test/symbol-text")
+          )
+        )
       )
     )
   )
@@ -1156,6 +1254,16 @@ mod tests {
         assert!(svg.contains("stroke-dasharray=\"8 5\""));
         assert!(svg.contains("stroke=\"rgba(58,104,255,0.5)\""));
         assert!(svg.contains("stroke-dasharray=\"8 4 2 4\""));
+        assert!(svg.contains("data-graphic-text=\"true\""));
+        assert!(svg.contains(">ALT</text>"));
+        assert!(svg.contains("fill=\"rgba(255,89,101,0.75)\""));
+        assert!(svg.contains("font-size=\"18.288\""));
+        assert!(svg.contains("font-weight=\"700\""));
+        assert!(svg.contains("font-style=\"italic\""));
+        assert!(svg.contains("text-anchor=\"end\""));
+        assert!(svg.contains("dominant-baseline=\"text-after-edge\""));
+        assert!(svg.contains("data-href=\"https://nekospice.test/symbol-text\""));
+        assert!(svg.contains("transform=\"rotate(90"));
     }
 
     #[test]

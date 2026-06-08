@@ -3406,6 +3406,7 @@ pub enum KicadCanvasGraphic {
     Text {
         text: String,
         at: Option<KicadAt>,
+        effects: Option<KicadTextEffects>,
         stroke: Option<KicadStroke>,
         fill: Option<KicadFill>,
     },
@@ -3870,6 +3871,20 @@ impl KicadSymbolLibrary {
             .iter()
             .filter(|symbol| symbol.embedded_fonts.is_some())
             .count();
+        let symbol_graphic_text_effect_count = self
+            .symbols
+            .iter()
+            .flat_map(|symbol| &symbol.graphics)
+            .filter(|graphic| {
+                matches!(
+                    &graphic.graphic,
+                    KicadGraphic::Text {
+                        effects: Some(_),
+                        ..
+                    }
+                )
+            })
+            .count();
 
         format!(
             concat!(
@@ -3880,6 +3895,7 @@ impl KicadSymbolLibrary {
                 "  \"generator_version\": {},\n",
                 "  \"symbol_count\": {},\n",
                 "  \"graphic_count\": {},\n",
+                "  \"symbol_graphic_text_effect_count\": {},\n",
                 "  \"pin_count\": {},\n",
                 "  \"pin_display_setting_count\": {},\n",
                 "  \"pin_text_effect_count\": {},\n",
@@ -3904,6 +3920,7 @@ impl KicadSymbolLibrary {
                 .iter()
                 .map(|symbol| symbol.graphics.len())
                 .sum::<usize>(),
+            symbol_graphic_text_effect_count,
             pin_count,
             pin_display_setting_count,
             pin_text_effect_count,
@@ -4566,6 +4583,7 @@ pub enum KicadGraphic {
     Text {
         text: String,
         at: Option<KicadAt>,
+        effects: Option<KicadTextEffects>,
     },
 }
 
@@ -4648,9 +4666,10 @@ impl KicadGraphic {
                 stroke: None,
                 fill: None,
             },
-            Self::Text { text, at } => KicadCanvasGraphic::Text {
+            Self::Text { text, at, effects } => KicadCanvasGraphic::Text {
                 text: text.clone(),
                 at: at.map(|at| transform_local_at(at, symbol_at)),
+                effects: effects.clone(),
                 stroke: None,
                 fill: None,
             },
@@ -4688,9 +4707,10 @@ impl KicadGraphic {
                 stroke: None,
                 fill: None,
             },
-            Self::Text { text, at } => KicadCanvasGraphic::Text {
+            Self::Text { text, at, effects } => KicadCanvasGraphic::Text {
                 text: text.clone(),
                 at: *at,
+                effects: effects.clone(),
                 stroke: None,
                 fill: None,
             },
@@ -4772,7 +4792,7 @@ impl KicadGraphic {
                 write_symbol_graphic_metadata(output, format.uuid, format.locked);
                 output.push_str(")\n");
             }
-            Self::Text { text, at } => {
+            Self::Text { text, at, effects } => {
                 output.push_str(&format!("{}(text{} {}", pad, private, sexpr_string(text)));
                 if let Some(at) = at {
                     output.push_str(&format!(
@@ -4782,7 +4802,7 @@ impl KicadGraphic {
                         format_number(at.rotation)
                     ));
                 }
-                output.push_str(" (effects (font (size 1.27 1.27)))");
+                write_inline_text_effects(output, effects.as_ref());
                 write_symbol_graphic_metadata(output, format.uuid, format.locked);
                 output.push_str(")\n");
             }
@@ -4886,7 +4906,7 @@ impl KicadSchematicGraphic {
                 self.write_locked(output);
                 output.push_str(")\n");
             }
-            KicadGraphic::Text { text, at } => {
+            KicadGraphic::Text { text, at, effects } => {
                 output.push_str(&format!("{}(text {}", pad, sexpr_string(text)));
                 if let Some(at) = at {
                     output.push_str(&format!(
@@ -4896,7 +4916,7 @@ impl KicadSchematicGraphic {
                         format_number(at.rotation)
                     ));
                 }
-                output.push_str(" (effects (font (size 1.27 1.27)))");
+                write_inline_text_effects(output, effects.as_ref());
                 self.write_uuid(output);
                 self.write_locked(output);
                 output.push_str(")\n");
@@ -7493,6 +7513,7 @@ fn parse_graphic(node: &Sexp) -> Option<KicadGraphic> {
         "text" => Some(KicadGraphic::Text {
             text: list_value(node, 1)?,
             at: child(items, "at").and_then(parse_at),
+            effects: child(items, "effects").map(parse_text_effects),
         }),
         _ => None,
     }
@@ -11880,6 +11901,14 @@ mod tests {
         (stroke (width 0) (type default) (color 0 0 0 0))
         (fill (type background))
       )
+      (text "ALT"
+        (at 1.27 2.54 90)
+        (effects
+          (font (size 1.524 1.016) (thickness 0.1524) bold italic (color 255 89 101 0.75))
+          (justify right bottom)
+          (href "https://nekospice.test/symbol-text")
+        )
+      )
     )
   )
 )"#,
@@ -11888,7 +11917,7 @@ mod tests {
         .unwrap();
 
         let symbol = library.symbol("NekoSpice:Styled").unwrap();
-        assert_eq!(symbol.graphics.len(), 2);
+        assert_eq!(symbol.graphics.len(), 3);
         let styled = &symbol.graphics[0];
         assert!(styled.private);
         assert!(matches!(
@@ -11927,6 +11956,33 @@ mod tests {
                 .as_deref(),
             Some("background")
         );
+        if let KicadGraphic::Text { text, at, effects } = &symbol.graphics[2].graphic {
+            assert_eq!(text, "ALT");
+            assert_close(at.unwrap().x, 1.27);
+            assert_close(at.unwrap().rotation, 90.0);
+            let effects = effects.as_ref().unwrap();
+            assert_close(effects.font_size.unwrap().width, 1.524);
+            assert_close(effects.font_size.unwrap().height, 1.016);
+            assert_close(effects.font_thickness.unwrap(), 0.1524);
+            assert_eq!(effects.font_bold, Some(true));
+            assert_eq!(effects.font_italic, Some(true));
+            assert_eq!(
+                effects.font_color,
+                Some(KicadColor {
+                    red: 255.0,
+                    green: 89.0,
+                    blue: 101.0,
+                    alpha: 0.75,
+                })
+            );
+            assert_eq!(effects.justify, vec!["right", "bottom"]);
+            assert_eq!(
+                effects.href.as_deref(),
+                Some("https://nekospice.test/symbol-text")
+            );
+        } else {
+            panic!("expected styled text symbol graphic");
+        }
 
         let schematic = parse_kicad_schematic(
             r#"(kicad_sch
@@ -11969,6 +12025,11 @@ mod tests {
         ));
 
         let exported = library.to_kicad_symbol_library_sexpr();
+        assert!(
+            library
+                .to_summary_json()
+                .contains("\"symbol_graphic_text_effect_count\": 1")
+        );
         assert!(exported.contains("(polyline private"));
         assert!(
             exported.contains("(stroke (width 0.0254) (type dash_dot) (color 58 104 255 0.5))")
@@ -11977,11 +12038,17 @@ mod tests {
         assert!(exported.contains("(uuid \"a5cd8da1-8f7f-4f80-bb23-0317de562222\")"));
         assert!(exported.contains("(locked yes)"));
         assert!(exported.contains("(fill (type background))"));
+        assert!(exported.contains("(text \"ALT\" (at 1.27 2.54 90)"));
+        assert!(
+            exported.contains(
+                "(effects (font (size 1.524 1.016) (thickness 0.1524) (bold yes) (italic yes) (color 255 89 101 0.75)) (justify right bottom) (href \"https://nekospice.test/symbol-text\"))"
+            )
+        );
 
         let reparsed =
             parse_kicad_symbol_library(&exported, "styled_symbol_roundtrip.kicad_sym").unwrap();
         let reparsed_symbol = reparsed.symbol("NekoSpice:Styled").unwrap();
-        assert_eq!(reparsed_symbol.graphics.len(), 2);
+        assert_eq!(reparsed_symbol.graphics.len(), 3);
         assert!(reparsed_symbol.graphics[0].private);
         assert_eq!(
             reparsed_symbol.graphics[0]
@@ -12011,6 +12078,13 @@ mod tests {
                 .as_deref(),
             Some("background")
         );
+        assert!(matches!(
+            &reparsed_symbol.graphics[2].graphic,
+            KicadGraphic::Text { effects: Some(effects), .. }
+                if effects.font_italic == Some(true)
+                    && effects.justify == vec!["right".to_string(), "bottom".to_string()]
+                    && effects.href.as_deref() == Some("https://nekospice.test/symbol-text")
+        ));
     }
 
     #[test]
