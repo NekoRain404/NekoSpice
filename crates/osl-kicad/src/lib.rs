@@ -84,8 +84,10 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         source: source.to_string(),
         version: child_value(root_list, "version"),
         generator: child_value(root_list, "generator"),
+        generator_version: child_value(root_list, "generator_version"),
         uuid: child_value(root_list, "uuid"),
         paper: child_value(root_list, "paper"),
+        title_block: child(root_list, "title_block").map(parse_title_block),
         library_symbols,
         bus_aliases: direct_children(root_list, "bus_alias")
             .filter_map(parse_bus_alias)
@@ -141,6 +143,13 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         junctions: direct_children(root_list, "junction")
             .filter_map(parse_junction)
             .collect(),
+        sheet_instances: child(root_list, "sheet_instances")
+            .map(parse_sheet_instances)
+            .unwrap_or_default(),
+        symbol_instances: child(root_list, "symbol_instances")
+            .map(parse_symbol_path_instances)
+            .unwrap_or_default(),
+        embedded_fonts: child_value(root_list, "embedded_fonts").and_then(parse_kicad_bool_value),
     })
 }
 
@@ -209,8 +218,10 @@ pub struct KicadSchematic {
     pub source: String,
     pub version: Option<String>,
     pub generator: Option<String>,
+    pub generator_version: Option<String>,
     pub uuid: Option<String>,
     pub paper: Option<String>,
+    pub title_block: Option<KicadTitleBlock>,
     pub library_symbols: Vec<KicadSymbolDef>,
     pub bus_aliases: Vec<KicadBusAlias>,
     pub symbols: Vec<KicadSymbolInstance>,
@@ -227,6 +238,9 @@ pub struct KicadSchematic {
     pub text_items: Vec<KicadTextItem>,
     pub text_boxes: Vec<KicadTextBox>,
     pub junctions: Vec<KicadJunction>,
+    pub sheet_instances: Vec<KicadSheetInstance>,
+    pub symbol_instances: Vec<KicadSymbolPathInstance>,
+    pub embedded_fonts: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1121,6 +1135,12 @@ impl KicadSchematic {
         if let Some(generator) = &self.generator {
             output.push_str(&format!("  (generator {})\n", sexpr_string(generator)));
         }
+        if let Some(generator_version) = &self.generator_version {
+            output.push_str(&format!(
+                "  (generator_version {})\n",
+                sexpr_string(generator_version)
+            ));
+        }
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("  (uuid {})\n", sexpr_string(uuid)));
         }
@@ -1128,6 +1148,9 @@ impl KicadSchematic {
             "  (paper {})\n",
             sexpr_string(self.paper.as_deref().unwrap_or("A4"))
         ));
+        if let Some(title_block) = &self.title_block {
+            title_block.write_title_block_sexpr(&mut output, 2);
+        }
         output.push_str("  (lib_symbols\n");
         for symbol in &self.library_symbols {
             symbol.write_symbol_sexpr(&mut output, 4);
@@ -1177,6 +1200,18 @@ impl KicadSchematic {
         }
         for symbol in &self.symbols {
             symbol.write_instance_sexpr(&mut output, 2);
+        }
+        if !self.sheet_instances.is_empty() {
+            write_sheet_instances_sexpr(&mut output, &self.sheet_instances, 2);
+        }
+        if !self.symbol_instances.is_empty() {
+            write_symbol_path_instances_sexpr(&mut output, &self.symbol_instances, 2);
+        }
+        if let Some(embedded_fonts) = self.embedded_fonts {
+            output.push_str(&format!(
+                "  (embedded_fonts {})\n",
+                if embedded_fonts { "yes" } else { "no" }
+            ));
         }
         output.push_str(")\n");
         output
@@ -2010,6 +2045,9 @@ impl KicadSchematic {
                 "  \"source\": \"{}\",\n",
                 "  \"version\": {},\n",
                 "  \"generator\": {},\n",
+                "  \"generator_version\": {},\n",
+                "  \"has_title_block\": {},\n",
+                "  \"title_comment_count\": {},\n",
                 "  \"symbol_count\": {},\n",
                 "  \"library_symbol_count\": {},\n",
                 "  \"bus_alias_count\": {},\n",
@@ -2030,12 +2068,21 @@ impl KicadSchematic {
                 "  \"text_count\": {},\n",
                 "  \"text_box_count\": {},\n",
                 "  \"spice_directive_count\": {},\n",
+                "  \"sheet_instance_count\": {},\n",
+                "  \"symbol_instance_count\": {},\n",
+                "  \"embedded_fonts\": {},\n",
                 "  \"library_graphic_count\": {}\n",
                 "}}"
             ),
             json_escape(&self.source),
             json_option(self.version.as_deref()),
             json_option(self.generator.as_deref()),
+            json_option(self.generator_version.as_deref()),
+            self.title_block.is_some(),
+            self.title_block
+                .as_ref()
+                .map(|title_block| title_block.comments.len())
+                .unwrap_or(0),
             self.symbols.len(),
             self.library_symbols.len(),
             self.bus_aliases.len(),
@@ -2065,6 +2112,9 @@ impl KicadSchematic {
             self.text_items.len(),
             self.text_boxes.len(),
             self.spice_directives().len(),
+            self.sheet_instances.len(),
+            self.symbol_instances.len(),
+            json_bool_option(self.embedded_fonts),
             self.library_symbols
                 .iter()
                 .map(|symbol| symbol.graphics.len())
@@ -4202,6 +4252,64 @@ impl KicadProperty {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct KicadTitleBlock {
+    pub title: Option<String>,
+    pub date: Option<String>,
+    pub revision: Option<String>,
+    pub company: Option<String>,
+    pub comments: Vec<KicadTitleComment>,
+}
+
+impl KicadTitleBlock {
+    fn write_title_block_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(title_block\n", pad));
+        if let Some(title) = &self.title {
+            output.push_str(&format!("{}  (title {})\n", pad, sexpr_string(title)));
+        }
+        if let Some(date) = &self.date {
+            output.push_str(&format!("{}  (date {})\n", pad, sexpr_string(date)));
+        }
+        if let Some(revision) = &self.revision {
+            output.push_str(&format!("{}  (rev {})\n", pad, sexpr_string(revision)));
+        }
+        if let Some(company) = &self.company {
+            output.push_str(&format!("{}  (company {})\n", pad, sexpr_string(company)));
+        }
+        for comment in &self.comments {
+            output.push_str(&format!(
+                "{}  (comment {} {})\n",
+                pad,
+                comment.index,
+                sexpr_string(&comment.text)
+            ));
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadTitleComment {
+    pub index: u32,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSheetInstance {
+    pub path: String,
+    pub page: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSymbolPathInstance {
+    pub path: String,
+    pub reference: Option<String>,
+    pub unit: Option<u32>,
+    pub value: Option<String>,
+    pub footprint: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct KicadWire {
     pub points: Vec<KicadPoint>,
     pub uuid: Option<String>,
@@ -4842,6 +4950,112 @@ fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
     })
 }
 
+fn parse_title_block(node: &Sexp) -> KicadTitleBlock {
+    let items = list_items(node);
+    KicadTitleBlock {
+        title: child_value(items, "title"),
+        date: child_value(items, "date"),
+        revision: child_value(items, "rev"),
+        company: child_value(items, "company"),
+        comments: direct_children(items, "comment")
+            .filter_map(parse_title_comment)
+            .collect(),
+    }
+}
+
+fn parse_title_comment(node: &Sexp) -> Option<KicadTitleComment> {
+    Some(KicadTitleComment {
+        index: list_value(node, 1)?.parse().ok()?,
+        text: list_value(node, 2)?,
+    })
+}
+
+fn parse_sheet_instances(node: &Sexp) -> Vec<KicadSheetInstance> {
+    direct_children(list_items(node), "path")
+        .filter_map(parse_sheet_instance)
+        .collect()
+}
+
+fn parse_sheet_instance(node: &Sexp) -> Option<KicadSheetInstance> {
+    let items = list_items(node);
+    Some(KicadSheetInstance {
+        path: list_value(node, 1)?,
+        page: child_value(items, "page"),
+    })
+}
+
+fn parse_symbol_path_instances(node: &Sexp) -> Vec<KicadSymbolPathInstance> {
+    direct_children(list_items(node), "path")
+        .filter_map(parse_symbol_path_instance)
+        .collect()
+}
+
+fn parse_symbol_path_instance(node: &Sexp) -> Option<KicadSymbolPathInstance> {
+    let items = list_items(node);
+    Some(KicadSymbolPathInstance {
+        path: list_value(node, 1)?,
+        reference: child_value(items, "reference"),
+        unit: child_value(items, "unit").and_then(|value| value.parse().ok()),
+        value: child_value(items, "value"),
+        footprint: child_value(items, "footprint"),
+    })
+}
+
+fn write_sheet_instances_sexpr(
+    output: &mut String,
+    instances: &[KicadSheetInstance],
+    indent: usize,
+) {
+    let pad = " ".repeat(indent);
+    output.push_str(&format!("{}(sheet_instances\n", pad));
+    for instance in instances {
+        output.push_str(&format!("{}  (path {}", pad, sexpr_string(&instance.path)));
+        if let Some(page) = &instance.page {
+            output.push_str(&format!(" (page {})", sexpr_string(page)));
+        }
+        output.push_str(")\n");
+    }
+    output.push_str(&format!("{})\n", pad));
+}
+
+fn write_symbol_path_instances_sexpr(
+    output: &mut String,
+    instances: &[KicadSymbolPathInstance],
+    indent: usize,
+) {
+    let pad = " ".repeat(indent);
+    output.push_str(&format!("{}(symbol_instances\n", pad));
+    for instance in instances {
+        output.push_str(&format!(
+            "{}  (path {}\n",
+            pad,
+            sexpr_string(&instance.path)
+        ));
+        if let Some(reference) = &instance.reference {
+            output.push_str(&format!(
+                "{}    (reference {})\n",
+                pad,
+                sexpr_string(reference)
+            ));
+        }
+        if let Some(unit) = instance.unit {
+            output.push_str(&format!("{}    (unit {})\n", pad, unit));
+        }
+        if let Some(value) = &instance.value {
+            output.push_str(&format!("{}    (value {})\n", pad, sexpr_string(value)));
+        }
+        if let Some(footprint) = &instance.footprint {
+            output.push_str(&format!(
+                "{}    (footprint {})\n",
+                pad,
+                sexpr_string(footprint)
+            ));
+        }
+        output.push_str(&format!("{}  )\n", pad));
+    }
+    output.push_str(&format!("{})\n", pad));
+}
+
 fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
     let items = list_items(node);
     Some(KicadSymbolDef {
@@ -5300,6 +5514,14 @@ fn json_u64_option(value: Option<u64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_bool_option(value: Option<bool>) -> &'static str {
+    match value {
+        Some(true) => "true",
+        Some(false) => "false",
+        None => "null",
+    }
 }
 
 fn json_path_string(root: &serde_json::Value, path: &[&str]) -> Option<String> {
@@ -6762,6 +6984,116 @@ mod tests {
         assert_eq!(reparsed.groups.len(), 1);
         assert_eq!(reparsed.groups[0].members.len(), 2);
         assert_eq!(reparsed.groups[0].locked, Some(true));
+    }
+
+    #[test]
+    fn preserves_schematic_file_metadata_and_instances() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "eeschema")
+  (generator_version "9.99")
+  (uuid "10101010-1010-4010-8010-101010101010")
+  (paper "A4")
+  (title_block
+    (title "Control Board")
+    (date "2026-06-09")
+    (rev "A")
+    (company "NekoSpice")
+    (comment 1 "simulation front-end")
+    (comment 4 "${APPROVER}")
+  )
+  (lib_symbols)
+  (symbol
+    (lib_id "Device:R")
+    (at 10 20 0)
+    (unit 1)
+    (uuid "20202020-2020-4020-8020-202020202020")
+    (property "Reference" "R1" (at 10 17.46 0))
+    (property "Value" "1k" (at 10 22.54 0))
+    (pin "1" (uuid "30303030-3030-4030-8030-303030303030"))
+    (pin "2" (uuid "40404040-4040-4040-8040-404040404040"))
+  )
+  (sheet_instances
+    (path "/" (page "1"))
+    (path "/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" (page "2"))
+  )
+  (symbol_instances
+    (path "/20202020-2020-4020-8020-202020202020"
+      (reference "R1")
+      (unit 1)
+      (value "1k")
+      (footprint "")
+    )
+  )
+  (embedded_fonts no)
+)"#,
+            "metadata.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.generator_version.as_deref(), Some("9.99"));
+        assert_eq!(schematic.embedded_fonts, Some(false));
+        let title_block = schematic.title_block.as_ref().unwrap();
+        assert_eq!(title_block.title.as_deref(), Some("Control Board"));
+        assert_eq!(title_block.revision.as_deref(), Some("A"));
+        assert_eq!(title_block.comments.len(), 2);
+        assert_eq!(title_block.comments[1].index, 4);
+        assert_eq!(title_block.comments[1].text, "${APPROVER}");
+        assert_eq!(schematic.sheet_instances.len(), 2);
+        assert_eq!(schematic.sheet_instances[1].page.as_deref(), Some("2"));
+        assert_eq!(schematic.symbol_instances.len(), 1);
+        assert_eq!(
+            schematic.symbol_instances[0].path,
+            "/20202020-2020-4020-8020-202020202020"
+        );
+        assert_eq!(
+            schematic.symbol_instances[0].reference.as_deref(),
+            Some("R1")
+        );
+        assert_eq!(schematic.symbol_instances[0].unit, Some(1));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"has_title_block\": true")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"title_comment_count\": 2")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"sheet_instance_count\": 2")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"symbol_instance_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"embedded_fonts\": false")
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(generator_version \"9.99\")"));
+        assert!(roundtrip.contains("(title \"Control Board\")"));
+        assert!(roundtrip.contains("(comment 4 \"${APPROVER}\")"));
+        assert!(roundtrip.contains("(sheet_instances"));
+        assert!(roundtrip.contains("(path \"/\" (page \"1\"))"));
+        assert!(roundtrip.contains("(symbol_instances"));
+        assert!(roundtrip.contains("(reference \"R1\")"));
+        assert!(roundtrip.contains("(embedded_fonts no)"));
+
+        let reparsed = parse_kicad_schematic(&roundtrip, "metadata_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.generator_version.as_deref(), Some("9.99"));
+        assert_eq!(reparsed.title_block.unwrap().comments.len(), 2);
+        assert_eq!(reparsed.sheet_instances.len(), 2);
+        assert_eq!(reparsed.symbol_instances.len(), 1);
+        assert_eq!(reparsed.embedded_fonts, Some(false));
     }
 
     #[test]
