@@ -104,6 +104,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         bus_entries: direct_children(root_list, "bus_entry")
             .filter_map(parse_bus_entry)
             .collect(),
+        net_chains: direct_children(root_list, "net_chain")
+            .filter_map(parse_net_chain)
+            .collect(),
         graphics: root_list
             .iter()
             .filter_map(parse_schematic_graphic)
@@ -234,6 +237,7 @@ pub struct KicadSchematic {
     pub wires: Vec<KicadWire>,
     pub buses: Vec<KicadBus>,
     pub bus_entries: Vec<KicadBusEntry>,
+    pub net_chains: Vec<KicadNetChain>,
     pub graphics: Vec<KicadSchematicGraphic>,
     pub images: Vec<KicadImage>,
     pub tables: Vec<KicadTable>,
@@ -1218,6 +1222,9 @@ impl KicadSchematic {
         for entry in &self.bus_entries {
             entry.write_bus_entry_sexpr(&mut output, 2);
         }
+        for net_chain in &self.net_chains {
+            net_chain.write_net_chain_sexpr(&mut output, 2);
+        }
         for graphic in &self.graphics {
             graphic.write_schematic_graphic_sexpr(&mut output, 2);
         }
@@ -2123,6 +2130,8 @@ impl KicadSchematic {
                 "  \"styled_bus_count\": {},\n",
                 "  \"bus_entry_count\": {},\n",
                 "  \"styled_bus_entry_count\": {},\n",
+                "  \"net_chain_count\": {},\n",
+                "  \"net_chain_member_net_count\": {},\n",
                 "  \"schematic_graphic_count\": {},\n",
                 "  \"styled_schematic_graphic_count\": {},\n",
                 "  \"locked_schematic_graphic_count\": {},\n",
@@ -2187,6 +2196,8 @@ impl KicadSchematic {
             self.styled_bus_count(),
             self.bus_entries.len(),
             self.styled_bus_entry_count(),
+            self.net_chains.len(),
+            self.net_chain_member_net_count(),
             self.graphics.len(),
             self.styled_schematic_graphic_count(),
             self.locked_schematic_graphic_count(),
@@ -2318,6 +2329,13 @@ impl KicadSchematic {
             .iter()
             .filter(|entry| entry.stroke.is_some())
             .count()
+    }
+
+    fn net_chain_member_net_count(&self) -> usize {
+        self.net_chains
+            .iter()
+            .map(|net_chain| net_chain.member_nets.len())
+            .sum()
     }
 
     fn locked_schematic_graphic_count(&self) -> usize {
@@ -5227,6 +5245,62 @@ impl KicadBusEntry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct KicadNetChain {
+    pub name: String,
+    pub from: Option<KicadNetChainEndpoint>,
+    pub to: Option<KicadNetChainEndpoint>,
+    pub net_class: Option<String>,
+    pub color: Option<KicadColor>,
+    pub member_nets: Vec<String>,
+    pub extra: Vec<Sexp>,
+}
+
+impl KicadNetChain {
+    fn write_net_chain_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(net_chain {}", pad, sexpr_string(&self.name)));
+        if let Some(from) = &self.from {
+            output.push_str(&format!(
+                " (from {} {})",
+                sexpr_string(&from.reference),
+                sexpr_string(&from.pin)
+            ));
+        }
+        if let Some(to) = &self.to {
+            output.push_str(&format!(
+                " (to {} {})",
+                sexpr_string(&to.reference),
+                sexpr_string(&to.pin)
+            ));
+        }
+        if let Some(net_class) = &self.net_class {
+            output.push_str(&format!(" (net_class {})", sexpr_string(net_class)));
+        }
+        if let Some(color) = self.color {
+            color.write_inline_color_sexpr(output);
+        }
+        if !self.member_nets.is_empty() {
+            output.push_str(" (nets");
+            for net in &self.member_nets {
+                output.push_str(&format!(" {}", sexpr_string(net)));
+            }
+            output.push(')');
+        }
+        for item in &self.extra {
+            output.push(' ');
+            write_sexpr_inline(output, item);
+        }
+        output.push_str(")\n");
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadNetChainEndpoint {
+    pub reference: String,
+    pub pin: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct KicadLabel {
     pub text: String,
     pub kind: KicadLabelKind,
@@ -6401,6 +6475,44 @@ fn parse_bus_entry(node: &Sexp) -> Option<KicadBusEntry> {
     })
 }
 
+fn parse_net_chain(node: &Sexp) -> Option<KicadNetChain> {
+    let items = list_items(node);
+    let known_heads = ["from", "to", "net_class", "color", "nets"];
+    Some(KicadNetChain {
+        name: list_value(node, 1)?,
+        from: child(items, "from").and_then(parse_net_chain_endpoint),
+        to: child(items, "to").and_then(parse_net_chain_endpoint),
+        net_class: child_value(items, "net_class"),
+        color: child(items, "color").and_then(parse_color),
+        member_nets: child(items, "nets")
+            .map(|nets| {
+                list_items(nets)
+                    .iter()
+                    .skip(1)
+                    .filter_map(atom_text)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        extra: list_items(node)
+            .iter()
+            .skip(2)
+            .filter(|item| {
+                matches!(item, Sexp::List(_))
+                    && head(item).is_none_or(|head| !known_heads.contains(&head))
+            })
+            .cloned()
+            .collect(),
+    })
+}
+
+fn parse_net_chain_endpoint(node: &Sexp) -> Option<KicadNetChainEndpoint> {
+    Some(KicadNetChainEndpoint {
+        reference: list_value(node, 1)?,
+        pin: list_value(node, 2)?,
+    })
+}
+
 fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
     match head(node)? {
         "polyline" | "bezier" | "rectangle" | "circle" | "arc" => {
@@ -6971,6 +7083,28 @@ fn sexpr_atom_or_string(value: &str) -> String {
         value.to_string()
     } else {
         sexpr_string(value)
+    }
+}
+
+fn write_sexpr_inline(output: &mut String, node: &Sexp) {
+    match node {
+        Sexp::Atom(value) => output.push_str(&sexpr_string(value)),
+        Sexp::List(items) => {
+            output.push('(');
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    output.push(' ');
+                }
+                match item {
+                    Sexp::Atom(value) if index == 0 => {
+                        output.push_str(&sexpr_atom_or_string(value));
+                    }
+                    Sexp::Atom(value) => output.push_str(&sexpr_string(value)),
+                    Sexp::List(_) => write_sexpr_inline(output, item),
+                }
+            }
+            output.push(')');
+        }
     }
 }
 
@@ -8178,6 +8312,78 @@ mod tests {
             reparsed.buses[0].uuid.as_deref(),
             Some("32323232-3232-4232-8232-323232323232")
         );
+    }
+
+    #[test]
+    fn parses_net_chains_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20251028)
+  (generator "eeschema")
+  (paper "A4")
+  (lib_symbols)
+  (net_chain "Signal1"
+    (from "U1" "A1")
+    (to "J1" "2")
+    (net_class "USB3")
+    (color 58 104 255 0.75)
+    (nets "SS_TX+" "SS_TX-")
+    (uuid "605e5401-cbcc-4f20-9148-b7b3bd8eecbe")
+    (uuid "a878e86a-9b21-4559-9e74-a7a0e383034e")
+  )
+)"#,
+            "net_chain.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.net_chains.len(), 1);
+        let net_chain = &schematic.net_chains[0];
+        assert_eq!(net_chain.name, "Signal1");
+        assert_eq!(net_chain.from.as_ref().unwrap().reference, "U1");
+        assert_eq!(net_chain.from.as_ref().unwrap().pin, "A1");
+        assert_eq!(net_chain.to.as_ref().unwrap().reference, "J1");
+        assert_eq!(net_chain.to.as_ref().unwrap().pin, "2");
+        assert_eq!(net_chain.net_class.as_deref(), Some("USB3"));
+        assert_eq!(
+            net_chain.color,
+            Some(KicadColor {
+                red: 58.0,
+                green: 104.0,
+                blue: 255.0,
+                alpha: 0.75,
+            })
+        );
+        assert_eq!(
+            net_chain.member_nets,
+            vec!["SS_TX+".to_string(), "SS_TX-".to_string()]
+        );
+        assert_eq!(net_chain.extra.len(), 2);
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"net_chain_count\": 1")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"net_chain_member_net_count\": 2")
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(net_chain \"Signal1\""));
+        assert!(roundtrip.contains("(from \"U1\" \"A1\")"));
+        assert!(roundtrip.contains("(to \"J1\" \"2\")"));
+        assert!(roundtrip.contains("(net_class \"USB3\")"));
+        assert!(roundtrip.contains("(color 58 104 255 0.75)"));
+        assert!(roundtrip.contains("(nets \"SS_TX+\" \"SS_TX-\")"));
+        assert!(roundtrip.contains("(uuid \"605e5401-cbcc-4f20-9148-b7b3bd8eecbe\")"));
+        assert!(roundtrip.contains("(uuid \"a878e86a-9b21-4559-9e74-a7a0e383034e\")"));
+
+        let reparsed = parse_kicad_schematic(&roundtrip, "net_chain_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.net_chains.len(), 1);
+        assert_eq!(reparsed.net_chains[0].member_nets.len(), 2);
+        assert_eq!(reparsed.net_chains[0].extra.len(), 2);
+        assert_eq!(reparsed.net_chains[0].net_class.as_deref(), Some("USB3"));
     }
 
     #[test]
