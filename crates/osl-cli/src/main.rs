@@ -3,10 +3,10 @@ use osl_core::{
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_kicad::{
-    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSymbolDef, read_kicad_project,
-    read_kicad_schematic_with_libraries, read_kicad_symbol_library,
-    read_kicad_symbol_library_index, read_kicad_symbol_library_table, write_kicad_schematic,
-    write_kicad_symbol_library,
+    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSize,
+    KicadSymbolDef, read_kicad_project, read_kicad_schematic_with_libraries,
+    read_kicad_symbol_library, read_kicad_symbol_library_index, read_kicad_symbol_library_table,
+    write_kicad_schematic, write_kicad_symbol_library,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
@@ -1717,6 +1717,7 @@ fn parse_kicad_edit_op(
         "add-hierarchical-label" => {
             parse_kicad_add_label_edit_with_kind(payload, KicadLabelKind::Hierarchical)
         }
+        "add-sheet" => parse_kicad_add_sheet_edit(payload),
         "add-text" => parse_kicad_add_text_edit(payload),
         _ => Err(OslError::InvalidInput(format!(
             "unsupported kicad-edit op '{name}'"
@@ -1864,6 +1865,67 @@ fn parse_kicad_add_text_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
     })
 }
 
+fn parse_kicad_add_sheet_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let (payload, uuid) = split_payload_uuid(payload);
+    let parts = payload.split(':').collect::<Vec<_>>();
+    if parts.len() < 4 || parts.len() > 5 {
+        return Err(OslError::InvalidInput(
+            "add-sheet expects add-sheet:<name>:<file>:<x,y>:<w,h>[:<pin@x,y[,rotation],type;...>]"
+                .to_string(),
+        ));
+    }
+    let pins = parts
+        .get(4)
+        .filter(|pins| !pins.trim().is_empty())
+        .map(|pins| {
+            pins.split(';')
+                .map(parse_kicad_sheet_pin)
+                .collect::<OslResult<Vec<_>>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
+    Ok(KicadSchematicEdit::AddSheet {
+        name: parts[0].to_string(),
+        file: parts[1].to_string(),
+        at: sheet_at_from_point(parse_kicad_point(parts[2], "sheet position")?),
+        size: parse_kicad_size(parts[3], "sheet size")?,
+        pins,
+        uuid,
+    })
+}
+
+fn parse_kicad_sheet_pin(value: &str) -> OslResult<KicadSheetPin> {
+    let (name, rest) = value.split_once('@').ok_or_else(|| {
+        OslError::InvalidInput("sheet pin expects <name>@<x,y[,rotation],type>".to_string())
+    })?;
+    let parts = rest.split(',').collect::<Vec<_>>();
+    if parts.len() < 3 || parts.len() > 4 {
+        return Err(OslError::InvalidInput(
+            "sheet pin expects <name>@<x,y[,rotation],type>".to_string(),
+        ));
+    }
+    let pin_type = parts.last().copied().unwrap_or_default().to_string();
+    let at = if parts.len() == 3 {
+        KicadAt {
+            x: parse_number(parts[0], "sheet pin position")?,
+            y: parse_number(parts[1], "sheet pin position")?,
+            rotation: 0.0,
+        }
+    } else {
+        KicadAt {
+            x: parse_number(parts[0], "sheet pin position")?,
+            y: parse_number(parts[1], "sheet pin position")?,
+            rotation: parse_number(parts[2], "sheet pin rotation")?,
+        }
+    };
+    Ok(KicadSheetPin {
+        name: name.to_string(),
+        pin_type,
+        at: Some(at),
+        uuid: None,
+    })
+}
+
 fn split_payload_uuid(payload: &str) -> (&str, Option<String>) {
     match payload.rsplit_once(":uuid=") {
         Some((payload, uuid)) => (payload, Some(uuid.to_string())),
@@ -1884,6 +1946,14 @@ fn parse_kicad_point(value: &str, context: &str) -> OslResult<KicadPoint> {
     })
 }
 
+fn sheet_at_from_point(point: KicadPoint) -> KicadAt {
+    KicadAt {
+        x: point.x,
+        y: point.y,
+        rotation: 0.0,
+    }
+}
+
 fn parse_kicad_at(value: &str, context: &str) -> OslResult<KicadAt> {
     let parts = value.split(',').collect::<Vec<_>>();
     if !(2..=3).contains(&parts.len()) {
@@ -1899,6 +1969,19 @@ fn parse_kicad_at(value: &str, context: &str) -> OslResult<KicadAt> {
             .map(|value| parse_number(value, context))
             .transpose()?
             .unwrap_or(0.0),
+    })
+}
+
+fn parse_kicad_size(value: &str, context: &str) -> OslResult<KicadSize> {
+    let parts = value.split(',').collect::<Vec<_>>();
+    if parts.len() != 2 {
+        return Err(OslError::InvalidInput(format!(
+            "{context} expects width,height"
+        )));
+    }
+    Ok(KicadSize {
+        width: parse_number(parts[0], context)?,
+        height: parse_number(parts[1], context)?,
     })
 }
 
@@ -2267,6 +2350,49 @@ mod tests {
                 assert_close(at.y, 53.34);
             }
             edit => panic!("expected place-symbol edit, got {edit:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_kicad_add_sheet_edit() {
+        let args = [
+            "input.kicad_sch",
+            "--output",
+            "hierarchical.kicad_sch",
+            "add-sheet:gain_stage:gain_stage.kicad_sch:66.04,45.72:25.4,10.16:in@66.04,50.8,180,input;out@91.44,50.8,0,output:uuid=30000000-0000-0000-0000-000000000008",
+        ]
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>();
+
+        let edits = parse_kicad_edit_ops(&args, &[]).unwrap();
+
+        assert_eq!(edits.len(), 1);
+        match &edits[0] {
+            KicadSchematicEdit::AddSheet {
+                name,
+                file,
+                at,
+                size,
+                pins,
+                uuid,
+            } => {
+                assert_eq!(name, "gain_stage");
+                assert_eq!(file, "gain_stage.kicad_sch");
+                assert_close(at.x, 66.04);
+                assert_close(at.y, 45.72);
+                assert_close(size.width, 25.4);
+                assert_close(size.height, 10.16);
+                assert_eq!(pins.len(), 2);
+                assert_eq!(pins[0].name, "in");
+                assert_eq!(pins[0].pin_type, "input");
+                assert_close(pins[0].at.unwrap().rotation, 180.0);
+                assert_eq!(
+                    uuid.as_deref(),
+                    Some("30000000-0000-0000-0000-000000000008")
+                );
+            }
+            edit => panic!("expected add-sheet edit, got {edit:?}"),
         }
     }
 

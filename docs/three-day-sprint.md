@@ -100,7 +100,7 @@ cargo run -p osl-cli -- waveform runs/kicad_rc_001/waveform.raw --signal 'v(out)
 
 优先级从高到低：
 
-1. Rust-native KiCad schematic/library：参考 KiCad 源码和官方 S-expression 格式，继续扩展 `.kicad_sch` / `.kicad_sym` parser、Rust IR、symbol library index、连接图、schematic-to-SPICE 和后续 schematic canvas 数据模型，并把 symbol fields、模型路径、pin order 和仿真 directives 转为可诊断报告。
+1. Rust-native KiCad schematic/library：参考 KiCad 源码和官方 S-expression 格式，继续扩展 `.kicad_sch` / `.kicad_sym` parser、Rust IR、symbol library index、连接图、hierarchical sheet 编辑、schematic-to-SPICE 和后续 schematic canvas 数据模型，并把 symbol fields、模型路径、pin order 和仿真 directives 转为可诊断报告。
 2. waveform data layer：持久 LOD cache、mmap、大文件 viewport query 优化。
 3. richer verification DSL：backend、analysis、corner、Monte Carlo 和 worst-case search。
 4. LTspice migration import：把现有 `.asc` 基础导入扩展到 hierarchical sheet 和更多 vendor symbol dialect。

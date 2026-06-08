@@ -290,6 +290,14 @@ pub enum KicadSchematicEdit {
         at: KicadAt,
         uuid: Option<String>,
     },
+    AddSheet {
+        name: String,
+        file: String,
+        at: KicadAt,
+        size: KicadSize,
+        pins: Vec<KicadSheetPin>,
+        uuid: Option<String>,
+    },
     AddText {
         text: String,
         at: KicadAt,
@@ -432,6 +440,14 @@ impl KicadSchematic {
                 at,
                 uuid,
             } => self.add_label(text, kind, at, uuid),
+            KicadSchematicEdit::AddSheet {
+                name,
+                file,
+                at,
+                size,
+                pins,
+                uuid,
+            } => self.add_sheet(&name, &file, at, size, pins, uuid),
             KicadSchematicEdit::AddText { text, at, uuid } => self.add_text(text, at, uuid),
         }
     }
@@ -671,6 +687,101 @@ impl KicadSchematic {
         Ok(KicadEditSummary {
             operation: "add-text".to_string(),
             target: text,
+        })
+    }
+
+    pub fn add_sheet(
+        &mut self,
+        name: &str,
+        file: &str,
+        at: KicadAt,
+        size: KicadSize,
+        pins: Vec<KicadSheetPin>,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        validate_at(at, "sheet")?;
+        validate_size(size, "sheet")?;
+        let name = name.trim();
+        let file = file.trim();
+        if name.is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad sheet name must not be empty".to_string(),
+            ));
+        }
+        if file.is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad sheet file must not be empty".to_string(),
+            ));
+        }
+        if self
+            .sheets
+            .iter()
+            .any(|sheet| sheet.sheet_name() == Some(name))
+        {
+            return Err(OslError::InvalidInput(format!(
+                "KiCad sheet name '{name}' already exists"
+            )));
+        }
+
+        let sheet_payload = format!(
+            "{}:{}@{},{},{}:{}x{}",
+            name, file, at.x, at.y, at.rotation, size.width, size.height
+        );
+        let sheet_uuid = self.edit_uuid(uuid, "sheet", &sheet_payload)?;
+        let mut reserved_uuids = BTreeSet::from([sheet_uuid.clone()]);
+        let mut checked_pins = Vec::new();
+        for (index, pin) in pins.into_iter().enumerate() {
+            let pin_name = pin.name.trim();
+            if pin_name.is_empty() {
+                return Err(OslError::InvalidInput(
+                    "KiCad sheet pin name must not be empty".to_string(),
+                ));
+            }
+            let pin_type = pin.pin_type.trim();
+            if pin_type.is_empty() {
+                return Err(OslError::InvalidInput(format!(
+                    "KiCad sheet pin '{pin_name}' type must not be empty"
+                )));
+            }
+            let at = pin.at.ok_or_else(|| {
+                OslError::InvalidInput(format!("KiCad sheet pin '{pin_name}' requires a position"))
+            })?;
+            validate_at(at, "sheet pin")?;
+            let pin_payload = format!(
+                "{}:{}:{}@{},{},{}",
+                sheet_uuid, pin_name, pin_type, at.x, at.y, at.rotation
+            );
+            let pin_uuid =
+                self.edit_uuid_excluding(pin.uuid, "sheet-pin", &pin_payload, &reserved_uuids)?;
+            reserved_uuids.insert(pin_uuid.clone());
+            checked_pins.push(KicadSheetPin {
+                name: pin_name.to_string(),
+                pin_type: pin_type.to_string(),
+                at: Some(at),
+                uuid: Some(pin_uuid),
+            });
+            if checked_pins[..index]
+                .iter()
+                .any(|existing| existing.name == pin_name)
+            {
+                return Err(OslError::InvalidInput(format!(
+                    "KiCad sheet pin '{pin_name}' is duplicated"
+                )));
+            }
+        }
+
+        self.sheets.push(KicadSheet {
+            at: Some(at),
+            size: Some(size),
+            uuid: Some(sheet_uuid),
+            exclude_from_sim: None,
+            properties: sheet_properties(name, file, at, size),
+            pins: checked_pins,
+        });
+
+        Ok(KicadEditSummary {
+            operation: "add-sheet".to_string(),
+            target: format!("{name} {file}"),
         })
     }
 
@@ -4485,6 +4596,29 @@ fn symbol_instance_properties(
     properties
 }
 
+fn sheet_properties(name: &str, file: &str, at: KicadAt, size: KicadSize) -> Vec<KicadProperty> {
+    vec![
+        KicadProperty {
+            name: "Sheetname".to_string(),
+            value: name.to_string(),
+            at: Some(KicadAt {
+                x: at.x,
+                y: at.y - 1.27,
+                rotation: 0.0,
+            }),
+        },
+        KicadProperty {
+            name: "Sheetfile".to_string(),
+            value: file.to_string(),
+            at: Some(KicadAt {
+                x: at.x,
+                y: at.y + size.height + 1.27,
+                rotation: 0.0,
+            }),
+        },
+    ]
+}
+
 fn validate_point(point: KicadPoint, context: &str) -> OslResult<()> {
     if point.x.is_finite() && point.y.is_finite() {
         Ok(())
@@ -4502,6 +4636,16 @@ fn validate_at(at: KicadAt, context: &str) -> OslResult<()> {
     } else {
         Err(OslError::InvalidInput(format!(
             "{context} rotation must be finite"
+        )))
+    }
+}
+
+fn validate_size(size: KicadSize, context: &str) -> OslResult<()> {
+    if size.width.is_finite() && size.height.is_finite() && size.width > 0.0 && size.height > 0.0 {
+        Ok(())
+    } else {
+        Err(OslError::InvalidInput(format!(
+            "{context} size must contain finite positive width and height"
         )))
     }
 }
@@ -4555,10 +4699,11 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 mod tests {
     use super::{
         KicadAt, KicadDiagnosticSeverity, KicadLabelKind, KicadPoint, KicadSchematicEdit,
-        parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
-        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
-        read_kicad_schematic_with_libraries, read_kicad_symbol_library,
-        read_kicad_symbol_library_index, read_kicad_symbol_library_table,
+        KicadSheetPin, KicadSize, parse_kicad_project, parse_kicad_schematic,
+        parse_kicad_symbol_library, parse_kicad_symbol_library_table, parse_sexpr,
+        read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
+        read_kicad_symbol_library, read_kicad_symbol_library_index,
+        read_kicad_symbol_library_table,
     };
     use std::fs;
     use std::path::Path;
@@ -5196,6 +5341,44 @@ mod tests {
                 uuid: Some("abababab-abab-abab-abab-abababababab".to_string()),
             })
             .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::AddSheet {
+                name: "gain_stage".to_string(),
+                file: "gain_stage.kicad_sch".to_string(),
+                at: KicadAt {
+                    x: 101.6,
+                    y: 43.18,
+                    rotation: 0.0,
+                },
+                size: KicadSize {
+                    width: 25.4,
+                    height: 12.7,
+                },
+                pins: vec![
+                    KicadSheetPin {
+                        name: "in".to_string(),
+                        pin_type: "input".to_string(),
+                        at: Some(KicadAt {
+                            x: 101.6,
+                            y: 48.26,
+                            rotation: 180.0,
+                        }),
+                        uuid: None,
+                    },
+                    KicadSheetPin {
+                        name: "out".to_string(),
+                        pin_type: "output".to_string(),
+                        at: Some(KicadAt {
+                            x: 127.0,
+                            y: 48.26,
+                            rotation: 0.0,
+                        }),
+                        uuid: None,
+                    },
+                ],
+                uuid: Some("cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd".to_string()),
+            })
+            .unwrap();
 
         let resistor = schematic
             .symbols
@@ -5216,6 +5399,9 @@ mod tests {
         );
         assert_eq!(resistor.value(), Some("2k"));
         assert_eq!(schematic.wires.len(), 4);
+        assert_eq!(schematic.sheets.len(), 1);
+        assert_eq!(schematic.sheets[0].sheet_name(), Some("gain_stage"));
+        assert_eq!(schematic.sheets[0].pins.len(), 2);
         assert!(schematic.labels.iter().any(|label| {
             label.text == "sense"
                 && label.kind == KicadLabelKind::Global
@@ -5230,9 +5416,14 @@ mod tests {
 
         let exported = schematic.to_kicad_schematic_sexpr();
         assert!(exported.contains("(global_label \"sense\""));
+        assert!(exported.contains("(sheet"));
+        assert!(exported.contains("(property \"Sheetname\" \"gain_stage\""));
+        assert!(exported.contains("(pin \"in\" input"));
         assert!(exported.contains("(text \".save v(sense)\""));
         let reparsed = parse_kicad_schematic(&exported, "edited.kicad_sch").unwrap();
         assert_eq!(reparsed.wires.len(), 4);
+        assert_eq!(reparsed.sheets.len(), 1);
+        assert_eq!(reparsed.sheets[0].pins.len(), 2);
         assert_eq!(
             reparsed
                 .symbols
