@@ -1712,6 +1712,8 @@ fn parse_kicad_edit_op(
         "set-property" => parse_kicad_set_property_edit(payload),
         "place-symbol" => parse_kicad_place_symbol_edit(payload, symbol_definitions),
         "add-wire" => parse_kicad_add_wire_edit(payload),
+        "add-bus" => parse_kicad_add_bus_edit(payload),
+        "add-bus-entry" => parse_kicad_add_bus_entry_edit(payload),
         "add-junction" => parse_kicad_add_junction_edit(payload),
         "add-no-connect" => parse_kicad_add_no_connect_edit(payload),
         "add-label" => parse_kicad_add_label_edit(payload),
@@ -1824,6 +1826,27 @@ fn parse_kicad_add_wire_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
         .map(|point| parse_kicad_point(point, "wire point"))
         .collect::<OslResult<Vec<_>>>()?;
     Ok(KicadSchematicEdit::AddWire { points, uuid })
+}
+
+fn parse_kicad_add_bus_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let (points, uuid) = split_payload_uuid(payload);
+    let points = points
+        .split(';')
+        .map(|point| parse_kicad_point(point, "bus point"))
+        .collect::<OslResult<Vec<_>>>()?;
+    Ok(KicadSchematicEdit::AddBus { points, uuid })
+}
+
+fn parse_kicad_add_bus_entry_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let (payload, uuid) = split_payload_uuid(payload);
+    let (at, size) = payload.split_once(':').ok_or_else(|| {
+        OslError::InvalidInput("add-bus-entry expects add-bus-entry:<x,y>:<dx,dy>".to_string())
+    })?;
+    Ok(KicadSchematicEdit::AddBusEntry {
+        at: parse_kicad_point(at, "bus entry position")?,
+        size: parse_kicad_size(size, "bus entry size")?,
+        uuid,
+    })
 }
 
 fn parse_kicad_add_junction_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
@@ -2280,6 +2303,8 @@ mod tests {
             "edited.kicad_sch",
             "move-symbol:R1:73.66,50.8",
             "set-property:R1:Value=2k",
+            "add-bus:88.9,38.1;101.6,38.1",
+            "add-bus-entry:101.6,38.1:2.54,-2.54",
             "add-junction:88.9,45.72",
             "add-no-connect:101.6,45.72",
             "add-global-label:sense:88.9,45.72",
@@ -2294,6 +2319,8 @@ mod tests {
                 "input.kicad_sch",
                 "move-symbol:R1:73.66,50.8",
                 "set-property:R1:Value=2k",
+                "add-bus:88.9,38.1;101.6,38.1",
+                "add-bus-entry:101.6,38.1:2.54,-2.54",
                 "add-junction:88.9,45.72",
                 "add-no-connect:101.6,45.72",
                 "add-global-label:sense:88.9,45.72",
@@ -2301,7 +2328,7 @@ mod tests {
         );
 
         let edits = parse_kicad_edit_ops(&args, &[]).unwrap();
-        assert_eq!(edits.len(), 5);
+        assert_eq!(edits.len(), 7);
         match &edits[0] {
             KicadSchematicEdit::MoveSymbol { reference, to, .. } => {
                 assert_eq!(reference, "R1");
@@ -2310,20 +2337,37 @@ mod tests {
             edit => panic!("expected move-symbol edit, got {edit:?}"),
         }
         match &edits[2] {
+            KicadSchematicEdit::AddBus { points, .. } => {
+                assert_eq!(points.len(), 2);
+                assert_close(points[0].x, 88.9);
+                assert_close(points[1].y, 38.1);
+            }
+            edit => panic!("expected add-bus edit, got {edit:?}"),
+        }
+        match &edits[3] {
+            KicadSchematicEdit::AddBusEntry { at, size, .. } => {
+                assert_close(at.x, 101.6);
+                assert_close(at.y, 38.1);
+                assert_close(size.width, 2.54);
+                assert_close(size.height, -2.54);
+            }
+            edit => panic!("expected add-bus-entry edit, got {edit:?}"),
+        }
+        match &edits[4] {
             KicadSchematicEdit::AddJunction { at, .. } => {
                 assert_close(at.x, 88.9);
                 assert_close(at.y, 45.72);
             }
             edit => panic!("expected add-junction edit, got {edit:?}"),
         }
-        match &edits[3] {
+        match &edits[5] {
             KicadSchematicEdit::AddNoConnect { at, .. } => {
                 assert_close(at.x, 101.6);
                 assert_close(at.y, 45.72);
             }
             edit => panic!("expected add-no-connect edit, got {edit:?}"),
         }
-        match &edits[4] {
+        match &edits[6] {
             KicadSchematicEdit::AddLabel { text, kind, .. } => {
                 assert_eq!(text, "sense");
                 assert_eq!(*kind, KicadLabelKind::Global);

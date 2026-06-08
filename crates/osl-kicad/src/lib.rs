@@ -87,12 +87,21 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         uuid: child_value(root_list, "uuid"),
         paper: child_value(root_list, "paper"),
         library_symbols,
+        bus_aliases: direct_children(root_list, "bus_alias")
+            .filter_map(parse_bus_alias)
+            .collect(),
         symbols: direct_children(root_list, "symbol")
             .filter_map(parse_symbol_instance)
             .collect(),
         wires: direct_children(root_list, "wire")
             .map(parse_wire)
             .collect::<Vec<_>>(),
+        buses: direct_children(root_list, "bus")
+            .map(parse_bus)
+            .collect::<Vec<_>>(),
+        bus_entries: direct_children(root_list, "bus_entry")
+            .filter_map(parse_bus_entry)
+            .collect(),
         labels: direct_children(root_list, "label")
             .filter_map(|node| parse_label(node, KicadLabelKind::Local))
             .chain(
@@ -187,8 +196,11 @@ pub struct KicadSchematic {
     pub uuid: Option<String>,
     pub paper: Option<String>,
     pub library_symbols: Vec<KicadSymbolDef>,
+    pub bus_aliases: Vec<KicadBusAlias>,
     pub symbols: Vec<KicadSymbolInstance>,
     pub wires: Vec<KicadWire>,
+    pub buses: Vec<KicadBus>,
+    pub bus_entries: Vec<KicadBusEntry>,
     pub labels: Vec<KicadLabel>,
     pub sheets: Vec<KicadSheet>,
     pub no_connects: Vec<KicadNoConnect>,
@@ -286,6 +298,15 @@ pub enum KicadSchematicEdit {
     },
     AddWire {
         points: Vec<KicadPoint>,
+        uuid: Option<String>,
+    },
+    AddBus {
+        points: Vec<KicadPoint>,
+        uuid: Option<String>,
+    },
+    AddBusEntry {
+        at: KicadPoint,
+        size: KicadSize,
         uuid: Option<String>,
     },
     AddJunction {
@@ -446,6 +467,10 @@ impl KicadSchematic {
                 uuid,
             } => self.place_symbol(definition, &reference, &value, at, unit, uuid),
             KicadSchematicEdit::AddWire { points, uuid } => self.add_wire(points, uuid),
+            KicadSchematicEdit::AddBus { points, uuid } => self.add_bus(points, uuid),
+            KicadSchematicEdit::AddBusEntry { at, size, uuid } => {
+                self.add_bus_entry(at, size, uuid)
+            }
             KicadSchematicEdit::AddJunction { at, uuid } => self.add_junction(at, uuid),
             KicadSchematicEdit::AddNoConnect { at, uuid } => self.add_no_connect(at, uuid),
             KicadSchematicEdit::AddLabel {
@@ -642,6 +667,65 @@ impl KicadSchematic {
 
         Ok(KicadEditSummary {
             operation: "add-wire".to_string(),
+            target: payload,
+        })
+    }
+
+    pub fn add_bus(
+        &mut self,
+        points: Vec<KicadPoint>,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        if points.len() < 2 {
+            return Err(OslError::InvalidInput(
+                "KiCad bus edit requires at least two points".to_string(),
+            ));
+        }
+        for point in &points {
+            validate_point(*point, "bus point")?;
+        }
+
+        let payload = points_payload(&points);
+        let uuid = Some(self.edit_uuid(uuid, "bus", &payload)?);
+        self.buses.push(KicadBus { points, uuid });
+
+        Ok(KicadEditSummary {
+            operation: "add-bus".to_string(),
+            target: payload,
+        })
+    }
+
+    pub fn add_bus_entry(
+        &mut self,
+        at: KicadPoint,
+        size: KicadSize,
+        uuid: Option<String>,
+    ) -> OslResult<KicadEditSummary> {
+        validate_point(at, "bus entry")?;
+        validate_bus_entry_size(size, "bus entry")?;
+        if self
+            .bus_entries
+            .iter()
+            .any(|entry| same_point(entry.at, at) && same_size(entry.size, size))
+        {
+            return Err(OslError::InvalidInput(format!(
+                "KiCad bus entry already exists at {},{} with size {},{}",
+                at.x, at.y, size.width, size.height
+            )));
+        }
+
+        let payload = format!(
+            "{},{}:{},{}",
+            format_number(at.x),
+            format_number(at.y),
+            format_number(size.width),
+            format_number(size.height)
+        );
+        let uuid = Some(self.edit_uuid(uuid, "bus-entry", &payload)?);
+        self.bus_entries.push(KicadBusEntry { at, size, uuid });
+
+        Ok(KicadEditSummary {
+            operation: "add-bus-entry".to_string(),
             target: payload,
         })
     }
@@ -866,6 +950,7 @@ impl KicadSchematic {
         self.check_duplicate_references(&mut diagnostics);
         self.check_symbols(&graph, &mut diagnostics);
         self.check_wires(&mut diagnostics);
+        self.check_buses(&mut diagnostics);
         self.check_labels(&graph, &mut diagnostics);
         self.check_sheets(&mut diagnostics);
         self.check_no_connects(&mut diagnostics);
@@ -1027,8 +1112,17 @@ impl KicadSchematic {
             symbol.write_symbol_sexpr(&mut output, 4);
         }
         output.push_str("  )\n");
+        for alias in &self.bus_aliases {
+            alias.write_bus_alias_sexpr(&mut output, 2);
+        }
         for wire in &self.wires {
             wire.write_wire_sexpr(&mut output, 2);
+        }
+        for bus in &self.buses {
+            bus.write_bus_sexpr(&mut output, 2);
+        }
+        for entry in &self.bus_entries {
+            entry.write_bus_entry_sexpr(&mut output, 2);
         }
         for junction in &self.junctions {
             junction.write_junction_sexpr(&mut output, 2);
@@ -1630,6 +1724,36 @@ impl KicadSchematic {
         }
     }
 
+    fn check_buses(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
+        for (index, bus) in self.buses.iter().enumerate() {
+            if bus.points.len() < 2 {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Warning,
+                    "empty-bus",
+                    &format!("bus #{index} has fewer than two points"),
+                    Some(format!("bus:{index}")),
+                    None,
+                    None,
+                ));
+            }
+        }
+        for (index, entry) in self.bus_entries.iter().enumerate() {
+            if !is_valid_bus_entry_size(entry.size) {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Warning,
+                    "invalid-bus-entry-size",
+                    &format!(
+                        "bus entry #{index} has invalid size {},{}",
+                        entry.size.width, entry.size.height
+                    ),
+                    Some(format!("bus-entry:{index}")),
+                    None,
+                    None,
+                ));
+            }
+        }
+    }
+
     fn check_spice_directives(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
         let directives = self.spice_directives();
         if directives.is_empty() {
@@ -1718,6 +1842,16 @@ impl KicadSchematic {
         }
         for wire in &self.wires {
             if let Some(uuid) = &wire.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
+        for bus in &self.buses {
+            if let Some(uuid) = &bus.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
+        for entry in &self.bus_entries {
+            if let Some(uuid) = &entry.uuid {
                 uuids.insert(uuid.clone());
             }
         }
@@ -1812,7 +1946,10 @@ impl KicadSchematic {
                 "  \"generator\": {},\n",
                 "  \"symbol_count\": {},\n",
                 "  \"library_symbol_count\": {},\n",
+                "  \"bus_alias_count\": {},\n",
                 "  \"wire_count\": {},\n",
+                "  \"bus_count\": {},\n",
+                "  \"bus_entry_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
@@ -1828,7 +1965,10 @@ impl KicadSchematic {
             json_option(self.generator.as_deref()),
             self.symbols.len(),
             self.library_symbols.len(),
+            self.bus_aliases.len(),
             self.wires.len(),
+            self.buses.len(),
+            self.bus_entries.len(),
             self.labels.len(),
             self.junctions.len(),
             self.no_connects.len(),
@@ -2173,6 +2313,8 @@ pub struct KicadCanvasScene {
     pub symbols: Vec<KicadCanvasSymbol>,
     pub sheets: Vec<KicadCanvasSheet>,
     pub wires: Vec<KicadCanvasWire>,
+    pub buses: Vec<KicadCanvasBus>,
+    pub bus_entries: Vec<KicadCanvasBusEntry>,
     pub labels: Vec<KicadCanvasLabel>,
     pub junctions: Vec<KicadCanvasJunction>,
     pub no_connects: Vec<KicadCanvasNoConnect>,
@@ -2268,6 +2410,32 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let buses = schematic
+            .buses
+            .iter()
+            .map(|bus| {
+                for point in &bus.points {
+                    bounds.include(*point);
+                }
+                KicadCanvasBus {
+                    points: bus.points.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let bus_entries = schematic
+            .bus_entries
+            .iter()
+            .map(|entry| {
+                bounds.include(entry.at);
+                bounds.include(entry.end());
+                KicadCanvasBusEntry {
+                    at: entry.at,
+                    size: entry.size,
+                }
+            })
+            .collect::<Vec<_>>();
+
         let labels = schematic
             .labels
             .iter()
@@ -2306,6 +2474,8 @@ impl KicadCanvasScene {
             symbols,
             sheets,
             wires,
+            buses,
+            bus_entries,
             labels,
             junctions,
             no_connects,
@@ -2339,6 +2509,8 @@ impl KicadCanvasScene {
                 "  \"pin_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"wire_count\": {},\n",
+                "  \"bus_count\": {},\n",
+                "  \"bus_entry_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
@@ -2355,6 +2527,8 @@ impl KicadCanvasScene {
                 .map(|sheet| sheet.pins.len())
                 .sum::<usize>(),
             self.wires.len(),
+            self.buses.len(),
+            self.bus_entries.len(),
             self.labels.len(),
             self.junctions.len(),
             self.no_connects.len(),
@@ -2481,6 +2655,26 @@ impl KicadCanvasPin {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasWire {
     pub points: Vec<KicadPoint>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasBus {
+    pub points: Vec<KicadPoint>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasBusEntry {
+    pub at: KicadPoint,
+    pub size: KicadSize,
+}
+
+impl KicadCanvasBusEntry {
+    pub fn end(&self) -> KicadPoint {
+        KicadPoint {
+            x: self.at.x + self.size.width,
+            y: self.at.y + self.size.height,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3422,6 +3616,84 @@ impl KicadWire {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct KicadBusAlias {
+    pub name: String,
+    pub members: Vec<String>,
+}
+
+impl KicadBusAlias {
+    fn write_bus_alias_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        let members = self
+            .members
+            .iter()
+            .map(|member| sexpr_string(member))
+            .collect::<Vec<_>>()
+            .join(" ");
+        output.push_str(&format!(
+            "{}(bus_alias {} (members {}))\n",
+            pad,
+            sexpr_string(&self.name),
+            members
+        ));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadBus {
+    pub points: Vec<KicadPoint>,
+    pub uuid: Option<String>,
+}
+
+impl KicadBus {
+    fn write_bus_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(bus", pad));
+        write_points_sexpr(output, &self.points);
+        output.push_str(" (stroke (width 0) (type default))");
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        output.push_str(")\n");
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadBusEntry {
+    pub at: KicadPoint,
+    pub size: KicadSize,
+    pub uuid: Option<String>,
+}
+
+impl KicadBusEntry {
+    pub fn end(&self) -> KicadPoint {
+        KicadPoint {
+            x: self.at.x + self.size.width,
+            y: self.at.y + self.size.height,
+        }
+    }
+
+    fn write_bus_entry_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(bus_entry\n{}  (at {} {})\n{}  (size {} {})\n{}  (stroke (width 0) (type default))\n",
+            pad,
+            pad,
+            format_number(self.at.x),
+            format_number(self.at.y),
+            pad,
+            format_number(self.size.width),
+            format_number(self.size.height),
+            pad
+        ));
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct KicadLabel {
     pub text: String,
     pub kind: KicadLabelKind,
@@ -3942,6 +4214,41 @@ fn parse_wire(node: &Sexp) -> KicadWire {
     }
 }
 
+fn parse_bus_alias(node: &Sexp) -> Option<KicadBusAlias> {
+    let items = list_items(node);
+    Some(KicadBusAlias {
+        name: list_value(node, 1)?,
+        members: child(items, "members")
+            .map(|members| {
+                list_items(members)
+                    .iter()
+                    .skip(1)
+                    .filter_map(atom_text)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+    })
+}
+
+fn parse_bus(node: &Sexp) -> KicadBus {
+    let items = list_items(node);
+    KicadBus {
+        points: child(items, "pts").map(parse_points).unwrap_or_default(),
+        uuid: child_value(items, "uuid"),
+    }
+}
+
+fn parse_bus_entry(node: &Sexp) -> Option<KicadBusEntry> {
+    let items = list_items(node);
+    let at = child(items, "at").and_then(parse_at)?;
+    Some(KicadBusEntry {
+        at: KicadPoint { x: at.x, y: at.y },
+        size: child(items, "size").and_then(parse_size)?,
+        uuid: child_value(items, "uuid"),
+    })
+}
+
 fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
     let items = list_items(node);
     Some(KicadLabel {
@@ -4456,6 +4763,11 @@ fn same_point(left: KicadPoint, right: KicadPoint) -> bool {
         && coordinate_key(left.y) == coordinate_key(right.y)
 }
 
+fn same_size(left: KicadSize, right: KicadSize) -> bool {
+    coordinate_key(left.width) == coordinate_key(right.width)
+        && coordinate_key(left.height) == coordinate_key(right.height)
+}
+
 fn normalize_net_name(name: &str) -> String {
     match name.trim().to_ascii_lowercase().as_str() {
         "gnd" | "agnd" | "dgnd" | "earth" => "0".to_string(),
@@ -4838,6 +5150,23 @@ fn validate_size(size: KicadSize, context: &str) -> OslResult<()> {
     }
 }
 
+fn validate_bus_entry_size(size: KicadSize, context: &str) -> OslResult<()> {
+    if is_valid_bus_entry_size(size) {
+        Ok(())
+    } else {
+        Err(OslError::InvalidInput(format!(
+            "{context} size must contain finite non-zero x and y deltas"
+        )))
+    }
+}
+
+fn is_valid_bus_entry_size(size: KicadSize) -> bool {
+    size.width.is_finite()
+        && size.height.is_finite()
+        && coordinate_key(size.width) != 0
+        && coordinate_key(size.height) != 0
+}
+
 fn points_payload(points: &[KicadPoint]) -> String {
     points
         .iter()
@@ -5112,6 +5441,84 @@ mod tests {
         let reparsed = parse_kicad_schematic(&roundtrip, "roundtrip.kicad_sch").unwrap();
         assert_eq!(reparsed.no_connects.len(), 1);
         assert_eq!(reparsed.canvas_scene().no_connects.len(), 1);
+    }
+
+    #[test]
+    fn parses_kicad_bus_items_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (bus_alias "DATA" (members "D0" "D1" "D2" "D3"))
+  (bus_entry
+    (at 30 10)
+    (size 2.54 -2.54)
+    (stroke (width 0) (type default))
+    (uuid "31313131-3131-4131-8131-313131313131")
+  )
+  (bus
+    (pts (xy 30 10) (xy 30 30) (xy 60 30))
+    (stroke (width 0) (type default))
+    (uuid "32323232-3232-4232-8232-323232323232")
+  )
+)"#,
+            "bus.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.bus_aliases.len(), 1);
+        assert_eq!(schematic.bus_aliases[0].name, "DATA");
+        assert_eq!(
+            schematic.bus_aliases[0].members,
+            vec![
+                "D0".to_string(),
+                "D1".to_string(),
+                "D2".to_string(),
+                "D3".to_string()
+            ]
+        );
+        assert_eq!(schematic.buses.len(), 1);
+        assert_eq!(schematic.bus_entries.len(), 1);
+        assert_close(schematic.bus_entries[0].end().x, 32.54);
+        assert_close(schematic.bus_entries[0].end().y, 7.46);
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"bus_alias_count\": 1")
+        );
+        assert!(schematic.to_summary_json().contains("\"bus_count\": 1"));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"bus_entry_count\": 1")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.buses.len(), 1);
+        assert_eq!(scene.bus_entries.len(), 1);
+        assert!(scene.to_summary_json().contains("\"bus_count\": 1"));
+        assert!(scene.to_summary_json().contains("\"bus_entry_count\": 1"));
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(bus_alias \"DATA\" (members \"D0\" \"D1\" \"D2\" \"D3\"))"));
+        assert!(roundtrip.contains("(bus"));
+        assert!(roundtrip.contains("(bus_entry"));
+        assert!(roundtrip.contains("(uuid \"31313131-3131-4131-8131-313131313131\")"));
+        assert!(roundtrip.contains("(uuid \"32323232-3232-4232-8232-323232323232\")"));
+        let reparsed = parse_kicad_schematic(&roundtrip, "bus_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.bus_aliases.len(), 1);
+        assert_eq!(reparsed.buses.len(), 1);
+        assert_eq!(reparsed.bus_entries.len(), 1);
+        assert_eq!(
+            reparsed.bus_entries[0].uuid.as_deref(),
+            Some("31313131-3131-4131-8131-313131313131")
+        );
+        assert_eq!(
+            reparsed.buses[0].uuid.as_deref(),
+            Some("32323232-3232-4232-8232-323232323232")
+        );
     }
 
     #[test]
@@ -5569,6 +5976,25 @@ mod tests {
             })
             .unwrap();
         schematic
+            .apply_edit(KicadSchematicEdit::AddBus {
+                points: vec![
+                    KicadPoint { x: 88.9, y: 38.1 },
+                    KicadPoint { x: 101.6, y: 38.1 },
+                ],
+                uuid: Some("33333333-aaaa-bbbb-cccc-333333333333".to_string()),
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::AddBusEntry {
+                at: KicadPoint { x: 101.6, y: 38.1 },
+                size: KicadSize {
+                    width: 2.54,
+                    height: -2.54,
+                },
+                uuid: Some("44444444-aaaa-bbbb-cccc-444444444444".to_string()),
+            })
+            .unwrap();
+        schematic
             .apply_edit(KicadSchematicEdit::AddJunction {
                 at: KicadPoint { x: 88.9, y: 45.72 },
                 uuid: Some("11111111-aaaa-bbbb-cccc-111111111111".to_string()),
@@ -5661,6 +6087,8 @@ mod tests {
         );
         assert_eq!(resistor.value(), Some("2k"));
         assert_eq!(schematic.wires.len(), 4);
+        assert_eq!(schematic.buses.len(), 1);
+        assert_eq!(schematic.bus_entries.len(), 1);
         assert_eq!(schematic.junctions.len(), 1);
         assert_eq!(schematic.no_connects.len(), 1);
         assert_eq!(schematic.sheets.len(), 1);
@@ -5679,6 +6107,10 @@ mod tests {
         );
 
         let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(bus"));
+        assert!(exported.contains("(uuid \"33333333-aaaa-bbbb-cccc-333333333333\")"));
+        assert!(exported.contains("(bus_entry"));
+        assert!(exported.contains("(uuid \"44444444-aaaa-bbbb-cccc-444444444444\")"));
         assert!(exported.contains("(junction"));
         assert!(exported.contains("(uuid \"11111111-aaaa-bbbb-cccc-111111111111\")"));
         assert!(exported.contains("(no_connect"));
@@ -5690,6 +6122,16 @@ mod tests {
         assert!(exported.contains("(text \".save v(sense)\""));
         let reparsed = parse_kicad_schematic(&exported, "edited.kicad_sch").unwrap();
         assert_eq!(reparsed.wires.len(), 4);
+        assert_eq!(reparsed.buses.len(), 1);
+        assert_eq!(
+            reparsed.buses[0].uuid.as_deref(),
+            Some("33333333-aaaa-bbbb-cccc-333333333333")
+        );
+        assert_eq!(reparsed.bus_entries.len(), 1);
+        assert_eq!(
+            reparsed.bus_entries[0].uuid.as_deref(),
+            Some("44444444-aaaa-bbbb-cccc-444444444444")
+        );
         assert_eq!(reparsed.junctions.len(), 1);
         assert_eq!(
             reparsed.junctions[0].uuid.as_deref(),
@@ -5702,6 +6144,8 @@ mod tests {
         );
         assert_eq!(reparsed.sheets.len(), 1);
         assert_eq!(reparsed.sheets[0].pins.len(), 2);
+        assert_eq!(reparsed.canvas_scene().buses.len(), 1);
+        assert_eq!(reparsed.canvas_scene().bus_entries.len(), 1);
         assert_eq!(reparsed.canvas_scene().junctions.len(), 1);
         assert_eq!(reparsed.canvas_scene().no_connects.len(), 1);
         assert_eq!(

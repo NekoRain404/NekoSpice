@@ -53,8 +53,22 @@ pub fn render_kicad_scene_svg_with_options(
         render_grid(&mut output, &viewport);
     }
     output.push_str("  <g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n");
+    for bus in &scene.buses {
+        render_polyline(&mut output, &viewport, &bus.points, "#2563eb", 3.2);
+    }
     for wire in &scene.wires {
         render_polyline(&mut output, &viewport, &wire.points, "#0f172a", 2.0);
+    }
+    for entry in &scene.bus_entries {
+        let start = viewport.project(entry.at);
+        let end = viewport.project(entry.end());
+        output.push_str(&format!(
+            "    <line data-bus-entry=\"true\" x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#2563eb\" stroke-width=\"2\"/>\n",
+            fmt(start.x),
+            fmt(start.y),
+            fmt(end.x),
+            fmt(end.y)
+        ));
     }
     for sheet in &scene.sheets {
         render_sheet(&mut output, &viewport, sheet);
@@ -421,5 +435,27 @@ mod tests {
         assert!(svg.contains("gain_stage.kicad_sch"));
         assert!(svg.contains(">in</text>"));
         assert!(svg.contains(">out</text>"));
+    }
+
+    #[test]
+    fn renders_kicad_bus_items_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (bus (pts (xy 10 10) (xy 30 10)) (uuid "11111111-1111-4111-8111-111111111111"))
+  (bus_entry (at 30 10) (size 2.54 -2.54) (uuid "22222222-2222-4222-8222-222222222222"))
+)"#,
+            "bus.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("<polyline"));
+        assert!(svg.contains("stroke=\"#2563eb\""));
+        assert!(svg.contains("data-bus-entry=\"true\""));
     }
 }
