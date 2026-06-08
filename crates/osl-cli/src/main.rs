@@ -4,9 +4,10 @@ use osl_core::{
 };
 use osl_kicad::{
     KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSize,
-    KicadSymbolDef, read_kicad_project, read_kicad_schematic_with_libraries,
-    read_kicad_symbol_library, read_kicad_symbol_library_index, read_kicad_symbol_library_table,
-    write_kicad_schematic, write_kicad_symbol_library,
+    KicadSymbolDef, KicadSymbolLibraryIndexQuery, read_kicad_project,
+    read_kicad_schematic_with_libraries, read_kicad_symbol_library,
+    read_kicad_symbol_library_index, read_kicad_symbol_library_table, write_kicad_schematic,
+    write_kicad_symbol_library,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
@@ -354,6 +355,11 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
     let path = Path::new(input);
     let should_emit_canvas = has_flag(args, "--canvas");
     let should_index = has_flag(args, "--index");
+    let index_query = KicadSymbolLibraryIndexQuery {
+        text: flag_value(args, "--query"),
+        library: flag_value(args, "--library"),
+        footprint: flag_value(args, "--footprint"),
+    };
     let extension = path
         .extension()
         .and_then(|extension| extension.to_str())
@@ -371,7 +377,12 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
         ("kicad_pro", _) => read_kicad_project(path)?.to_summary_json(),
         ("kicad_sym", _) => read_kicad_symbol_library(path)?.to_summary_json(),
         (_, Some("sym-lib-table")) if should_index => {
-            read_kicad_symbol_library_index(path)?.to_json()
+            let index = read_kicad_symbol_library_index(path)?;
+            if index_query.is_empty() {
+                index.to_json()
+            } else {
+                index.query(&index_query).to_json()
+            }
         }
         (_, Some("sym-lib-table")) => read_kicad_symbol_library_table(path)?.to_summary_json(),
         _ => {
@@ -1658,7 +1669,9 @@ fn flag_takes_value(flag: &str) -> bool {
             | "--ngspice"
             | "--output"
             | "--points"
+            | "--footprint"
             | "--library"
+            | "--query"
             | "--signal"
             | "--symbol"
             | "--to"
@@ -2383,12 +2396,24 @@ mod tests {
         let args = [
             "sym-lib-table".to_string(),
             "--index".to_string(),
+            "--query".to_string(),
+            "opamp".to_string(),
+            "--library".to_string(),
+            "Device".to_string(),
+            "--footprint".to_string(),
+            "Package_SO:SOIC-8".to_string(),
             "--output".to_string(),
             "symbol_index.json".to_string(),
         ];
 
         assert!(has_flag(&args, "--index"));
         assert_eq!(positionals(&args), vec!["sym-lib-table"]);
+        assert_eq!(flag_value(&args, "--query"), Some("opamp".to_string()));
+        assert_eq!(flag_value(&args, "--library"), Some("Device".to_string()));
+        assert_eq!(
+            flag_value(&args, "--footprint"),
+            Some("Package_SO:SOIC-8".to_string())
+        );
         assert_eq!(
             flag_value(&args, "--output"),
             Some("symbol_index.json".to_string())

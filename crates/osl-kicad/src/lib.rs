@@ -4196,6 +4196,42 @@ impl KicadSymbolLibraryIndex {
         self.symbols.iter().find(|symbol| symbol.id == lib_id)
     }
 
+    pub fn query(&self, query: &KicadSymbolLibraryIndexQuery) -> Self {
+        let symbols = self
+            .symbols
+            .iter()
+            .filter(|symbol| query.matches(symbol))
+            .cloned()
+            .collect::<Vec<_>>();
+        let libraries_with_symbols = symbols
+            .iter()
+            .map(|symbol| symbol.library.as_str())
+            .collect::<BTreeSet<_>>();
+        let libraries = self
+            .libraries
+            .iter()
+            .filter(|library| {
+                query.matches_library_name(&library.name)
+                    && libraries_with_symbols.contains(library.name.as_str())
+            })
+            .cloned()
+            .map(|mut library| {
+                library.symbol_count = symbols
+                    .iter()
+                    .filter(|symbol| symbol.library == library.name)
+                    .count();
+                library
+            })
+            .collect();
+
+        Self {
+            source: self.source.clone(),
+            libraries,
+            symbols,
+            diagnostics: self.diagnostics.clone(),
+        }
+    }
+
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(&self.to_json_value())
             .expect("KiCad symbol library index JSON should serialize")
@@ -4306,6 +4342,66 @@ impl KicadSymbolLibraryIndex {
             .iter()
             .map(|symbol| symbol.footprint_filters.len())
             .sum::<usize>()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KicadSymbolLibraryIndexQuery {
+    pub text: Option<String>,
+    pub library: Option<String>,
+    pub footprint: Option<String>,
+}
+
+impl KicadSymbolLibraryIndexQuery {
+    pub fn is_empty(&self) -> bool {
+        self.text.as_deref().is_none_or(str::is_empty)
+            && self.library.as_deref().is_none_or(str::is_empty)
+            && self.footprint.as_deref().is_none_or(str::is_empty)
+    }
+
+    fn matches(&self, symbol: &KicadIndexedSymbol) -> bool {
+        self.matches_library_name(&symbol.library)
+            && self.matches_text(symbol)
+            && self.matches_footprint(symbol)
+    }
+
+    fn matches_library_name(&self, library: &str) -> bool {
+        self.library
+            .as_deref()
+            .map(|filter| case_insensitive_contains(library, filter))
+            .unwrap_or(true)
+    }
+
+    fn matches_text(&self, symbol: &KicadIndexedSymbol) -> bool {
+        let Some(text) = self.text.as_deref().filter(|text| !text.is_empty()) else {
+            return true;
+        };
+
+        case_insensitive_contains(&symbol.id, text)
+            || case_insensitive_contains(&symbol.name, text)
+            || symbol
+                .description
+                .as_deref()
+                .is_some_and(|description| case_insensitive_contains(description, text))
+            || symbol
+                .keywords
+                .as_deref()
+                .is_some_and(|keywords| case_insensitive_contains(keywords, text))
+    }
+
+    fn matches_footprint(&self, symbol: &KicadIndexedSymbol) -> bool {
+        let Some(footprint) = self
+            .footprint
+            .as_deref()
+            .filter(|footprint| !footprint.is_empty())
+        else {
+            return true;
+        };
+
+        symbol
+            .footprint_filters
+            .iter()
+            .any(|filter| kicad_wildcard_match(filter, footprint))
     }
 }
 
@@ -8236,6 +8332,50 @@ fn parse_kicad_footprint_filters(value: &str) -> Vec<String> {
         .collect()
 }
 
+fn case_insensitive_contains(value: &str, needle: &str) -> bool {
+    value
+        .to_ascii_lowercase()
+        .contains(&needle.to_ascii_lowercase())
+}
+
+fn kicad_wildcard_match(pattern: &str, value: &str) -> bool {
+    wildcard_match(
+        pattern.to_ascii_lowercase().as_bytes(),
+        value.to_ascii_lowercase().as_bytes(),
+    )
+}
+
+fn wildcard_match(pattern: &[u8], value: &[u8]) -> bool {
+    let (mut pattern_index, mut value_index) = (0, 0);
+    let mut star_index = None;
+    let mut star_value_index = 0;
+
+    while value_index < value.len() {
+        if pattern_index < pattern.len()
+            && (pattern[pattern_index] == b'?' || pattern[pattern_index] == value[value_index])
+        {
+            pattern_index += 1;
+            value_index += 1;
+        } else if pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+            star_index = Some(pattern_index);
+            pattern_index += 1;
+            star_value_index = value_index;
+        } else if let Some(star) = star_index {
+            pattern_index = star + 1;
+            star_value_index += 1;
+            value_index = star_value_index;
+        } else {
+            return false;
+        }
+    }
+
+    while pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+        pattern_index += 1;
+    }
+
+    pattern_index == pattern.len()
+}
+
 fn unescape_kicad_brace_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
     let mut characters = value.chars().peekable();
@@ -9300,9 +9440,9 @@ mod tests {
     use super::{
         KicadAt, KicadColor, KicadDiagnosticSeverity, KicadGraphic, KicadIndexedSymbolUnit,
         KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSize,
-        KicadSymbolBodyStyles, KicadSymbolPower, parse_kicad_project, parse_kicad_schematic,
-        parse_kicad_symbol_library, parse_kicad_symbol_library_table, parse_sexpr,
-        read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
+        KicadSymbolBodyStyles, KicadSymbolLibraryIndexQuery, KicadSymbolPower, parse_kicad_project,
+        parse_kicad_schematic, parse_kicad_symbol_library, parse_kicad_symbol_library_table,
+        parse_sexpr, read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
         read_kicad_symbol_library, read_kicad_symbol_library_index,
         read_kicad_symbol_library_table,
     };
@@ -13531,6 +13671,31 @@ mod tests {
         assert_eq!(index_json["symbols"][1]["bounding_box"]["min"]["x"], -2.54);
         assert_eq!(index_json["diagnostic_count"], 0);
         assert!(index_json["diagnostics"].as_array().unwrap().is_empty());
+
+        let by_text = index.query(&KicadSymbolLibraryIndexQuery {
+            text: Some("analog".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(
+            by_text
+                .symbols
+                .iter()
+                .map(|symbol| symbol.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Browser:Parent", "Browser:Derived"]
+        );
+        let by_footprint = index.query(&KicadSymbolLibraryIndexQuery {
+            footprint: Some("Connector Foo:Bar".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(by_footprint.symbols.len(), 2);
+        assert_eq!(by_footprint.libraries[0].symbol_count, 2);
+        let by_library = index.query(&KicadSymbolLibraryIndexQuery {
+            library: Some("missing".to_string()),
+            ..Default::default()
+        });
+        assert!(by_library.symbols.is_empty());
+        assert!(by_library.libraries.is_empty());
 
         let library = read_kicad_symbol_library(&project_dir.join("browser.kicad_sym")).unwrap();
         let parent = library.symbol("Parent").unwrap();
