@@ -1,7 +1,7 @@
 use osl_core::html_escape;
 use osl_kicad::{
-    KicadAt, KicadBoundingBox, KicadCanvasGraphic, KicadCanvasScene, KicadCanvasSymbol,
-    KicadLabelKind, KicadPoint,
+    KicadAt, KicadBoundingBox, KicadCanvasGraphic, KicadCanvasScene, KicadCanvasSheet,
+    KicadCanvasSymbol, KicadLabelKind, KicadPoint,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -56,6 +56,9 @@ pub fn render_kicad_scene_svg_with_options(
     for wire in &scene.wires {
         render_polyline(&mut output, &viewport, &wire.points, "#0f172a", 2.0);
     }
+    for sheet in &scene.sheets {
+        render_sheet(&mut output, &viewport, sheet);
+    }
     for symbol in &scene.symbols {
         render_symbol(&mut output, &viewport, symbol);
     }
@@ -109,6 +112,64 @@ pub fn render_kicad_scene_svg_with_options(
     output.push_str("  </g>\n");
     output.push_str("</svg>\n");
     output
+}
+
+fn render_sheet(output: &mut String, viewport: &SvgViewport, sheet: &KicadCanvasSheet) {
+    let Some(at) = sheet.at else {
+        return;
+    };
+    let Some(size) = sheet.size else {
+        return;
+    };
+    let origin = viewport.project(at_point(at));
+    output.push_str(&format!(
+        "    <g data-sheet-name=\"{}\" data-sheet-file=\"{}\">\n",
+        html_escape(&sheet.name),
+        html_escape(&sheet.file)
+    ));
+    output.push_str(&format!(
+        "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"#b45309\" stroke-width=\"1.8\" fill=\"#fef3c7\" fill-opacity=\"0.18\"/>\n",
+        fmt(origin.x),
+        fmt(origin.y),
+        fmt(size.width * viewport.scale),
+        fmt(size.height * viewport.scale)
+    ));
+    if !sheet.name.is_empty() {
+        output.push_str(&format!(
+            "      <text x=\"{}\" y=\"{}\" fill=\"#92400e\" stroke=\"none\">{}</text>\n",
+            fmt(origin.x + 4.0),
+            fmt(origin.y - 6.0),
+            html_escape(&sheet.name)
+        ));
+    }
+    if !sheet.file.is_empty() {
+        output.push_str(&format!(
+            "      <text x=\"{}\" y=\"{}\" fill=\"#a16207\" stroke=\"none\">{}</text>\n",
+            fmt(origin.x + 4.0),
+            fmt(origin.y + size.height * viewport.scale + 14.0),
+            html_escape(&sheet.file)
+        ));
+    }
+    for pin in &sheet.pins {
+        if let Some(at) = pin.at {
+            let start = viewport.project(at_point(at));
+            let end = viewport.project(pin_body_end(at, 2.54));
+            output.push_str(&format!(
+                "      <line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#b45309\" stroke-width=\"1.4\"/>\n",
+                fmt(start.x),
+                fmt(start.y),
+                fmt(end.x),
+                fmt(end.y)
+            ));
+            output.push_str(&format!(
+                "      <text x=\"{}\" y=\"{}\" fill=\"#92400e\" stroke=\"none\">{}</text>\n",
+                fmt(start.x + 4.0),
+                fmt(start.y - 4.0),
+                html_escape(&pin.name)
+            ));
+        }
+    }
+    output.push_str("    </g>\n");
 }
 
 fn render_symbol(output: &mut String, viewport: &SvgViewport, symbol: &KicadCanvasSymbol) {
@@ -287,10 +348,18 @@ fn at_point(at: KicadAt) -> KicadPoint {
     KicadPoint { x: at.x, y: at.y }
 }
 
+fn pin_body_end(at: KicadAt, length: f64) -> KicadPoint {
+    let radians = at.rotation.to_radians();
+    KicadPoint {
+        x: at.x + length * radians.cos(),
+        y: at.y + length * radians.sin(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::render_kicad_scene_svg;
-    use osl_kicad::read_kicad_schematic;
+    use osl_kicad::{parse_kicad_schematic, read_kicad_schematic};
     use std::path::Path;
 
     #[test]
@@ -310,5 +379,33 @@ mod tests {
         assert!(svg.contains(">in</text>"));
         assert!(svg.contains("<polyline"));
         assert!(svg.ends_with("</svg>\n"));
+    }
+
+    #[test]
+    fn renders_kicad_hierarchical_sheet_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (sheet
+    (at 20 10)
+    (size 15 10)
+    (property "Sheetname" "gain_stage" (at 20 9 0))
+    (property "Sheetfile" "gain_stage.kicad_sch" (at 20 21 0))
+    (pin "in" input (at 20 15 180))
+    (pin "out" output (at 35 15 0))
+  )
+)"#,
+            "hierarchical.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-sheet-name=\"gain_stage\""));
+        assert!(svg.contains("gain_stage.kicad_sch"));
+        assert!(svg.contains(">in</text>"));
+        assert!(svg.contains(">out</text>"));
     }
 }

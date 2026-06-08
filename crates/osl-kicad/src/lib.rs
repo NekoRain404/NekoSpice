@@ -97,6 +97,9 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
                     .filter_map(|node| parse_label(node, KicadLabelKind::Hierarchical)),
             )
             .collect(),
+        sheets: direct_children(root_list, "sheet")
+            .filter_map(parse_sheet)
+            .collect(),
         text_items: direct_children(root_list, "text")
             .filter_map(parse_text_item)
             .collect(),
@@ -177,6 +180,7 @@ pub struct KicadSchematic {
     pub symbols: Vec<KicadSymbolInstance>,
     pub wires: Vec<KicadWire>,
     pub labels: Vec<KicadLabel>,
+    pub sheets: Vec<KicadSheet>,
     pub text_items: Vec<KicadTextItem>,
     pub junctions: Vec<KicadJunction>,
 }
@@ -296,6 +300,7 @@ pub struct KicadEditSummary {
 pub struct KicadSchematicCheckReport {
     pub source: String,
     pub symbol_count: usize,
+    pub sheet_count: usize,
     pub net_count: usize,
     pub spice_directive_count: usize,
     pub diagnostics: Vec<KicadSchematicDiagnostic>,
@@ -349,6 +354,7 @@ impl KicadSchematicCheckReport {
                 "{{\n",
                 "  \"source\": \"{}\",\n",
                 "  \"symbol_count\": {},\n",
+                "  \"sheet_count\": {},\n",
                 "  \"net_count\": {},\n",
                 "  \"spice_directive_count\": {},\n",
                 "  \"diagnostic_count\": {},\n",
@@ -362,6 +368,7 @@ impl KicadSchematicCheckReport {
             ),
             json_escape(&self.source),
             self.symbol_count,
+            self.sheet_count,
             self.net_count,
             self.spice_directive_count,
             self.diagnostics.len(),
@@ -670,6 +677,7 @@ impl KicadSchematic {
         self.check_symbols(&graph, &mut diagnostics);
         self.check_wires(&mut diagnostics);
         self.check_labels(&graph, &mut diagnostics);
+        self.check_sheets(&mut diagnostics);
         self.check_spice_directives(&mut diagnostics);
         if !graph.nets.iter().any(|net| net.name == "0") {
             diagnostics.push(kicad_schematic_diagnostic(
@@ -685,6 +693,7 @@ impl KicadSchematic {
         KicadSchematicCheckReport {
             source: self.source.clone(),
             symbol_count: self.symbols.len(),
+            sheet_count: self.sheets.len(),
             net_count: graph.nets.len(),
             spice_directive_count: self.spice_directives().len(),
             diagnostics,
@@ -696,6 +705,17 @@ impl KicadSchematic {
         let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
 
         lines.extend(self.spice_include_directives());
+
+        for sheet in &self.sheets {
+            if sheet.exclude_from_sim == Some(true) {
+                continue;
+            }
+            lines.push(format!(
+                "* Unsupported KiCad hierarchical sheet {} {}",
+                sheet.sheet_name().unwrap_or("<unnamed-sheet>"),
+                sheet.sheet_file().unwrap_or("<no-sheetfile>")
+            ));
+        }
 
         for symbol in &self.symbols {
             match self.symbol_to_spice_line(symbol, &graph) {
@@ -763,6 +783,9 @@ impl KicadSchematic {
         }
         for label in &self.labels {
             label.write_label_sexpr(&mut output, 2);
+        }
+        for sheet in &self.sheets {
+            sheet.write_sheet_sexpr(&mut output, 2);
         }
         for text in &self.text_items {
             text.write_text_sexpr(&mut output, 2);
@@ -1253,6 +1276,67 @@ impl KicadSchematic {
         }
     }
 
+    fn check_sheets(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
+        for (index, sheet) in self.sheets.iter().enumerate() {
+            let item = sheet
+                .sheet_name()
+                .or_else(|| sheet.sheet_file())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("sheet:{index}"));
+            if sheet.sheet_name().is_none_or(|name| name.trim().is_empty()) {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "missing-sheet-name",
+                    &format!("hierarchical sheet #{index} has no Sheetname property"),
+                    Some(item.clone()),
+                    None,
+                    None,
+                ));
+            }
+            if sheet.sheet_file().is_none_or(|file| file.trim().is_empty()) {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "missing-sheet-file",
+                    &format!("hierarchical sheet '{item}' has no Sheetfile property"),
+                    Some(item.clone()),
+                    None,
+                    None,
+                ));
+            }
+            if sheet.at.is_none() || sheet.size.is_none() {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Warning,
+                    "missing-sheet-geometry",
+                    &format!("hierarchical sheet '{item}' has incomplete placement geometry"),
+                    Some(item.clone()),
+                    None,
+                    None,
+                ));
+            }
+            if sheet.exclude_from_sim == Some(true) {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Info,
+                    "simulation-disabled-sheet",
+                    &format!("hierarchical sheet '{item}' is excluded from simulation"),
+                    Some(item),
+                    None,
+                    None,
+                ));
+            } else {
+                diagnostics.push(kicad_schematic_diagnostic(
+                    KicadDiagnosticSeverity::Error,
+                    "hierarchical-sheet-unsupported",
+                    &format!(
+                        "hierarchical sheet '{item}' is parsed but child sheet expansion is not implemented yet"
+                    ),
+                    Some(item),
+                    None,
+                    None,
+                ));
+            }
+        }
+    }
+
     fn check_spice_directives(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
         let directives = self.spice_directives();
         if directives.is_empty() {
@@ -1352,6 +1436,16 @@ impl KicadSchematic {
                 uuids.insert(uuid.clone());
             }
         }
+        for sheet in &self.sheets {
+            if let Some(uuid) = &sheet.uuid {
+                uuids.insert(uuid.clone());
+            }
+            for pin in &sheet.pins {
+                if let Some(uuid) = &pin.uuid {
+                    uuids.insert(uuid.clone());
+                }
+            }
+        }
         for text in &self.text_items {
             if let Some(uuid) = &text.uuid {
                 uuids.insert(uuid.clone());
@@ -1402,6 +1496,8 @@ impl KicadSchematic {
                 "  \"library_symbol_count\": {},\n",
                 "  \"wire_count\": {},\n",
                 "  \"label_count\": {},\n",
+                "  \"sheet_count\": {},\n",
+                "  \"sheet_pin_count\": {},\n",
                 "  \"text_count\": {},\n",
                 "  \"spice_directive_count\": {},\n",
                 "  \"library_graphic_count\": {}\n",
@@ -1414,6 +1510,11 @@ impl KicadSchematic {
             self.library_symbols.len(),
             self.wires.len(),
             self.labels.len(),
+            self.sheets.len(),
+            self.sheets
+                .iter()
+                .map(|sheet| sheet.pins.len())
+                .sum::<usize>(),
             self.text_items.len(),
             self.spice_directives().len(),
             self.library_symbols
@@ -1428,6 +1529,7 @@ impl KicadSchematic {
 pub struct KicadCanvasScene {
     pub source: String,
     pub symbols: Vec<KicadCanvasSymbol>,
+    pub sheets: Vec<KicadCanvasSheet>,
     pub wires: Vec<KicadCanvasWire>,
     pub labels: Vec<KicadCanvasLabel>,
     pub junctions: Vec<KicadCanvasJunction>,
@@ -1475,6 +1577,41 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let sheets = schematic
+            .sheets
+            .iter()
+            .map(|sheet| {
+                let mut sheet_bounds = KicadBoundingBoxBuilder::default();
+                if let Some(sheet_box) = sheet.bounding_box() {
+                    sheet_bounds.include_box(sheet_box);
+                    bounds.include_box(sheet_box);
+                }
+                let pins = sheet
+                    .pins
+                    .iter()
+                    .map(|pin| {
+                        if let Some(at) = pin.at {
+                            sheet_bounds.include(at.point());
+                            bounds.include(at.point());
+                        }
+                        KicadCanvasSheetPin {
+                            name: pin.name.clone(),
+                            pin_type: pin.pin_type.clone(),
+                            at: pin.at,
+                        }
+                    })
+                    .collect();
+                KicadCanvasSheet {
+                    name: sheet.sheet_name().unwrap_or_default().to_string(),
+                    file: sheet.sheet_file().unwrap_or_default().to_string(),
+                    at: sheet.at,
+                    size: sheet.size,
+                    pins,
+                    bounds: sheet_bounds.finish(),
+                }
+            })
+            .collect::<Vec<_>>();
+
         let wires = schematic
             .wires
             .iter()
@@ -1515,6 +1652,7 @@ impl KicadCanvasScene {
         Self {
             source: schematic.source.clone(),
             symbols,
+            sheets,
             wires,
             labels,
             junctions,
@@ -1543,8 +1681,10 @@ impl KicadCanvasScene {
                 "{{\n",
                 "  \"source\": \"{}\",\n",
                 "  \"symbol_count\": {},\n",
+                "  \"sheet_count\": {},\n",
                 "  \"graphic_count\": {},\n",
                 "  \"pin_count\": {},\n",
+                "  \"sheet_pin_count\": {},\n",
                 "  \"wire_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
@@ -1553,8 +1693,13 @@ impl KicadCanvasScene {
             ),
             json_escape(&self.source),
             self.symbols.len(),
+            self.sheets.len(),
             graphic_count,
             pin_count,
+            self.sheets
+                .iter()
+                .map(|sheet| sheet.pins.len())
+                .sum::<usize>(),
             self.wires.len(),
             self.labels.len(),
             self.junctions.len(),
@@ -1572,6 +1717,23 @@ pub struct KicadCanvasSymbol {
     pub graphics: Vec<KicadCanvasGraphic>,
     pub pins: Vec<KicadCanvasPin>,
     pub bounds: Option<KicadBoundingBox>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasSheet {
+    pub name: String,
+    pub file: String,
+    pub at: Option<KicadAt>,
+    pub size: Option<KicadSize>,
+    pub pins: Vec<KicadCanvasSheetPin>,
+    pub bounds: Option<KicadBoundingBox>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasSheetPin {
+    pub name: String,
+    pub pin_type: String,
+    pub at: Option<KicadAt>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2647,6 +2809,115 @@ impl KicadLabelKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct KicadSheet {
+    pub at: Option<KicadAt>,
+    pub size: Option<KicadSize>,
+    pub uuid: Option<String>,
+    pub exclude_from_sim: Option<bool>,
+    pub properties: Vec<KicadProperty>,
+    pub pins: Vec<KicadSheetPin>,
+}
+
+impl KicadSheet {
+    pub fn property(&self, name: &str) -> Option<&str> {
+        self.properties
+            .iter()
+            .find(|property| property.name == name)
+            .map(|property| property.value.as_str())
+    }
+
+    pub fn sheet_name(&self) -> Option<&str> {
+        self.property("Sheetname")
+    }
+
+    pub fn sheet_file(&self) -> Option<&str> {
+        self.property("Sheetfile")
+    }
+
+    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
+        let at = self.at?;
+        let size = self.size?;
+        Some(KicadBoundingBox {
+            min: at.point(),
+            max: KicadPoint {
+                x: at.x + size.width,
+                y: at.y + size.height,
+            },
+        })
+    }
+
+    fn write_sheet_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(sheet\n", pad));
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                "{}  (at {} {})\n",
+                pad,
+                format_number(at.x),
+                format_number(at.y)
+            ));
+        }
+        if let Some(size) = self.size {
+            output.push_str(&format!(
+                "{}  (size {} {})\n",
+                pad,
+                format_number(size.width),
+                format_number(size.height)
+            ));
+        }
+        if let Some(exclude_from_sim) = self.exclude_from_sim {
+            output.push_str(&format!(
+                "{}  (exclude_from_sim {})\n",
+                pad,
+                if exclude_from_sim { "yes" } else { "no" }
+            ));
+        }
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        for property in &self.properties {
+            property.write_property_sexpr(output, indent + 2);
+        }
+        for pin in &self.pins {
+            pin.write_sheet_pin_sexpr(output, indent + 2);
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSheetPin {
+    pub name: String,
+    pub pin_type: String,
+    pub at: Option<KicadAt>,
+    pub uuid: Option<String>,
+}
+
+impl KicadSheetPin {
+    fn write_sheet_pin_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}(pin {} {}",
+            pad,
+            sexpr_string(&self.name),
+            sexpr_atom_or_string(&self.pin_type)
+        ));
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                " (at {} {} {})",
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
+        }
+        output.push_str(" (effects (font (size 1.27 1.27))))\n");
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct KicadTextItem {
     pub text: String,
     pub at: Option<KicadAt>,
@@ -2682,6 +2953,12 @@ pub struct KicadJunction {
 pub struct KicadPoint {
     pub x: f64,
     pub y: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KicadSize {
+    pub width: f64,
+    pub height: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -2969,6 +3246,32 @@ fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
     })
 }
 
+fn parse_sheet(node: &Sexp) -> Option<KicadSheet> {
+    let items = list_items(node);
+    Some(KicadSheet {
+        at: child(items, "at").and_then(parse_at),
+        size: child(items, "size").and_then(parse_size),
+        uuid: child_value(items, "uuid"),
+        exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
+        properties: direct_children(items, "property")
+            .filter_map(parse_property)
+            .collect(),
+        pins: direct_children(items, "pin")
+            .filter_map(parse_sheet_pin)
+            .collect(),
+    })
+}
+
+fn parse_sheet_pin(node: &Sexp) -> Option<KicadSheetPin> {
+    let items = list_items(node);
+    Some(KicadSheetPin {
+        name: list_value(node, 1)?,
+        pin_type: list_value(node, 2).unwrap_or_else(|| "unspecified".to_string()),
+        at: child(items, "at").and_then(parse_at),
+        uuid: child_value(items, "uuid"),
+    })
+}
+
 fn parse_text_item(node: &Sexp) -> Option<KicadTextItem> {
     let items = list_items(node);
     Some(KicadTextItem {
@@ -2993,6 +3296,14 @@ fn parse_xy(node: &Sexp) -> Option<KicadPoint> {
     Some(KicadPoint {
         x: atom_text(items.get(1)?)?.parse().ok()?,
         y: atom_text(items.get(2)?)?.parse().ok()?,
+    })
+}
+
+fn parse_size(node: &Sexp) -> Option<KicadSize> {
+    let items = list_items(node);
+    Some(KicadSize {
+        width: atom_text(items.get(1)?)?.parse().ok()?,
+        height: atom_text(items.get(2)?)?.parse().ok()?,
     })
 }
 
@@ -3824,10 +4135,11 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, parse_kicad_project,
-        parse_kicad_schematic, parse_kicad_symbol_library, parse_kicad_symbol_library_table,
-        parse_sexpr, read_kicad_project, read_kicad_schematic, read_kicad_symbol_library,
-        read_kicad_symbol_library_index, read_kicad_symbol_library_table,
+        KicadAt, KicadDiagnosticSeverity, KicadLabelKind, KicadPoint, KicadSchematicEdit,
+        parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
+        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
+        read_kicad_symbol_library, read_kicad_symbol_library_index,
+        read_kicad_symbol_library_table,
     };
     use std::fs;
     use std::path::Path;
@@ -3986,6 +4298,71 @@ mod tests {
         assert!(codes.contains(&"missing-value"));
         assert!(codes.contains(&"missing-spice-directive"));
         assert!(report.to_json().contains("\"diagnostic_count\""));
+    }
+
+    #[test]
+    fn parses_hierarchical_sheet_items_and_reports_unsupported_expansion() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (wire (pts (xy 5 5) (xy 10 5)))
+  (label "0" (at 5 5 0))
+  (text ".op" (at 5 2 0))
+  (sheet
+    (at 20 10)
+    (size 15 10)
+    (exclude_from_sim no)
+    (uuid "aaaaaaaa-0000-0000-0000-000000000001")
+    (property "Sheetname" "gain_stage" (at 20 9 0))
+    (property "Sheetfile" "gain_stage.kicad_sch" (at 20 21 0))
+    (pin "in" input (at 20 15 180) (uuid "aaaaaaaa-0000-0000-0000-000000000002"))
+    (pin "out" output (at 35 15 0) (uuid "aaaaaaaa-0000-0000-0000-000000000003"))
+  )
+)"#,
+            "hierarchical.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.sheets.len(), 1);
+        assert_eq!(schematic.sheets[0].sheet_name(), Some("gain_stage"));
+        assert_eq!(
+            schematic.sheets[0].sheet_file(),
+            Some("gain_stage.kicad_sch")
+        );
+        assert_eq!(schematic.sheets[0].pins.len(), 2);
+        assert_eq!(schematic.sheets[0].pins[0].pin_type, "input");
+        assert_eq!(schematic.sheets[0].bounding_box().unwrap().width(), 15.0);
+        assert!(schematic.to_summary_json().contains("\"sheet_count\": 1"));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"sheet_pin_count\": 2")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.sheets.len(), 1);
+        assert_eq!(scene.sheets[0].pins.len(), 2);
+        assert!(scene.to_summary_json().contains("\"sheet_count\": 1"));
+        assert!(scene.to_summary_json().contains("\"sheet_pin_count\": 2"));
+
+        let report = schematic.check_report();
+        assert_eq!(report.sheet_count, 1);
+        assert!(report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.severity == KicadDiagnosticSeverity::Error
+                && diagnostic.code == "hierarchical-sheet-unsupported"
+        }));
+
+        let netlist = schematic.to_spice_netlist().unwrap();
+        assert!(
+            netlist
+                .contains("* Unsupported KiCad hierarchical sheet gain_stage gain_stage.kicad_sch")
+        );
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(sheet"));
+        assert!(roundtrip.contains("(property \"Sheetname\" \"gain_stage\""));
+        assert!(roundtrip.contains("(pin \"in\" input"));
     }
 
     #[test]

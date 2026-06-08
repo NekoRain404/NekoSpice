@@ -1,5 +1,8 @@
 use osl_core::{OslError, OslResult, html_escape, json_escape, read_text};
-use osl_kicad::{KicadProject, read_kicad_project, read_kicad_schematic_with_libraries};
+use osl_kicad::{
+    KicadDiagnosticSeverity, KicadProject, KicadSchematicDiagnostic, read_kicad_project,
+    read_kicad_schematic_with_libraries,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
@@ -17,9 +20,16 @@ pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
     let source = path.display().to_string();
     if is_kicad_schematic(&path) {
         let schematic = read_kicad_schematic_with_libraries(&path)?;
+        let check_report = schematic.check_report();
         let netlist = schematic.to_spice_netlist()?;
         let mut report = parse_netlist(&netlist, &source)?;
         report.flavor = NetlistFlavor::KiCad;
+        report.diagnostics.extend(
+            check_report
+                .diagnostics
+                .iter()
+                .map(kicad_schematic_diagnostic_to_import),
+        );
         Ok(ImportInput {
             source_netlist: netlist,
             source_path: path,
@@ -312,6 +322,40 @@ fn kicad_schematic_candidate_score(
         }
     }
     score
+}
+
+fn kicad_schematic_diagnostic_to_import(diagnostic: &KicadSchematicDiagnostic) -> ImportDiagnostic {
+    let detail = [
+        diagnostic.item.as_ref().map(|item| format!("item={item}")),
+        diagnostic.net.as_ref().map(|net| format!("net={net}")),
+        diagnostic.pin.as_ref().map(|pin| format!("pin={pin}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(", ");
+    let message = if detail.is_empty() {
+        diagnostic.message.clone()
+    } else {
+        format!("{} ({detail})", diagnostic.message)
+    };
+    let suggestion = if diagnostic.code == "hierarchical-sheet-unsupported" {
+        "Flatten or expand the KiCad hierarchy before import, or import a leaf schematic until hierarchical sheet expansion is implemented.".to_string()
+    } else {
+        "Run `osl kicad-check <file.kicad_sch>` and fix the schematic before relying on the generated SPICE netlist.".to_string()
+    };
+
+    ImportDiagnostic {
+        line: 0,
+        severity: match diagnostic.severity {
+            KicadDiagnosticSeverity::Error => ImportSeverity::Error,
+            KicadDiagnosticSeverity::Warning => ImportSeverity::Warning,
+            KicadDiagnosticSeverity::Info => ImportSeverity::Info,
+        },
+        code: format!("kicad-{}", diagnostic.code),
+        message,
+        suggestion,
+    }
 }
 
 #[derive(Debug)]
@@ -2724,6 +2768,54 @@ XU1 in out vcc vee GOODAMP
         assert!(from_dir.source_netlist.contains("R1 in 0 2k"));
         assert!(!from_dir.source_netlist.contains("Rchild"));
         assert_eq!(from_project_file.source_netlist, from_dir.source_netlist);
+
+        let _ = fs::remove_dir_all(project_dir);
+    }
+
+    #[test]
+    fn imports_kicad_hierarchical_sheet_with_diagnostic() {
+        let project_dir = std::env::temp_dir().join(format!(
+            "nekospice_kicad_hierarchical_sheet_import_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project_dir);
+        fs::create_dir_all(&project_dir).unwrap();
+        let schematic_path = project_dir.join("hierarchical.kicad_sch");
+        fs::write(
+            &schematic_path,
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (wire (pts (xy 5 5) (xy 10 5)))
+  (label "0" (at 5 5 0))
+  (text ".op" (at 5 2 0))
+  (sheet
+    (at 20 10)
+    (size 15 10)
+    (property "Sheetname" "gain_stage" (at 20 9 0))
+    (property "Sheetfile" "gain_stage.kicad_sch" (at 20 21 0))
+    (pin "in" input (at 20 15 180))
+    (pin "out" output (at 35 15 0))
+  )
+)"#,
+        )
+        .unwrap();
+
+        let input = read_import_input(&schematic_path).unwrap();
+
+        assert_eq!(input.report.flavor, NetlistFlavor::KiCad);
+        assert!(input.report.error_count() >= 1);
+        assert!(input.report.compatibility_score() < 100);
+        assert!(
+            input
+                .source_netlist
+                .contains("* Unsupported KiCad hierarchical sheet gain_stage gain_stage.kicad_sch")
+        );
+        assert!(input.report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.severity == ImportSeverity::Error
+                && diagnostic.code == "kicad-hierarchical-sheet-unsupported"
+        }));
 
         let _ = fs::remove_dir_all(project_dir);
     }
