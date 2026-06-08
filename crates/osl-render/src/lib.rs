@@ -53,6 +53,9 @@ pub fn render_kicad_scene_svg_with_options(
         render_grid(&mut output, &viewport);
     }
     output.push_str("  <g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n");
+    for graphic in &scene.graphics {
+        render_graphic(&mut output, &viewport, graphic, "#64748b", "#e2e8f0");
+    }
     for bus in &scene.buses {
         render_polyline(&mut output, &viewport, &bus.points, "#2563eb", 3.2);
     }
@@ -207,56 +210,7 @@ fn render_symbol(output: &mut String, viewport: &SvgViewport, symbol: &KicadCanv
         html_escape(&symbol.reference)
     ));
     for graphic in &symbol.graphics {
-        match graphic {
-            KicadCanvasGraphic::Polyline { points } => {
-                render_polyline(output, viewport, points, "#1d4ed8", 1.8);
-            }
-            KicadCanvasGraphic::Rectangle { start, end } => {
-                let left_top = viewport.project(KicadPoint {
-                    x: start.x.min(end.x),
-                    y: start.y.min(end.y),
-                });
-                let right_bottom = viewport.project(KicadPoint {
-                    x: start.x.max(end.x),
-                    y: start.y.max(end.y),
-                });
-                output.push_str(&format!(
-                    "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"#1d4ed8\" stroke-width=\"1.8\" fill=\"#dbeafe\" fill-opacity=\"0.25\"/>\n",
-                    fmt(left_top.x),
-                    fmt(left_top.y),
-                    fmt((right_bottom.x - left_top.x).abs()),
-                    fmt((right_bottom.y - left_top.y).abs())
-                ));
-            }
-            KicadCanvasGraphic::Circle { center, radius } => {
-                let center = viewport.project(*center);
-                output.push_str(&format!(
-                    "      <circle cx=\"{}\" cy=\"{}\" r=\"{}\" stroke=\"#1d4ed8\" stroke-width=\"1.8\" fill=\"none\"/>\n",
-                    fmt(center.x),
-                    fmt(center.y),
-                    fmt(radius * viewport.scale)
-                ));
-            }
-            KicadCanvasGraphic::Arc { start, mid, end } => {
-                let mut points = vec![*start];
-                if let Some(mid) = mid {
-                    points.push(*mid);
-                }
-                points.push(*end);
-                render_polyline(output, viewport, &points, "#1d4ed8", 1.8);
-            }
-            KicadCanvasGraphic::Text { text, at } => {
-                if let Some(at) = at {
-                    let point = viewport.project(at_point(*at));
-                    output.push_str(&format!(
-                        "      <text x=\"{}\" y=\"{}\" fill=\"#1d4ed8\" stroke=\"none\">{}</text>\n",
-                        fmt(point.x),
-                        fmt(point.y),
-                        html_escape(text)
-                    ));
-                }
-            }
-        }
+        render_graphic(output, viewport, graphic, "#1d4ed8", "#dbeafe");
     }
     for pin in &symbol.pins {
         let start = viewport.project(pin.start);
@@ -270,6 +224,69 @@ fn render_symbol(output: &mut String, viewport: &SvgViewport, symbol: &KicadCanv
         ));
     }
     output.push_str("    </g>\n");
+}
+
+fn render_graphic(
+    output: &mut String,
+    viewport: &SvgViewport,
+    graphic: &KicadCanvasGraphic,
+    stroke: &str,
+    fill: &str,
+) {
+    match graphic {
+        KicadCanvasGraphic::Polyline { points } => {
+            render_polyline(output, viewport, points, stroke, 1.8);
+        }
+        KicadCanvasGraphic::Rectangle { start, end } => {
+            let left_top = viewport.project(KicadPoint {
+                x: start.x.min(end.x),
+                y: start.y.min(end.y),
+            });
+            let right_bottom = viewport.project(KicadPoint {
+                x: start.x.max(end.x),
+                y: start.y.max(end.y),
+            });
+            output.push_str(&format!(
+                "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"{}\" stroke-width=\"1.8\" fill=\"{}\" fill-opacity=\"0.25\"/>\n",
+                fmt(left_top.x),
+                fmt(left_top.y),
+                fmt((right_bottom.x - left_top.x).abs()),
+                fmt((right_bottom.y - left_top.y).abs()),
+                stroke,
+                fill
+            ));
+        }
+        KicadCanvasGraphic::Circle { center, radius } => {
+            let center = viewport.project(*center);
+            output.push_str(&format!(
+                "      <circle cx=\"{}\" cy=\"{}\" r=\"{}\" stroke=\"{}\" stroke-width=\"1.8\" fill=\"none\"/>\n",
+                fmt(center.x),
+                fmt(center.y),
+                fmt(radius * viewport.scale),
+                stroke
+            ));
+        }
+        KicadCanvasGraphic::Arc { start, mid, end } => {
+            let mut points = vec![*start];
+            if let Some(mid) = mid {
+                points.push(*mid);
+            }
+            points.push(*end);
+            render_polyline(output, viewport, &points, stroke, 1.8);
+        }
+        KicadCanvasGraphic::Text { text, at } => {
+            if let Some(at) = at {
+                let point = viewport.project(at_point(*at));
+                output.push_str(&format!(
+                    "      <text x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\">{}</text>\n",
+                    fmt(point.x),
+                    fmt(point.y),
+                    stroke,
+                    html_escape(text)
+                ));
+            }
+        }
+    }
 }
 
 fn render_polyline(
@@ -457,5 +474,29 @@ mod tests {
         assert!(svg.contains("<polyline"));
         assert!(svg.contains("stroke=\"#2563eb\""));
         assert!(svg.contains("data-bus-entry=\"true\""));
+    }
+
+    #[test]
+    fn renders_schematic_graphics_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (polyline (pts (xy 10 10) (xy 20 10)) (uuid "11111111-1111-4111-8111-111111111111"))
+  (rectangle (start 25 10) (end 35 20) (uuid "22222222-2222-4222-8222-222222222222"))
+  (circle (center 45 15) (radius 5) (uuid "33333333-3333-4333-8333-333333333333"))
+)"#,
+            "graphics.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("<polyline"));
+        assert!(svg.contains("<rect"));
+        assert!(svg.contains("<circle"));
+        assert!(svg.contains("stroke=\"#64748b\""));
     }
 }

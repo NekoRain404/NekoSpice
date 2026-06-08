@@ -102,6 +102,10 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
         bus_entries: direct_children(root_list, "bus_entry")
             .filter_map(parse_bus_entry)
             .collect(),
+        graphics: root_list
+            .iter()
+            .filter_map(parse_schematic_graphic)
+            .collect(),
         labels: direct_children(root_list, "label")
             .filter_map(|node| parse_label(node, KicadLabelKind::Local))
             .chain(
@@ -201,6 +205,7 @@ pub struct KicadSchematic {
     pub wires: Vec<KicadWire>,
     pub buses: Vec<KicadBus>,
     pub bus_entries: Vec<KicadBusEntry>,
+    pub graphics: Vec<KicadSchematicGraphic>,
     pub labels: Vec<KicadLabel>,
     pub sheets: Vec<KicadSheet>,
     pub no_connects: Vec<KicadNoConnect>,
@@ -1124,6 +1129,9 @@ impl KicadSchematic {
         for entry in &self.bus_entries {
             entry.write_bus_entry_sexpr(&mut output, 2);
         }
+        for graphic in &self.graphics {
+            graphic.write_schematic_graphic_sexpr(&mut output, 2);
+        }
         for junction in &self.junctions {
             junction.write_junction_sexpr(&mut output, 2);
         }
@@ -1855,6 +1863,11 @@ impl KicadSchematic {
                 uuids.insert(uuid.clone());
             }
         }
+        for graphic in &self.graphics {
+            if let Some(uuid) = &graphic.uuid {
+                uuids.insert(uuid.clone());
+            }
+        }
         for label in &self.labels {
             if let Some(uuid) = &label.uuid {
                 uuids.insert(uuid.clone());
@@ -1950,6 +1963,7 @@ impl KicadSchematic {
                 "  \"wire_count\": {},\n",
                 "  \"bus_count\": {},\n",
                 "  \"bus_entry_count\": {},\n",
+                "  \"schematic_graphic_count\": {},\n",
                 "  \"label_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
@@ -1969,6 +1983,7 @@ impl KicadSchematic {
             self.wires.len(),
             self.buses.len(),
             self.bus_entries.len(),
+            self.graphics.len(),
             self.labels.len(),
             self.junctions.len(),
             self.no_connects.len(),
@@ -2312,6 +2327,7 @@ pub struct KicadCanvasScene {
     pub source: String,
     pub symbols: Vec<KicadCanvasSymbol>,
     pub sheets: Vec<KicadCanvasSheet>,
+    pub graphics: Vec<KicadCanvasGraphic>,
     pub wires: Vec<KicadCanvasWire>,
     pub buses: Vec<KicadCanvasBus>,
     pub bus_entries: Vec<KicadCanvasBusEntry>,
@@ -2410,6 +2426,16 @@ impl KicadCanvasScene {
             })
             .collect::<Vec<_>>();
 
+        let graphics = schematic
+            .graphics
+            .iter()
+            .map(|graphic| {
+                let canvas_graphic = graphic.graphic.to_canvas_graphic();
+                canvas_graphic.include_in_bounds(&mut bounds);
+                canvas_graphic
+            })
+            .collect::<Vec<_>>();
+
         let buses = schematic
             .buses
             .iter()
@@ -2473,6 +2499,7 @@ impl KicadCanvasScene {
             source: schematic.source.clone(),
             symbols,
             sheets,
+            graphics,
             wires,
             buses,
             bus_entries,
@@ -2488,11 +2515,12 @@ impl KicadCanvasScene {
             .bounds
             .map(kicad_bounding_box_json)
             .unwrap_or_else(|| "null".to_string());
-        let graphic_count = self
+        let symbol_graphic_count = self
             .symbols
             .iter()
             .map(|symbol| symbol.graphics.len())
             .sum::<usize>();
+        let graphic_count = symbol_graphic_count + self.graphics.len();
         let pin_count = self
             .symbols
             .iter()
@@ -2506,6 +2534,7 @@ impl KicadCanvasScene {
                 "  \"symbol_count\": {},\n",
                 "  \"sheet_count\": {},\n",
                 "  \"graphic_count\": {},\n",
+                "  \"schematic_graphic_count\": {},\n",
                 "  \"pin_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"wire_count\": {},\n",
@@ -2521,6 +2550,7 @@ impl KicadCanvasScene {
             self.symbols.len(),
             self.sheets.len(),
             graphic_count,
+            self.graphics.len(),
             pin_count,
             self.sheets
                 .iter()
@@ -3406,6 +3436,31 @@ impl KicadGraphic {
         }
     }
 
+    fn to_canvas_graphic(&self) -> KicadCanvasGraphic {
+        match self {
+            Self::Polyline { points } => KicadCanvasGraphic::Polyline {
+                points: points.clone(),
+            },
+            Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
+                start: *start,
+                end: *end,
+            },
+            Self::Circle { center, radius } => KicadCanvasGraphic::Circle {
+                center: *center,
+                radius: *radius,
+            },
+            Self::Arc { start, mid, end } => KicadCanvasGraphic::Arc {
+                start: *start,
+                mid: *mid,
+                end: *end,
+            },
+            Self::Text { text, at } => KicadCanvasGraphic::Text {
+                text: text.clone(),
+                at: *at,
+            },
+        }
+    }
+
     fn write_graphic_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         match self {
@@ -3469,6 +3524,88 @@ impl KicadGraphic {
                 }
                 output.push_str(" (effects (font (size 1.27 1.27))))\n");
             }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadSchematicGraphic {
+    pub graphic: KicadGraphic,
+    pub uuid: Option<String>,
+}
+
+impl KicadSchematicGraphic {
+    fn write_schematic_graphic_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        match &self.graphic {
+            KicadGraphic::Polyline { points } => {
+                output.push_str(&format!("{}(polyline", pad));
+                write_points_sexpr(output, points);
+                output.push_str(" (stroke (width 0) (type default))");
+                self.write_uuid(output);
+                output.push_str(")\n");
+            }
+            KicadGraphic::Rectangle { start, end } => {
+                output.push_str(&format!(
+                    "{}(rectangle (start {} {}) (end {} {}) (stroke (width 0) (type default)) (fill (type none))",
+                    pad,
+                    format_number(start.x),
+                    format_number(start.y),
+                    format_number(end.x),
+                    format_number(end.y)
+                ));
+                self.write_uuid(output);
+                output.push_str(")\n");
+            }
+            KicadGraphic::Circle { center, radius } => {
+                output.push_str(&format!(
+                    "{}(circle (center {} {}) (radius {}) (stroke (width 0) (type default)) (fill (type none))",
+                    pad,
+                    format_number(center.x),
+                    format_number(center.y),
+                    format_number(*radius)
+                ));
+                self.write_uuid(output);
+                output.push_str(")\n");
+            }
+            KicadGraphic::Arc { start, mid, end } => {
+                let mid = mid.unwrap_or(KicadPoint {
+                    x: (start.x + end.x) / 2.0,
+                    y: (start.y + end.y) / 2.0,
+                });
+                output.push_str(&format!(
+                    "{}(arc (start {} {}) (mid {} {}) (end {} {}) (stroke (width 0) (type default)) (fill (type none))",
+                    pad,
+                    format_number(start.x),
+                    format_number(start.y),
+                    format_number(mid.x),
+                    format_number(mid.y),
+                    format_number(end.x),
+                    format_number(end.y)
+                ));
+                self.write_uuid(output);
+                output.push_str(")\n");
+            }
+            KicadGraphic::Text { text, at } => {
+                output.push_str(&format!("{}(text {}", pad, sexpr_string(text)));
+                if let Some(at) = at {
+                    output.push_str(&format!(
+                        " (at {} {} {})",
+                        format_number(at.x),
+                        format_number(at.y),
+                        format_number(at.rotation)
+                    ));
+                }
+                output.push_str(" (effects (font (size 1.27 1.27)))");
+                self.write_uuid(output);
+                output.push_str(")\n");
+            }
+        }
+    }
+
+    fn write_uuid(&self, output: &mut String) {
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
         }
     }
 }
@@ -4247,6 +4384,19 @@ fn parse_bus_entry(node: &Sexp) -> Option<KicadBusEntry> {
         size: child(items, "size").and_then(parse_size)?,
         uuid: child_value(items, "uuid"),
     })
+}
+
+fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
+    match head(node)? {
+        "polyline" | "rectangle" | "circle" | "arc" => {
+            let items = list_items(node);
+            Some(KicadSchematicGraphic {
+                graphic: parse_graphic(node)?,
+                uuid: child_value(items, "uuid"),
+            })
+        }
+        _ => None,
+    }
 }
 
 fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
@@ -5215,8 +5365,8 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        KicadAt, KicadDiagnosticSeverity, KicadLabelKind, KicadPoint, KicadSchematicEdit,
-        KicadSheetPin, KicadSize, parse_kicad_project, parse_kicad_schematic,
+        KicadAt, KicadDiagnosticSeverity, KicadGraphic, KicadLabelKind, KicadPoint,
+        KicadSchematicEdit, KicadSheetPin, KicadSize, parse_kicad_project, parse_kicad_schematic,
         parse_kicad_symbol_library, parse_kicad_symbol_library_table, parse_sexpr,
         read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
         read_kicad_symbol_library, read_kicad_symbol_library_index,
@@ -5519,6 +5669,97 @@ mod tests {
             reparsed.buses[0].uuid.as_deref(),
             Some("32323232-3232-4232-8232-323232323232")
         );
+    }
+
+    #[test]
+    fn parses_schematic_graphics_and_roundtrips() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (polyline
+    (pts (xy 10 10) (xy 20 10) (xy 20 15))
+    (stroke (width 0) (type dash))
+    (uuid "41414141-4141-4141-8141-414141414141")
+  )
+  (rectangle
+    (start 30 10)
+    (end 45 20)
+    (stroke (width 0) (type default))
+    (fill (type none))
+    (uuid "42424242-4242-4242-8242-424242424242")
+  )
+  (circle
+    (center 60 15)
+    (radius 5)
+    (stroke (width 0) (type default))
+    (fill (type none))
+    (uuid "43434343-4343-4343-8343-434343434343")
+  )
+  (arc
+    (start 70 20)
+    (mid 75 10)
+    (end 80 20)
+    (stroke (width 0) (type default))
+    (fill (type none))
+    (uuid "44444444-4444-4444-8444-444444444444")
+  )
+)"#,
+            "graphics.kicad_sch",
+        )
+        .unwrap();
+
+        assert_eq!(schematic.graphics.len(), 4);
+        assert!(matches!(
+            &schematic.graphics[0].graphic,
+            KicadGraphic::Polyline { .. }
+        ));
+        assert!(matches!(
+            &schematic.graphics[1].graphic,
+            KicadGraphic::Rectangle { .. }
+        ));
+        assert!(matches!(
+            &schematic.graphics[2].graphic,
+            KicadGraphic::Circle { .. }
+        ));
+        assert!(matches!(
+            &schematic.graphics[3].graphic,
+            KicadGraphic::Arc { .. }
+        ));
+        assert_eq!(
+            schematic.graphics[0].uuid.as_deref(),
+            Some("41414141-4141-4141-8141-414141414141")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"schematic_graphic_count\": 4")
+        );
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.graphics.len(), 4);
+        assert!(scene.to_summary_json().contains("\"graphic_count\": 4"));
+        assert!(
+            scene
+                .to_summary_json()
+                .contains("\"schematic_graphic_count\": 4")
+        );
+
+        let roundtrip = schematic.to_kicad_schematic_sexpr();
+        assert!(roundtrip.contains("(polyline"));
+        assert!(roundtrip.contains("(rectangle"));
+        assert!(roundtrip.contains("(circle"));
+        assert!(roundtrip.contains("(arc"));
+        assert!(roundtrip.contains("(uuid \"44444444-4444-4444-8444-444444444444\")"));
+        let reparsed = parse_kicad_schematic(&roundtrip, "graphics_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.graphics.len(), 4);
+        assert_eq!(
+            reparsed.graphics[3].uuid.as_deref(),
+            Some("44444444-4444-4444-8444-444444444444")
+        );
+        assert_eq!(reparsed.canvas_scene().graphics.len(), 4);
     }
 
     #[test]

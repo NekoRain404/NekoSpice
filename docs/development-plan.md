@@ -192,7 +192,7 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 
 - winit + egui + wgpu app shell。
 - waveform renderer。
-- schematic canvas renderer：symbol、wire、label、junction、sheet、selection、grid。
+- schematic canvas renderer：symbol、symbol graphics、schematic-level drawing primitives、wire、bus、label、junction、no-connect、sheet、selection、grid。
 - 缩放、平移、游标、marker。
 - 多曲线叠加。
 - sweep 分组显示。
