@@ -8,6 +8,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -55,7 +57,7 @@ osl {VERSION}
 
 Usage:
   osl run <netlist.cir> [--output <dir>] [--ngspice <path>]
-  osl verify <project.osl.yaml> [--output <dir>] [--ngspice <path>]
+  osl verify <project.osl.yaml> [--output <dir>] [--ngspice <path>] [--jobs <n>]
   osl bench <directory> [--output <dir>] [--ngspice <path>]
   osl report <run-or-verify-dir>
   osl --version
@@ -96,6 +98,10 @@ fn verify_command(args: &[String]) -> OslResult<i32> {
     let config_path = positional(args, 0, "missing config path for 'osl verify'")?;
     let ngspice = flag_value(args, "--ngspice").unwrap_or_else(|| "ngspice".to_string());
     let config = VerifyConfig::parse(Path::new(config_path))?;
+    let jobs = flag_value(args, "--jobs")
+        .map(|value| parse_jobs(&value))
+        .transpose()?
+        .unwrap_or(1);
     let output_dir = flag_value(args, "--output")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("reports").join(make_run_id(&config.project)));
@@ -103,25 +109,22 @@ fn verify_command(args: &[String]) -> OslResult<i32> {
     fs::create_dir_all(&output_dir)
         .map_err(|err| OslError::io(format!("create {}", output_dir.display()), err))?;
 
-    let backend = NgspiceCliBackend::new(ngspice);
-    let mut results = Vec::new();
+    let mut tasks = Vec::new();
     for item in &config.runs {
         for case in item.expand_cases()? {
             let run_dir = output_dir.join("runs").join(sanitize_name(&case.name));
-            let metadata =
-                backend.run_with_parameters(&item.netlist, &run_dir, &case.parameters)?;
-            let checks = evaluate_checks(&run_dir, &item.checks);
-            write_single_run_report(&run_dir, &metadata)?;
-            results.push(VerifyRunResult {
+            tasks.push(VerifyTask {
+                index: tasks.len(),
                 name: case.name,
                 netlist: item.netlist.display().to_string(),
+                netlist_path: item.netlist.clone(),
                 run_dir: run_dir.display().to_string(),
-                metadata,
                 parameters: case.parameters,
-                checks,
+                checks: item.checks.clone(),
             });
         }
     }
+    let results = run_verify_tasks(tasks, &ngspice, jobs)?;
 
     let report = VerifyReport {
         project: config.project,
@@ -131,10 +134,11 @@ fn verify_command(args: &[String]) -> OslResult<i32> {
     write_text(&output_dir.join("report.html"), &report.to_html())?;
 
     println!(
-        "verify {}: {} passed, {} failed -> {}",
+        "verify {}: {} passed, {} failed, jobs={} -> {}",
         report.project,
         report.passed_count(),
         report.failed_count(),
+        jobs,
         output_dir.display()
     );
 
@@ -161,7 +165,7 @@ fn bench_command(args: &[String]) -> OslResult<i32> {
     let backend = NgspiceCliBackend::new(ngspice);
     let mut results = Vec::new();
 
-    for circuit in circuits {
+    for (index, circuit) in circuits.into_iter().enumerate() {
         let name = circuit
             .file_stem()
             .and_then(|name| name.to_str())
@@ -170,6 +174,7 @@ fn bench_command(args: &[String]) -> OslResult<i32> {
         let run_dir = output_dir.join(&name);
         let metadata = backend.run(&circuit, &run_dir)?;
         results.push(VerifyRunResult {
+            index,
             name,
             netlist: circuit.display().to_string(),
             run_dir: run_dir.display().to_string(),
@@ -314,6 +319,17 @@ struct SweepDimension {
 struct RunCase {
     name: String,
     parameters: Vec<ParameterOverride>,
+}
+
+#[derive(Debug, Clone)]
+struct VerifyTask {
+    index: usize,
+    name: String,
+    netlist: String,
+    netlist_path: PathBuf,
+    run_dir: String,
+    parameters: Vec<ParameterOverride>,
+    checks: Vec<VerifyCheck>,
 }
 
 #[derive(Debug, Clone)]
@@ -571,6 +587,97 @@ fn validate_check(check: VerifyCheck) -> OslResult<VerifyCheck> {
     Ok(check)
 }
 
+fn run_verify_tasks(
+    tasks: Vec<VerifyTask>,
+    ngspice: &str,
+    jobs: usize,
+) -> OslResult<Vec<VerifyRunResult>> {
+    if tasks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if jobs == 1 || tasks.len() == 1 {
+        return tasks
+            .into_iter()
+            .map(|task| run_verify_task(task, ngspice))
+            .collect();
+    }
+
+    let worker_count = jobs.min(tasks.len());
+    let queue = Arc::new(Mutex::new(tasks.into_iter().rev().collect::<Vec<_>>()));
+    let results = Arc::new(Mutex::new(Vec::<VerifyRunResult>::new()));
+    let errors = Arc::new(Mutex::new(Vec::<String>::new()));
+    let mut handles = Vec::new();
+
+    for _ in 0..worker_count {
+        let queue = Arc::clone(&queue);
+        let results = Arc::clone(&results);
+        let errors = Arc::clone(&errors);
+        let ngspice = ngspice.to_string();
+        handles.push(thread::spawn(move || {
+            loop {
+                let task = {
+                    let mut queue = queue.lock().expect("verify task queue lock poisoned");
+                    queue.pop()
+                };
+                let Some(task) = task else {
+                    break;
+                };
+
+                match run_verify_task(task, &ngspice) {
+                    Ok(result) => {
+                        let mut results = results.lock().expect("verify result lock poisoned");
+                        results.push(result);
+                    }
+                    Err(error) => {
+                        let mut errors = errors.lock().expect("verify error lock poisoned");
+                        errors.push(error.to_string());
+                    }
+                }
+            }
+        }));
+    }
+
+    for handle in handles {
+        handle
+            .join()
+            .map_err(|_| OslError::Process("verify worker thread panicked".to_string()))?;
+    }
+
+    let errors = Arc::try_unwrap(errors)
+        .map_err(|_| OslError::Process("verify errors still shared".to_string()))?
+        .into_inner()
+        .map_err(|_| OslError::Process("verify error lock poisoned".to_string()))?;
+    if !errors.is_empty() {
+        return Err(OslError::Process(errors.join("; ")));
+    }
+
+    let mut results = Arc::try_unwrap(results)
+        .map_err(|_| OslError::Process("verify results still shared".to_string()))?
+        .into_inner()
+        .map_err(|_| OslError::Process("verify result lock poisoned".to_string()))?;
+    results.sort_by_key(|result| result.index);
+    Ok(results)
+}
+
+fn run_verify_task(task: VerifyTask, ngspice: &str) -> OslResult<VerifyRunResult> {
+    let backend = NgspiceCliBackend::new(ngspice);
+    let run_dir = PathBuf::from(&task.run_dir);
+    let metadata = backend.run_with_parameters(&task.netlist_path, &run_dir, &task.parameters)?;
+    let checks = evaluate_checks(&run_dir, &task.checks);
+    write_single_run_report(&run_dir, &metadata)?;
+
+    Ok(VerifyRunResult {
+        index: task.index,
+        name: task.name,
+        netlist: task.netlist,
+        run_dir: task.run_dir,
+        metadata,
+        parameters: task.parameters,
+        checks,
+    })
+}
+
 fn evaluate_checks(run_dir: &Path, checks: &[VerifyCheck]) -> Vec<CheckResult> {
     checks
         .iter()
@@ -665,6 +772,7 @@ fn evaluate_check(run_dir: &Path, check: &VerifyCheck) -> CheckResult {
 
 #[derive(Debug)]
 struct VerifyRunResult {
+    index: usize,
     name: String,
     netlist: String,
     run_dir: String,
@@ -938,6 +1046,21 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
         index += 1;
     }
     None
+}
+
+fn parse_jobs(value: &str) -> OslResult<usize> {
+    let jobs = value.parse::<usize>().map_err(|_| {
+        OslError::InvalidInput(format!(
+            "--jobs expects a positive integer, got '{}'",
+            value
+        ))
+    })?;
+    if jobs == 0 {
+        return Err(OslError::InvalidInput(
+            "--jobs expects a positive integer, got 0".to_string(),
+        ));
+    }
+    Ok(jobs)
 }
 
 fn strip_key<'a>(line: &'a str, key: &str) -> Option<&'a str> {

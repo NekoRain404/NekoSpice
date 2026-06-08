@@ -20,7 +20,7 @@ The current three-day build is a vertical slice:
 ```bash
 cargo run -p osl-cli -- --version
 cargo run -p osl-cli -- run examples/rc_filter/rc.cir --output runs/rc_001
-cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output reports/basic_001
+cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --output reports/basic_001
 cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 ```
 
@@ -42,7 +42,7 @@ runs:
         max: 0.50
 ```
 
-Each sweep dimension expands into a Cartesian product of ngspice runs. Parameters are injected as `.param` overrides in the working netlist and recorded in `run.json` and `verify.json`.
+Each sweep dimension expands into a Cartesian product of ngspice runs. `--jobs <n>` runs independent cases concurrently. Parameters are injected as `.param` overrides in the working netlist and recorded in `run.json` and `verify.json`; reports are sorted by the original expansion order.
 
 The ngspice runner automatically injects an ASCII raw export into the working netlist:
 
@@ -58,5 +58,5 @@ Checks can target any signal present in the raw variable table, such as `v(out)`
 ```bash
 cargo fmt --check
 cargo test --workspace
-cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output /tmp/nekospice_reports/basic
+cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/basic
 ```
