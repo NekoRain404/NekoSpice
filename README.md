@@ -12,7 +12,7 @@ The current three-day build is a vertical slice:
 - `osl model-check`: scan imported SPICE models for `.subckt`, `.model`, LTspice symbol pin mapping, dialect risks, and unsupported directives.
 - `osl import`: inspect SPICE/KiCad-style netlists, Rust-native KiCad schematics, and LTspice schematics, then generate an import compatibility report and runnable NekoSpice project.
 - `osl kicad-inspect`: parse KiCad `.kicad_sch`, `.kicad_sym`, and `sym-lib-table` assets through the Rust-native KiCad IR and emit a JSON summary or symbol-library index.
-- `osl kicad-export`: write KiCad-compatible `.kicad_sym` files back from the Rust-native symbol-library IR.
+- `osl kicad-export`: write KiCad-compatible `.kicad_sch` and `.kicad_sym` files back from the Rust-native KiCad IR.
 - `osl waveform`: query raw waveforms into viewport-sized min/max envelope JSON.
 - HTML and JSON reports for runs and verification batches.
 - Run artifacts include `waveform.raw`, `waveform.csv`, and `waveform-summary.json`.
@@ -41,6 +41,7 @@ cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --ou
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas --output reports/kicad_canvas_scene.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output reports/kicad_symbol_library.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --output reports/kicad_symbol_index.json
+cargo run -p osl-cli -- kicad-export examples/kicad_schematic/rc.kicad_sch --output reports/rc_roundtrip.kicad_sch
 cargo run -p osl-cli -- kicad-export examples/kicad_schematic/neko_spice.kicad_sym --output reports/neko_spice_roundtrip.kicad_sym
 cargo run -p osl-cli -- waveform runs/rc_001/waveform.raw --signal v(out) --from 8us --to 10us --points 200 --output reports/vout-envelope.json
 ```
@@ -108,10 +109,11 @@ cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index
+cargo run -p osl-cli -- kicad-export examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/rc_roundtrip.kicad_sch
 cargo run -p osl-cli -- kicad-export examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/neko_spice_roundtrip.kicad_sym
 ```
 
-`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, a symbol library index for later GUI library browsing and schematic symbol resolution, a schematic canvas scene with transformed symbol graphics, pins, wires, labels, junctions, and scene bounds, and `.kicad_sym` writer support for symbol-library roundtrips. The local KiCad source mirror is treated only as reference material and is ignored by Git.
+`osl-kicad` is the Rust-native KiCad-compatible foundation. It parses KiCad S-expression assets into schematic and symbol-library IR, covering schematic symbols, embedded library symbols, wires, labels, text/SPICE directives, junctions, symbol properties, pins, symbol graphics, symbol bounding boxes, symbol library tables, a symbol library index for later GUI library browsing and schematic symbol resolution, a schematic canvas scene with transformed symbol graphics, pins, wires, labels, junctions, and scene bounds, and `.kicad_sch` / `.kicad_sym` writer support for asset roundtrips. The local KiCad source mirror is treated only as reference material and is ignored by Git.
 
 ## Validation
 
@@ -132,6 +134,10 @@ cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --ou
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas --output /tmp/nekospice_import/kicad_canvas_scene.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/kicad_symbol_library.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/sym-lib-table --index --output /tmp/nekospice_import/kicad_symbol_index.json
+cargo run -p osl-cli -- kicad-export examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/rc_roundtrip.kicad_sch
+cargo run -p osl-cli -- kicad-inspect /tmp/nekospice_import/rc_roundtrip.kicad_sch --output /tmp/nekospice_import/rc_roundtrip.json
+cargo run -p osl-cli -- import /tmp/nekospice_import/rc_roundtrip.kicad_sch --output /tmp/nekospice_import/rc_roundtrip_import
+cargo run -p osl-cli -- verify /tmp/nekospice_import/rc_roundtrip_import/project/project.osl.yaml --output /tmp/nekospice_import/rc_roundtrip_verify
 cargo run -p osl-cli -- kicad-export examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/neko_spice_roundtrip.kicad_sym
 cargo run -p osl-cli -- kicad-inspect /tmp/nekospice_import/neko_spice_roundtrip.kicad_sym --output /tmp/nekospice_import/neko_spice_roundtrip.json
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output /tmp/nekospice_import/ltspice_rc

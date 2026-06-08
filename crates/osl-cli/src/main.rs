@@ -4,7 +4,7 @@ use osl_core::{
 };
 use osl_kicad::{
     read_kicad_schematic, read_kicad_symbol_library, read_kicad_symbol_library_index,
-    read_kicad_symbol_library_table, write_kicad_symbol_library,
+    read_kicad_symbol_library_table, write_kicad_schematic, write_kicad_symbol_library,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
@@ -76,7 +76,7 @@ Usage:
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
   osl kicad-inspect <file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
-  osl kicad-export <file.kicad_sym> --output <file.kicad_sym>
+  osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
   osl --version
@@ -384,9 +384,7 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
 fn kicad_export_command(args: &[String]) -> OslResult<i32> {
     let input = positional(args, 0, "missing KiCad path for 'osl kicad-export'")?;
     let output = flag_value(args, "--output").ok_or_else(|| {
-        OslError::InvalidInput(
-            "missing --output <file.kicad_sym> for 'osl kicad-export'".to_string(),
-        )
+        OslError::InvalidInput("missing --output <file> for 'osl kicad-export'".to_string())
     })?;
     let input_path = Path::new(input);
     let output_path = Path::new(&output);
@@ -397,13 +395,17 @@ fn kicad_export_command(args: &[String]) -> OslResult<i32> {
         .unwrap_or_default();
 
     match extension.as_str() {
+        "kicad_sch" => {
+            let schematic = read_kicad_schematic(input_path)?;
+            write_kicad_schematic(output_path, &schematic)?;
+        }
         "kicad_sym" => {
             let library = read_kicad_symbol_library(input_path)?;
             write_kicad_symbol_library(output_path, &library)?;
         }
         _ => {
             return Err(OslError::InvalidInput(format!(
-                "{} is not a supported KiCad export input (.kicad_sym)",
+                "{} is not a supported KiCad export input (.kicad_sch, .kicad_sym)",
                 input_path.display()
             )));
         }

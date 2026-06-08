@@ -28,6 +28,10 @@ pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
     parse_kicad_schematic(&content, &path.display().to_string())
 }
 
+pub fn write_kicad_schematic(path: &Path, schematic: &KicadSchematic) -> OslResult<()> {
+    write_text(path, &schematic.to_kicad_schematic_sexpr())
+}
+
 pub fn read_kicad_symbol_library(path: &Path) -> OslResult<KicadSymbolLibrary> {
     let content = read_text(path)?;
     parse_kicad_symbol_library(&content, &path.display().to_string())
@@ -175,6 +179,40 @@ impl KicadSchematic {
             .iter()
             .filter(|item| item.text.trim_start().starts_with('.'))
             .collect()
+    }
+
+    pub fn to_kicad_schematic_sexpr(&self) -> String {
+        let mut output = String::new();
+        output.push_str("(kicad_sch\n");
+        if let Some(version) = &self.version {
+            output.push_str(&format!("  (version {})\n", sexpr_atom_or_string(version)));
+        }
+        if let Some(generator) = &self.generator {
+            output.push_str(&format!("  (generator {})\n", sexpr_string(generator)));
+        }
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("  (uuid {})\n", sexpr_string(uuid)));
+        }
+        output.push_str("  (paper \"A4\")\n");
+        output.push_str("  (lib_symbols\n");
+        for symbol in &self.library_symbols {
+            symbol.write_symbol_sexpr(&mut output, 4);
+        }
+        output.push_str("  )\n");
+        for wire in &self.wires {
+            wire.write_wire_sexpr(&mut output, 2);
+        }
+        for label in &self.labels {
+            label.write_label_sexpr(&mut output, 2);
+        }
+        for text in &self.text_items {
+            text.write_text_sexpr(&mut output, 2);
+        }
+        for symbol in &self.symbols {
+            symbol.write_instance_sexpr(&mut output, 2);
+        }
+        output.push_str(")\n");
+        output
     }
 
     fn symbol_to_spice_line(
@@ -965,6 +1003,43 @@ impl KicadSymbolInstance {
     pub fn value(&self) -> Option<&str> {
         self.property("Value")
     }
+
+    fn write_instance_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(symbol\n", pad));
+        output.push_str(&format!(
+            "{}  (lib_id {})\n",
+            pad,
+            sexpr_string(&self.lib_id)
+        ));
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                "{}  (at {} {} {})\n",
+                pad,
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        if let Some(unit) = self.unit {
+            output.push_str(&format!("{}  (unit {})\n", pad, unit));
+        }
+        if let Some(uuid) = &self.uuid {
+            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
+        }
+        for property in &self.properties {
+            property.write_property_sexpr(output, indent + 2);
+        }
+        for pin in &self.pins {
+            output.push_str(&format!(
+                "{}  (pin {} (uuid {}))\n",
+                pad,
+                sexpr_string(pin),
+                sexpr_string(pin)
+            ));
+        }
+        output.push_str(&format!("{})\n", pad));
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1312,11 +1387,41 @@ pub struct KicadWire {
     pub points: Vec<KicadPoint>,
 }
 
+impl KicadWire {
+    fn write_wire_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(wire", pad));
+        write_points_sexpr(output, &self.points);
+        output.push_str(" (stroke (width 0) (type default)))\n");
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadLabel {
     pub text: String,
     pub kind: KicadLabelKind,
     pub at: Option<KicadAt>,
+}
+
+impl KicadLabel {
+    fn write_label_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!(
+            "{}({} {}",
+            pad,
+            self.kind.sexpr_name(),
+            sexpr_string(&self.text)
+        ));
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                " (at {} {} {})",
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        output.push_str(" (effects (font (size 1.27 1.27))))\n");
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1326,10 +1431,36 @@ pub enum KicadLabelKind {
     Hierarchical,
 }
 
+impl KicadLabelKind {
+    fn sexpr_name(self) -> &'static str {
+        match self {
+            Self::Local => "label",
+            Self::Global => "global_label",
+            Self::Hierarchical => "hierarchical_label",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadTextItem {
     pub text: String,
     pub at: Option<KicadAt>,
+}
+
+impl KicadTextItem {
+    fn write_text_sexpr(&self, output: &mut String, indent: usize) {
+        let pad = " ".repeat(indent);
+        output.push_str(&format!("{}(text {}", pad, sexpr_string(&self.text)));
+        if let Some(at) = self.at {
+            output.push_str(&format!(
+                " (at {} {} {})",
+                format_number(at.x),
+                format_number(at.y),
+                format_number(at.rotation)
+            ));
+        }
+        output.push_str(" (effects (font (size 1.27 1.27))))\n");
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1805,6 +1936,15 @@ fn sexpr_atom_or_string(value: &str) -> String {
     }
 }
 
+fn write_points_sexpr(output: &mut String, points: &[KicadPoint]) {
+    let points = points
+        .iter()
+        .map(|point| format!("(xy {} {})", format_number(point.x), format_number(point.y)))
+        .collect::<Vec<_>>()
+        .join(" ");
+    output.push_str(&format!(" (pts {})", points));
+}
+
 fn is_plain_sexpr_atom(value: &str) -> bool {
     !value.is_empty()
         && value
@@ -2139,6 +2279,41 @@ mod tests {
         assert_close(resistor.pins[0].end.x, 69.85);
         assert!(scene.to_summary_json().contains("\"graphic_count\": 6"));
         assert!(scene.to_summary_json().contains("\"pin_count\": 6"));
+    }
+
+    #[test]
+    fn roundtrips_kicad_schematic_fixture_through_writer() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(kicad_sch"));
+        assert!(exported.contains("(lib_symbols"));
+        assert!(exported.contains("(lib_id \"NekoSpice:R\")"));
+        let reparsed = parse_kicad_schematic(&exported, "roundtrip.kicad_sch").unwrap();
+
+        assert_eq!(reparsed.symbols.len(), 3);
+        assert_eq!(reparsed.library_symbols.len(), 3);
+        assert_eq!(reparsed.wires.len(), 3);
+        assert_eq!(reparsed.labels.len(), 3);
+        assert_eq!(reparsed.spice_directives()[0].text, ".tran 1u 1m");
+        assert_eq!(
+            reparsed
+                .library_symbols
+                .iter()
+                .map(|symbol| symbol.graphics.len())
+                .sum::<usize>(),
+            6
+        );
+        assert!(reparsed.canvas_scene().bounds.is_some());
+        let netlist = reparsed.to_spice_netlist().unwrap();
+        assert!(netlist.contains("R1 in out 1k"));
+        assert!(netlist.contains("C1 out 0 100n"));
     }
 
     #[test]
