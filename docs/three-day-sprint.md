@@ -35,6 +35,7 @@ cargo run -p osl-cli -- run examples/rc_filter/rc.cir --output runs/rc_001
 - checks 可以读取 raw 变量表中的任意信号，例如 `v(out)`、`i(v1)`。
 - 支持最小 sweep expansion，例如 `rload: [500, 1000, 2000]` 自动展开多次运行。
 - 支持 `--jobs <n>` 并发执行独立验证任务，并保持报告顺序稳定。
+- 报告支持失败摘要和 artifact drilldown：失败 check、参数组合、`run.json`、`waveform.raw`、`ngspice.log`、`input.cir`。
 - 输出 `verify.json` 和 `report.html`。
 - 失败时返回非零退出码。
 
@@ -66,7 +67,7 @@ cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 优先级从高到低：
 
 1. richer YAML parser：替换当前最小子集解析器。
-2. report failure drilldown：失败项跳转到具体 run 和波形。
+2. waveform summary in report：失败项附带小型波形摘要和关键采样点。
 3. binary raw parser：提升大型波形解析速度。
 4. model-check：`.subckt` pin list、方言检测、unsupported directive。
 5. waveform data layer：LOD、mmap、viewport query。

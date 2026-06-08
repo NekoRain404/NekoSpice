@@ -821,6 +821,22 @@ impl VerifyRunResult {
             RunStatus::Failed
         }
     }
+
+    fn run_dir_name(&self) -> String {
+        Path::new(&self.run_dir)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(&self.name)
+            .to_string()
+    }
+
+    fn artifact_href(&self, artifact: &str) -> String {
+        format!("runs/{}/{}", self.run_dir_name(), artifact)
+    }
+
+    fn failed_checks(&self) -> impl Iterator<Item = &CheckResult> {
+        self.checks.iter().filter(|check| !check.passed)
+    }
 }
 
 #[derive(Debug)]
@@ -835,6 +851,12 @@ struct CheckResult {
     max: Option<f64>,
     passed: bool,
     message: String,
+}
+
+impl CheckResult {
+    fn status_text(&self) -> &'static str {
+        if self.passed { "pass" } else { "fail" }
+    }
 }
 
 #[derive(Debug)]
@@ -855,7 +877,39 @@ impl VerifyReport {
         self.results.len() - self.passed_count()
     }
 
+    fn failure_count(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.failed_checks().count())
+            .sum()
+    }
+
     fn to_json(&self) -> String {
+        let failures = self
+            .results
+            .iter()
+            .flat_map(|result| {
+                result.failed_checks().map(|check| {
+                    format!(
+                        concat!(
+                            "    {{ \"run\": \"{}\", \"netlist\": \"{}\", \"run_dir\": \"{}\", ",
+                            "\"check\": \"{}\", \"signal\": \"{}\", \"value\": {}, ",
+                            "\"min\": {}, \"max\": {}, \"message\": \"{}\" }}"
+                        ),
+                        json_escape(&result.name),
+                        json_escape(&result.netlist),
+                        json_escape(&result.run_dir),
+                        json_escape(&check.name),
+                        json_escape(&check.signal),
+                        option_f64_json(check.value),
+                        option_f64_json(check.min),
+                        option_f64_json(check.max),
+                        json_escape(&check.message)
+                    )
+                })
+            })
+            .collect::<Vec<_>>()
+            .join(",\n");
         let runs = self
             .results
             .iter()
@@ -927,6 +981,10 @@ impl VerifyReport {
                 "  \"project\": \"{}\",\n",
                 "  \"passed\": {},\n",
                 "  \"failed\": {},\n",
+                "  \"failure_count\": {},\n",
+                "  \"failures\": [\n",
+                "{}\n",
+                "  ],\n",
                 "  \"runs\": [\n",
                 "{}\n",
                 "  ]\n",
@@ -935,26 +993,53 @@ impl VerifyReport {
             json_escape(&self.project),
             self.passed_count(),
             self.failed_count(),
+            self.failure_count(),
+            failures,
             runs
         )
     }
 
     fn to_html(&self) -> String {
+        let failure_rows = self
+            .results
+            .iter()
+            .flat_map(|result| {
+                result.failed_checks().map(|check| {
+                    format!(
+                        concat!(
+                            "<tr class=\"failed\"><td>{}</td><td>{}</td><td>{}</td>",
+                            "<td>{}</td><td><a href=\"{}\">run</a> <a href=\"{}\">waveform</a> <a href=\"{}\">log</a></td></tr>"
+                        ),
+                        html_escape(&result.name),
+                        html_escape(&parameters_text(&result.parameters)),
+                        html_escape(&check.name),
+                        html_escape(&check.message),
+                        html_escape(&result.artifact_href("report.html")),
+                        html_escape(&result.artifact_href("waveform.raw")),
+                        html_escape(&result.artifact_href("ngspice.log"))
+                    )
+                })
+            })
+            .collect::<String>();
+        let failure_section = if self.failure_count() == 0 {
+            "<section class=\"summary\"><strong>No failed checks.</strong></section>".to_string()
+        } else {
+            format!(
+                concat!(
+                    "<section><h2>Failures</h2>",
+                    "<table><thead><tr><th>Run</th><th>Parameters</th><th>Check</th><th>Message</th><th>Artifacts</th></tr></thead>",
+                    "<tbody>{}</tbody></table></section>"
+                ),
+                failure_rows
+            )
+        };
+
         let rows = self
             .results
             .iter()
             .map(|result| {
                 let status = result.status().as_str();
-                let parameters = if result.parameters.is_empty() {
-                    "none".to_string()
-                } else {
-                    result
-                        .parameters
-                        .iter()
-                        .map(|parameter| format!("{}={}", parameter.name, parameter.value))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                };
+                let parameters = parameters_text(&result.parameters);
                 let checks = if result.checks.is_empty() {
                     "no checks".to_string()
                 } else {
@@ -965,7 +1050,7 @@ impl VerifyReport {
                             format!(
                                 "{}: {} ({})",
                                 check.name,
-                                if check.passed { "pass" } else { "fail" },
+                                check.status_text(),
                                 check.message
                             )
                         })
@@ -975,7 +1060,7 @@ impl VerifyReport {
                 format!(
                     concat!(
                         "<tr class=\"{}\"><td>{}</td><td>{}</td><td>{}</td>",
-                        "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>"
+                        "<td>{}</td><td>{}</td><td><a href=\"{}\">report</a> <a href=\"{}\">run.json</a> <a href=\"{}\">waveform.raw</a> <a href=\"{}\">ngspice.log</a> <a href=\"{}\">input.cir</a></td><td>{}</td></tr>"
                     ),
                     status,
                     html_escape(status),
@@ -983,7 +1068,11 @@ impl VerifyReport {
                     html_escape(&result.netlist),
                     html_escape(&parameters),
                     result.metadata.duration_ms,
-                    html_escape(&result.run_dir),
+                    html_escape(&result.artifact_href("report.html")),
+                    html_escape(&result.artifact_href("run.json")),
+                    html_escape(&result.artifact_href("waveform.raw")),
+                    html_escape(&result.artifact_href("ngspice.log")),
+                    html_escape(&result.artifact_href("input.cir")),
                     html_escape(&checks)
                 )
             })
@@ -994,8 +1083,10 @@ impl VerifyReport {
                 "<!doctype html><html><head><meta charset=\"utf-8\">",
                 "<title>NekoSpice Verification Report</title>{}</head><body>",
                 "<main><h1>{}</h1>",
-                "<section class=\"summary\"><strong>{}</strong> passed, <strong>{}</strong> failed</section>",
-                "<table><thead><tr><th>Status</th><th>Run</th><th>Netlist</th><th>Parameters</th><th>ms</th><th>Output</th><th>Checks</th></tr></thead>",
+                "<section class=\"summary\"><strong>{}</strong> passed, <strong>{}</strong> failed, <strong>{}</strong> failed checks</section>",
+                "{}",
+                "<h2>Runs</h2>",
+                "<table><thead><tr><th>Status</th><th>Run</th><th>Netlist</th><th>Parameters</th><th>ms</th><th>Artifacts</th><th>Checks</th></tr></thead>",
                 "<tbody>{}</tbody></table>",
                 "</main></body></html>\n"
             ),
@@ -1003,6 +1094,8 @@ impl VerifyReport {
             html_escape(&self.project),
             self.passed_count(),
             self.failed_count(),
+            self.failure_count(),
+            failure_section,
             rows
         )
     }
@@ -1189,6 +1282,18 @@ fn window_text(from: Option<f64>, to: Option<f64>) -> String {
         (Some(from), None) => format!("{}..", from),
         (None, Some(to)) => format!("..{}", to),
         (None, None) => "all".to_string(),
+    }
+}
+
+fn parameters_text(parameters: &[ParameterOverride]) -> String {
+    if parameters.is_empty() {
+        "none".to_string()
+    } else {
+        parameters
+            .iter()
+            .map(|parameter| format!("{}={}", parameter.name, parameter.value))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 

@@ -8,6 +8,7 @@ The current three-day build is a vertical slice:
 - `osl verify`: run a small YAML verification plan.
 - `osl bench`: run every `.cir` under a directory and collect timings.
 - HTML and JSON reports for runs and verification batches.
+- Failure drilldown with failed checks, parameters, logs, netlists, and waveform artifacts.
 - Measurement checks over ngspice ASCII `waveform.raw`: `final_value`, `avg`, `min`, `max`, `pp`, `rms`.
 
 ## Requirements
@@ -61,4 +62,5 @@ Checks can target any signal present in the raw variable table, such as `v(out)`
 cargo fmt --check
 cargo test --workspace
 cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/basic
+bash -lc 'cargo run -p osl-cli -- verify examples/failing_validation.osl.yaml --output /tmp/nekospice_reports/failing; test $? -eq 2'
 ```
