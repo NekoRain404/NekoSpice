@@ -1,5 +1,5 @@
 use osl_core::{OslError, OslResult, html_escape, json_escape, read_text};
-use osl_kicad::parse_kicad_schematic;
+use osl_kicad::read_kicad_schematic_with_libraries;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
@@ -14,9 +14,19 @@ pub struct ImportInput {
 
 pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
     let path = resolve_import_source_path(path)?;
-    let content = read_text(&path)?;
     let source = path.display().to_string();
-    if is_ltspice_schematic(&path) {
+    if is_kicad_schematic(&path) {
+        let schematic = read_kicad_schematic_with_libraries(&path)?;
+        let netlist = schematic.to_spice_netlist()?;
+        let mut report = parse_netlist(&netlist, &source)?;
+        report.flavor = NetlistFlavor::KiCad;
+        Ok(ImportInput {
+            source_netlist: netlist,
+            source_path: path,
+            report,
+        })
+    } else if is_ltspice_schematic(&path) {
+        let content = read_text(&path)?;
         let imported = import_ltspice_asc(
             &content,
             &source,
@@ -30,17 +40,8 @@ pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
             source_path: path,
             report,
         })
-    } else if is_kicad_schematic(&path) {
-        let schematic = parse_kicad_schematic(&content, &source)?;
-        let netlist = schematic.to_spice_netlist()?;
-        let mut report = parse_netlist(&netlist, &source)?;
-        report.flavor = NetlistFlavor::KiCad;
-        Ok(ImportInput {
-            source_netlist: netlist,
-            source_path: path,
-            report,
-        })
     } else {
+        let content = read_text(&path)?;
         let report = parse_netlist(&content, &source)?;
         Ok(ImportInput {
             source_netlist: content,
@@ -52,10 +53,10 @@ pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
 
 fn resolve_import_source_path(path: &Path) -> OslResult<PathBuf> {
     if path.is_dir() {
-        return discover_kicad_project_netlist(path);
+        return discover_kicad_project_source(path);
     }
     if is_kicad_project_file(path) {
-        return discover_kicad_project_netlist(path.parent().unwrap_or_else(|| Path::new(".")));
+        return discover_kicad_project_source(path.parent().unwrap_or_else(|| Path::new(".")));
     }
     Ok(path.to_path_buf())
 }
@@ -64,6 +65,27 @@ fn is_kicad_project_file(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("kicad_pro"))
+}
+
+fn discover_kicad_project_source(project_dir: &Path) -> OslResult<PathBuf> {
+    discover_kicad_project_schematic(project_dir)
+        .or_else(|_| discover_kicad_project_netlist(project_dir))
+}
+
+fn discover_kicad_project_schematic(project_dir: &Path) -> OslResult<PathBuf> {
+    let mut candidates = Vec::new();
+    collect_kicad_schematic_candidates(project_dir, project_dir, &mut candidates)?;
+    candidates.sort_by(|left, right| {
+        kicad_schematic_candidate_score(project_dir, right)
+            .cmp(&kicad_schematic_candidate_score(project_dir, left))
+            .then_with(|| left.display().to_string().cmp(&right.display().to_string()))
+    });
+    candidates.into_iter().next().ok_or_else(|| {
+        OslError::InvalidInput(format!(
+            "{} does not contain an importable KiCad schematic (.kicad_sch)",
+            project_dir.display()
+        ))
+    })
 }
 
 fn discover_kicad_project_netlist(project_dir: &Path) -> OslResult<PathBuf> {
@@ -80,6 +102,35 @@ fn discover_kicad_project_netlist(project_dir: &Path) -> OslResult<PathBuf> {
             project_dir.display()
         ))
     })
+}
+
+fn collect_kicad_schematic_candidates(
+    root: &Path,
+    dir: &Path,
+    candidates: &mut Vec<PathBuf>,
+) -> OslResult<()> {
+    let entries =
+        fs::read_dir(dir).map_err(|err| OslError::io(format!("read {}", dir.display()), err))?;
+    for entry in entries {
+        let entry = entry.map_err(|err| OslError::io(format!("read {}", dir.display()), err))?;
+        let path = entry.path();
+        if path.is_dir() {
+            if path.file_name().and_then(|name| name.to_str()) == Some("project") {
+                continue;
+            }
+            if path
+                .strip_prefix(root)
+                .ok()
+                .is_some_and(|relative| relative.components().count() > 3)
+            {
+                continue;
+            }
+            collect_kicad_schematic_candidates(root, &path, candidates)?;
+        } else if is_kicad_schematic(&path) {
+            candidates.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn collect_kicad_netlist_candidates(
@@ -140,6 +191,40 @@ fn kicad_candidate_score(path: &Path) -> usize {
         let lowered = content.to_ascii_lowercase();
         if lowered.contains("kicad") || lowered.contains("eeschema") {
             score += 50;
+        }
+        if lowered.contains(".tran")
+            || lowered.contains(".op")
+            || lowered.contains(".ac")
+            || lowered.contains(".dc")
+        {
+            score += 10;
+        }
+    }
+    score
+}
+
+fn kicad_schematic_candidate_score(project_dir: &Path, path: &Path) -> usize {
+    let project_name = project_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let mut score = 0;
+    if !project_name.is_empty() && stem == project_name {
+        score += 50;
+    }
+    if let Ok(content) = read_text(path) {
+        let lowered = content.to_ascii_lowercase();
+        if lowered.contains("(kicad_sch") {
+            score += 50;
+        }
+        if lowered.contains("(symbol") {
+            score += 10;
         }
         if lowered.contains(".tran")
             || lowered.contains(".op")
@@ -2223,6 +2308,7 @@ mod tests {
         ComponentKind, ImportSeverity, NetlistFlavor, NormalizedDependency, import_ltspice_asc,
         parse_netlist, read_import_input,
     };
+    use std::fs;
     use std::path::Path;
 
     #[test]
@@ -2378,6 +2464,91 @@ XU1 in out vcc vee GOODAMP
                 .source_netlist
                 .contains(".include \"models/ideal_diode.lib\"")
         );
+    }
+
+    #[test]
+    fn imports_kicad_project_schematic_with_external_symbol_library() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let project_dir = std::env::temp_dir().join(format!(
+            "nekospice_kicad_project_schematic_import_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project_dir);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::copy(
+            workspace_root.join("examples/kicad_schematic/neko_spice.kicad_sym"),
+            project_dir.join("neko_spice.kicad_sym"),
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("sym-lib-table"),
+            r#"(sym_lib_table
+  (version 7)
+  (lib (name "NekoSpice")(type "KiCad")(uri "${KIPRJMOD}/neko_spice.kicad_sym")(options "")(descr ""))
+)"#,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("project.kicad_pro"),
+            r#"{"meta":{"filename":"project.kicad_pro","version":1},"project":{"name":"project"}}"#,
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("project.kicad_sch"),
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (wire (pts (xy 50.8 50.8) (xy 67.31 50.8)))
+  (wire (pts (xy 72.39 50.8) (xy 88.9 50.8)))
+  (wire (pts (xy 88.9 55.88) (xy 50.8 55.88)))
+  (label "in" (at 50.8 50.8 0))
+  (label "out" (at 88.9 50.8 0))
+  (label "0" (at 69.85 55.88 0))
+  (text ".tran 1u 1m" (at 45.72 38.1 0))
+  (symbol
+    (lib_id "NekoSpice:V")
+    (at 50.8 53.34 0)
+    (property "Reference" "V1" (at 48.26 57.15 0))
+    (property "Value" "PULSE(0 1 0 1u 1u 10u 20u)" (at 45.72 60.96 0))
+  )
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 69.85 50.8 0)
+    (property "Reference" "R1" (at 69.85 48.26 0))
+    (property "Value" "1k" (at 69.85 53.34 0))
+  )
+  (symbol
+    (lib_id "NekoSpice:C")
+    (at 88.9 53.34 0)
+    (property "Reference" "C1" (at 91.44 55.88 0))
+    (property "Value" "100n" (at 91.44 58.42 0))
+  )
+)"#,
+        )
+        .unwrap();
+
+        let from_dir = read_import_input(&project_dir).unwrap();
+        let from_project_file = read_import_input(&project_dir.join("project.kicad_pro")).unwrap();
+
+        assert_eq!(from_dir.source_path, project_dir.join("project.kicad_sch"));
+        assert_eq!(
+            from_project_file.source_path,
+            project_dir.join("project.kicad_sch")
+        );
+        assert_eq!(from_dir.report.flavor, NetlistFlavor::KiCad);
+        assert_eq!(from_dir.report.error_count(), 0);
+        assert!(from_dir.source_netlist.contains("V1 in 0 PULSE"));
+        assert!(from_dir.source_netlist.contains("R1 in out 1k"));
+        assert!(from_dir.source_netlist.contains("C1 out 0 100n"));
+        assert!(from_dir.source_netlist.contains(".tran 1u 1m"));
+        assert_eq!(from_project_file.source_netlist, from_dir.source_netlist);
+
+        let _ = fs::remove_dir_all(project_dir);
     }
 
     #[test]

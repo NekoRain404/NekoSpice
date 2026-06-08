@@ -3,9 +3,10 @@ use osl_core::{
     json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_kicad::{
-    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSymbolDef, read_kicad_schematic,
-    read_kicad_symbol_library, read_kicad_symbol_library_index, read_kicad_symbol_library_table,
-    write_kicad_schematic, write_kicad_symbol_library,
+    KicadAt, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSymbolDef,
+    read_kicad_schematic_with_libraries, read_kicad_symbol_library,
+    read_kicad_symbol_library_index, read_kicad_symbol_library_table, write_kicad_schematic,
+    write_kicad_symbol_library,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
@@ -363,10 +364,10 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
         extension.as_str(),
         path.file_name().and_then(|name| name.to_str()),
     ) {
-        ("kicad_sch", _) if should_emit_canvas => {
-            read_kicad_schematic(path)?.canvas_scene().to_summary_json()
-        }
-        ("kicad_sch", _) => read_kicad_schematic(path)?.to_summary_json(),
+        ("kicad_sch", _) if should_emit_canvas => read_kicad_schematic_with_libraries(path)?
+            .canvas_scene()
+            .to_summary_json(),
+        ("kicad_sch", _) => read_kicad_schematic_with_libraries(path)?.to_summary_json(),
         ("kicad_sym", _) => read_kicad_symbol_library(path)?.to_summary_json(),
         (_, Some("sym-lib-table")) if should_index => {
             read_kicad_symbol_library_index(path)?.to_summary_json()
@@ -405,7 +406,7 @@ fn kicad_check_command(args: &[String]) -> OslResult<i32> {
         )));
     }
 
-    let report = read_kicad_schematic(input_path)?.check_report();
+    let report = read_kicad_schematic_with_libraries(input_path)?.check_report();
     let json = report.to_json();
     if let Some(output) = output {
         write_text(Path::new(&output), &json)?;
@@ -438,7 +439,7 @@ fn kicad_export_command(args: &[String]) -> OslResult<i32> {
 
     match extension.as_str() {
         "kicad_sch" => {
-            let schematic = read_kicad_schematic(input_path)?;
+            let schematic = read_kicad_schematic_with_libraries(input_path)?;
             write_kicad_schematic(output_path, &schematic)?;
         }
         "kicad_sym" => {
@@ -475,7 +476,7 @@ fn kicad_edit_command(args: &[String]) -> OslResult<i32> {
         )));
     }
 
-    let mut schematic = read_kicad_schematic(input_path)?;
+    let mut schematic = read_kicad_schematic_with_libraries(input_path)?;
     let mut symbol_definitions = schematic.library_symbols.clone();
     for library_path in flag_values(args, "--library") {
         let library = read_kicad_symbol_library(Path::new(&library_path))?;
@@ -520,7 +521,7 @@ fn kicad_render_command(args: &[String]) -> OslResult<i32> {
         )));
     }
 
-    let schematic = read_kicad_schematic(input_path)?;
+    let schematic = read_kicad_schematic_with_libraries(input_path)?;
     let svg = render_kicad_scene_svg(&schematic.canvas_scene());
     write_text(Path::new(&output), &svg)?;
     println!("kicad-render -> {output}");

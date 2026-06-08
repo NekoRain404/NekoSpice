@@ -28,6 +28,14 @@ pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
     parse_kicad_schematic(&content, &path.display().to_string())
 }
 
+pub fn read_kicad_schematic_with_libraries(path: &Path) -> OslResult<KicadSchematic> {
+    let mut schematic = read_kicad_schematic(path)?;
+    if let Some(project_dir) = path.parent() {
+        schematic.resolve_project_symbol_libraries(project_dir)?;
+    }
+    Ok(schematic)
+}
+
 pub fn write_kicad_schematic(path: &Path, schematic: &KicadSchematic) -> OslResult<()> {
     write_text(path, &schematic.to_kicad_schematic_sexpr())
 }
@@ -841,6 +849,90 @@ impl KicadSchematic {
         self.library_symbols
             .iter()
             .find(|symbol| symbol.name == lib_id)
+    }
+
+    pub fn resolve_project_symbol_libraries(
+        &mut self,
+        project_dir: &Path,
+    ) -> OslResult<Vec<KicadLibraryDiagnostic>> {
+        let table_path = project_dir.join("sym-lib-table");
+        if !table_path.exists() {
+            return Ok(Vec::new());
+        }
+        self.resolve_missing_symbol_definitions_from_table(&table_path)
+    }
+
+    pub fn resolve_missing_symbol_definitions_from_table(
+        &mut self,
+        table_path: &Path,
+    ) -> OslResult<Vec<KicadLibraryDiagnostic>> {
+        let table = read_kicad_symbol_library_table(table_path)?;
+        let base_dir = table_path.parent().unwrap_or_else(|| Path::new("."));
+        let mut diagnostics = Vec::new();
+        let mut missing = self.missing_symbol_lib_ids();
+
+        for row in table.libraries {
+            if missing.is_empty() {
+                break;
+            }
+            if row.disabled {
+                diagnostics.push(KicadLibraryDiagnostic {
+                    library: row.name.clone(),
+                    severity: KicadDiagnosticSeverity::Info,
+                    message: "library row is disabled".to_string(),
+                });
+                continue;
+            }
+            if !row.library_type.eq_ignore_ascii_case("KiCad") {
+                diagnostics.push(KicadLibraryDiagnostic {
+                    library: row.name.clone(),
+                    severity: KicadDiagnosticSeverity::Warning,
+                    message: format!("unsupported symbol library type '{}'", row.library_type),
+                });
+                continue;
+            }
+
+            let resolved_path = resolve_kicad_uri(&row.uri, base_dir);
+            match read_kicad_symbol_library(&resolved_path) {
+                Ok(library) => {
+                    let mut resolved = Vec::new();
+                    for lib_id in &missing {
+                        if let Some(definition) =
+                            library_symbol_definition_for_lib_id(&library, &row.name, lib_id)
+                        {
+                            self.merge_library_symbol(definition);
+                            resolved.push(lib_id.clone());
+                        }
+                    }
+                    for lib_id in resolved {
+                        missing.remove(&lib_id);
+                    }
+                }
+                Err(error) => diagnostics.push(KicadLibraryDiagnostic {
+                    library: row.name,
+                    severity: KicadDiagnosticSeverity::Error,
+                    message: format!("failed to load {}: {}", resolved_path.display(), error),
+                }),
+            }
+        }
+
+        Ok(diagnostics)
+    }
+
+    fn missing_symbol_lib_ids(&self) -> BTreeSet<String> {
+        self.symbols
+            .iter()
+            .map(|symbol| symbol.lib_id.clone())
+            .filter(|lib_id| self.symbol_definition(lib_id).is_none())
+            .collect()
+    }
+
+    fn merge_library_symbol(&mut self, definition: KicadSymbolDef) -> bool {
+        if self.symbol_definition(&definition.name).is_some() {
+            return false;
+        }
+        self.library_symbols.push(definition);
+        true
     }
 
     fn check_duplicate_references(&self, diagnostics: &mut Vec<KicadSchematicDiagnostic>) {
@@ -3205,6 +3297,31 @@ fn kicad_schematic_diagnostic(
     }
 }
 
+fn library_symbol_definition_for_lib_id(
+    library: &KicadSymbolLibrary,
+    library_name: &str,
+    lib_id: &str,
+) -> Option<KicadSymbolDef> {
+    if let Some(symbol) = library.symbol(lib_id) {
+        return Some(symbol.clone());
+    }
+
+    let (requested_library, requested_name) = lib_id.split_once(':')?;
+    if requested_library != library_name {
+        return None;
+    }
+
+    library
+        .symbols
+        .iter()
+        .find(|symbol| symbol.name == requested_name || symbol.local_name() == requested_name)
+        .cloned()
+        .map(|mut symbol| {
+            symbol.name = lib_id.to_string();
+            symbol
+        })
+}
+
 fn spice_primitive_for_device(device: &str) -> Option<String> {
     let device = device.to_ascii_uppercase();
     let primitive = match device.as_str() {
@@ -3548,6 +3665,7 @@ mod tests {
         read_kicad_schematic, read_kicad_symbol_library, read_kicad_symbol_library_index,
         read_kicad_symbol_library_table,
     };
+    use std::fs;
     use std::path::Path;
 
     #[test]
@@ -3866,6 +3984,79 @@ mod tests {
                 .iter()
                 .any(|diagnostic| diagnostic.code == "invalid-sim-pin")
         );
+    }
+
+    #[test]
+    fn resolves_missing_symbols_from_project_library_table() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let project_dir = std::env::temp_dir().join(format!(
+            "nekospice_kicad_library_resolution_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project_dir);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::copy(
+            workspace_root.join("examples/kicad_schematic/neko_spice.kicad_sym"),
+            project_dir.join("neko_spice.kicad_sym"),
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("sym-lib-table"),
+            r#"(sym_lib_table
+  (version 7)
+  (lib (name "NekoSpice")(type "KiCad")(uri "${KIPRJMOD}/neko_spice.kicad_sym")(options "")(descr ""))
+)"#,
+        )
+        .unwrap();
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (wire (pts (xy 10 10) (xy 7 10)))
+  (wire (pts (xy 15.08 10) (xy 18 10)))
+  (label "in" (at 7 10 0))
+  (label "0" (at 18 10 0))
+  (text ".op" (at 5 5 0))
+  (symbol
+    (lib_id "NekoSpice:R")
+    (at 12.54 10 0)
+    (property "Reference" "R1" (at 12.54 8 0))
+    (property "Value" "1k" (at 12.54 12 0))
+  )
+)"#,
+            "library_resolution.kicad_sch",
+        )
+        .unwrap();
+
+        assert!(
+            schematic
+                .check_report()
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "missing-symbol-definition")
+        );
+        let diagnostics = schematic
+            .resolve_project_symbol_libraries(&project_dir)
+            .unwrap();
+        let netlist = schematic.to_spice_netlist().unwrap();
+
+        assert_eq!(diagnostics.len(), 0);
+        assert_eq!(schematic.library_symbols.len(), 1);
+        assert!(netlist.contains("R1 in 0 1k"));
+        assert!(
+            !schematic
+                .check_report()
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "missing-symbol-definition")
+        );
+
+        let _ = fs::remove_dir_all(project_dir);
     }
 
     #[test]
