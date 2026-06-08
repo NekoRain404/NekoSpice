@@ -1,4 +1,4 @@
-use osl_core::{OslError, OslResult, read_text};
+use osl_core::{OslError, OslResult, json_escape, read_text};
 use std::fs;
 use std::path::Path;
 use std::str;
@@ -91,6 +91,112 @@ impl Waveform {
         }
 
         Ok(selected)
+    }
+
+    pub fn to_csv(&self) -> OslResult<String> {
+        self.validate_column_lengths()?;
+
+        let mut output = String::new();
+        output.push_str(
+            &self
+                .variables
+                .iter()
+                .map(|variable| csv_escape(&variable.name))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        output.push('\n');
+
+        for point_index in 0..self.point_count() {
+            let row = self
+                .columns
+                .iter()
+                .map(|column| format_f64_csv(column[point_index]))
+                .collect::<Vec<_>>()
+                .join(",");
+            output.push_str(&row);
+            output.push('\n');
+        }
+
+        Ok(output)
+    }
+
+    pub fn to_summary_json(&self) -> OslResult<String> {
+        self.validate_column_lengths()?;
+
+        let variables = self
+            .variables
+            .iter()
+            .zip(self.columns.iter())
+            .map(|(variable, values)| {
+                let summary = WaveformSummary::summarize(values)?;
+                Ok(format!(
+                    concat!(
+                        "    {{ \"index\": {}, \"name\": \"{}\", \"unit\": \"{}\", ",
+                        "\"samples\": {}, \"first\": {}, \"last\": {}, \"min\": {}, ",
+                        "\"max\": {}, \"avg\": {}, \"pp\": {}, \"rms\": {} }}"
+                    ),
+                    variable.index,
+                    json_escape(&variable.name),
+                    json_escape(&variable.unit),
+                    summary.samples,
+                    f64_json(summary.first),
+                    f64_json(summary.last),
+                    f64_json(summary.min),
+                    f64_json(summary.max),
+                    f64_json(summary.avg),
+                    f64_json(summary.peak_to_peak),
+                    f64_json(summary.rms)
+                ))
+            })
+            .collect::<OslResult<Vec<_>>>()?
+            .join(",\n");
+
+        Ok(format!(
+            concat!(
+                "{{\n",
+                "  \"schema_version\": 1,\n",
+                "  \"title\": \"{}\",\n",
+                "  \"plot_name\": \"{}\",\n",
+                "  \"point_count\": {},\n",
+                "  \"variable_count\": {},\n",
+                "  \"variables\": [\n",
+                "{}\n",
+                "  ]\n",
+                "}}\n"
+            ),
+            json_escape(&self.title),
+            json_escape(&self.plot_name),
+            self.point_count(),
+            self.variables.len(),
+            variables
+        ))
+    }
+
+    fn validate_column_lengths(&self) -> OslResult<()> {
+        if self.variables.len() != self.columns.len() {
+            return Err(OslError::InvalidInput(format!(
+                "waveform has {} variables but {} value columns",
+                self.variables.len(),
+                self.columns.len()
+            )));
+        }
+
+        let Some((first, rest)) = self.columns.split_first() else {
+            return Ok(());
+        };
+        let expected = first.len();
+        for (index, column) in rest.iter().enumerate() {
+            if column.len() != expected {
+                return Err(OslError::InvalidInput(format!(
+                    "waveform column {} has {} points but expected {}",
+                    index + 1,
+                    column.len(),
+                    expected
+                )));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -598,6 +704,34 @@ fn normalize_signal(input: &str) -> String {
     input.trim().to_ascii_lowercase()
 }
 
+fn csv_escape(input: &str) -> String {
+    if input.contains(',') || input.contains('"') || input.contains('\n') || input.contains('\r') {
+        format!("\"{}\"", input.replace('"', "\"\""))
+    } else {
+        input.to_string()
+    }
+}
+
+fn format_f64_csv(value: f64) -> String {
+    if value.is_finite() {
+        value.to_string()
+    } else if value.is_nan() {
+        "NaN".to_string()
+    } else if value.is_sign_positive() {
+        "Infinity".to_string()
+    } else {
+        "-Infinity".to_string()
+    }
+}
+
+fn f64_json(value: f64) -> String {
+    if value.is_finite() {
+        value.to_string()
+    } else {
+        "null".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -653,6 +787,14 @@ Values:
         assert_eq!(summary.min, 2.0);
         assert_eq!(summary.max, 4.0);
         assert_eq!(summary.peak_to_peak, 2.0);
+
+        let csv = waveform.to_csv().unwrap();
+        assert_eq!(csv, "time,v(in),v(out)\n0,1,2\n0.000001,3,4\n");
+
+        let summary_json = waveform.to_summary_json().unwrap();
+        assert!(summary_json.contains("\"point_count\": 2"));
+        assert!(summary_json.contains("\"name\": \"v(out)\""));
+        assert!(summary_json.contains("\"pp\": 2"));
     }
 
     #[test]

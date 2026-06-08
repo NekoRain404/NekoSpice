@@ -1,6 +1,6 @@
 use osl_core::{
-    OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape, json_escape,
-    make_run_id, parameters_json, read_text, write_text,
+    Artifact, OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape,
+    json_escape, make_run_id, parameters_json, read_text, write_text,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::ImportReport;
@@ -82,8 +82,9 @@ fn run_command(args: &[String]) -> OslResult<i32> {
         .unwrap_or_else(|| default_run_dir(input));
 
     let backend = NgspiceCliBackend::new(ngspice);
-    let metadata = backend.run(Path::new(input), &output_dir)?;
-    write_single_run_report(&output_dir, &metadata)?;
+    let mut metadata = backend.run(Path::new(input), &output_dir)?;
+    let metadata_output_dir = PathBuf::from(&metadata.output_dir);
+    finalize_run_output(&metadata_output_dir, &mut metadata)?;
 
     println!(
         "{} {} in {} ms -> {}",
@@ -178,7 +179,9 @@ fn bench_command(args: &[String]) -> OslResult<i32> {
             .map(sanitize_name)
             .unwrap_or_else(|| "circuit".to_string());
         let run_dir = output_dir.join(&name);
-        let metadata = backend.run(&circuit, &run_dir)?;
+        let mut metadata = backend.run(&circuit, &run_dir)?;
+        let metadata_output_dir = PathBuf::from(&metadata.output_dir);
+        finalize_run_output(&metadata_output_dir, &mut metadata)?;
         results.push(VerifyRunResult {
             index,
             name,
@@ -760,9 +763,11 @@ fn run_verify_tasks(
 fn run_verify_task(task: VerifyTask, ngspice: &str) -> OslResult<VerifyRunResult> {
     let backend = NgspiceCliBackend::new(ngspice);
     let run_dir = PathBuf::from(&task.run_dir);
-    let metadata = backend.run_with_parameters(&task.netlist_path, &run_dir, &task.parameters)?;
+    let mut metadata =
+        backend.run_with_parameters(&task.netlist_path, &run_dir, &task.parameters)?;
+    let metadata_output_dir = PathBuf::from(&metadata.output_dir);
+    finalize_run_output(&metadata_output_dir, &mut metadata)?;
     let checks = evaluate_checks(&run_dir, &task.checks);
-    write_single_run_report(&run_dir, &metadata)?;
 
     Ok(VerifyRunResult {
         index: task.index,
@@ -1111,7 +1116,7 @@ impl VerifyReport {
                     format!(
                         concat!(
                             "<tr class=\"failed\"><td>{}</td><td>{}</td><td>{}</td>",
-                            "<td>{}</td><td>{}</td><td><a href=\"{}\">run</a> <a href=\"{}\">waveform</a> <a href=\"{}\">log</a></td></tr>"
+                            "<td>{}</td><td>{}</td><td><a href=\"{}\">run</a> <a href=\"{}\">raw</a> <a href=\"{}\">csv</a> <a href=\"{}\">summary</a> <a href=\"{}\">log</a></td></tr>"
                         ),
                         html_escape(&result.name),
                         html_escape(&parameters_text(&result.parameters)),
@@ -1120,6 +1125,8 @@ impl VerifyReport {
                         html_escape(&summary_text(check.summary)),
                         html_escape(&result.artifact_href("report.html")),
                         html_escape(&result.artifact_href("waveform.raw")),
+                        html_escape(&result.artifact_href("waveform.csv")),
+                        html_escape(&result.artifact_href("waveform-summary.json")),
                         html_escape(&result.artifact_href("ngspice.log"))
                     )
                 })
@@ -1165,7 +1172,7 @@ impl VerifyReport {
                 format!(
                     concat!(
                         "<tr class=\"{}\"><td>{}</td><td>{}</td><td>{}</td>",
-                        "<td>{}</td><td>{}</td><td><a href=\"{}\">report</a> <a href=\"{}\">run.json</a> <a href=\"{}\">waveform.raw</a> <a href=\"{}\">ngspice.log</a> <a href=\"{}\">input.cir</a></td><td>{}</td></tr>"
+                        "<td>{}</td><td>{}</td><td><a href=\"{}\">report</a> <a href=\"{}\">run.json</a> <a href=\"{}\">raw</a> <a href=\"{}\">csv</a> <a href=\"{}\">summary</a> <a href=\"{}\">ngspice.log</a> <a href=\"{}\">input.cir</a></td><td>{}</td></tr>"
                     ),
                     status,
                     html_escape(status),
@@ -1176,6 +1183,8 @@ impl VerifyReport {
                     html_escape(&result.artifact_href("report.html")),
                     html_escape(&result.artifact_href("run.json")),
                     html_escape(&result.artifact_href("waveform.raw")),
+                    html_escape(&result.artifact_href("waveform.csv")),
+                    html_escape(&result.artifact_href("waveform-summary.json")),
                     html_escape(&result.artifact_href("ngspice.log")),
                     html_escape(&result.artifact_href("input.cir")),
                     html_escape(&checks)
@@ -1212,7 +1221,8 @@ fn write_single_run_report(output_dir: &Path, metadata: &RunMetadata) -> OslResu
         .iter()
         .map(|artifact| {
             format!(
-                "<li><code>{}</code> <span>{}</span></li>",
+                "<li><a href=\"{}\"><code>{}</code></a> <span>{}</span></li>",
+                html_escape(&artifact.path),
                 html_escape(&artifact.path),
                 html_escape(&artifact.kind)
             )
@@ -1238,6 +1248,80 @@ fn write_single_run_report(output_dir: &Path, metadata: &RunMetadata) -> OslResu
         artifact_items
     );
     write_text(&output_dir.join("report.html"), &html)
+}
+
+fn finalize_run_output(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
+    if metadata.status == RunStatus::Passed {
+        export_waveform_artifacts(output_dir)?;
+    }
+    refresh_artifacts(output_dir, metadata)?;
+    write_single_run_report(output_dir, metadata)?;
+    refresh_artifacts(output_dir, metadata)?;
+    write_text(&output_dir.join("run.json"), &metadata.to_json())
+}
+
+fn export_waveform_artifacts(output_dir: &Path) -> OslResult<()> {
+    let raw_path = output_dir.join("waveform.raw");
+    if !raw_path.is_file() {
+        return Ok(());
+    }
+
+    let waveform = read_ngspice_raw(&raw_path)?;
+    write_text(&output_dir.join("waveform.csv"), &waveform.to_csv()?)?;
+    write_text(
+        &output_dir.join("waveform-summary.json"),
+        &waveform.to_summary_json()?,
+    )
+}
+
+fn refresh_artifacts(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
+    metadata.artifacts = collect_run_artifacts(output_dir)?;
+    metadata
+        .artifacts
+        .sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(())
+}
+
+fn collect_run_artifacts(output_dir: &Path) -> OslResult<Vec<Artifact>> {
+    let mut artifacts = Vec::new();
+    for entry in fs::read_dir(output_dir)
+        .map_err(|err| OslError::io(format!("read {}", output_dir.display()), err))?
+    {
+        let entry = entry.map_err(|err| OslError::io("read output directory entry", err))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if file_name == "run.json" {
+            continue;
+        }
+
+        artifacts.push(Artifact {
+            path: file_name.to_string(),
+            kind: run_artifact_kind(file_name).to_string(),
+        });
+    }
+    Ok(artifacts)
+}
+
+fn run_artifact_kind(file_name: &str) -> &'static str {
+    if file_name == "waveform-summary.json"
+        || file_name.ends_with(".raw")
+        || file_name.ends_with(".csv")
+    {
+        "waveform"
+    } else if file_name.ends_with(".log") || file_name.ends_with(".txt") {
+        "log"
+    } else if file_name.ends_with(".cir") || file_name.ends_with(".net") {
+        "netlist"
+    } else if file_name.ends_with(".html") {
+        "report"
+    } else {
+        "file"
+    }
 }
 
 fn report_css() -> &'static str {

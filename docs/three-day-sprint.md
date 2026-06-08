@@ -12,7 +12,7 @@
 - 实现 `osl` CLI。
 - 实现 `osl run <netlist.cir>`。
 - 调用 ngspice CLI。
-- 输出 `run.json`、`ngspice.log`、`stdout.txt`、`stderr.txt`、`report.html`。
+- 输出 `run.json`、`ngspice.log`、`stdout.txt`、`stderr.txt`、`waveform.raw`、`waveform.csv`、`waveform-summary.json`、`report.html`。
 - 准备 RC、整流、RLC 示例电路。
 
 验收：
@@ -35,7 +35,7 @@ cargo run -p osl-cli -- run examples/rc_filter/rc.cir --output runs/rc_001
 - checks 可以读取 raw 变量表中的任意信号，例如 `v(out)`、`i(v1)`。
 - 支持最小 sweep expansion，例如 `rload: [500, 1000, 2000]` 自动展开多次运行。
 - 支持 `--jobs <n>` 并发执行独立验证任务，并保持报告顺序稳定。
-- 报告支持失败摘要和 artifact drilldown：失败 check、参数组合、窗口波形摘要、`run.json`、`waveform.raw`、`ngspice.log`、`input.cir`。
+- 报告支持失败摘要和 artifact drilldown：失败 check、参数组合、窗口波形摘要、`run.json`、`waveform.raw`、`waveform.csv`、`waveform-summary.json`、`ngspice.log`、`input.cir`。
 - 输出 `verify.json` 和 `report.html`。
 - 失败时返回非零退出码。
 

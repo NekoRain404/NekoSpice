@@ -10,6 +10,7 @@ The current three-day build is a vertical slice:
 - `osl model-check`: scan imported SPICE models for `.subckt`, `.model`, LTspice symbol pin mapping, dialect risks, and unsupported directives.
 - `osl import`: inspect SPICE/KiCad-style netlists and generate an import compatibility report.
 - HTML and JSON reports for runs and verification batches.
+- Run artifacts include `waveform.raw`, `waveform.csv`, and `waveform-summary.json`.
 - Failure drilldown with failed checks, waveform summaries, parameters, logs, netlists, and waveform artifacts.
 - Measurement checks over ngspice binary or ASCII `waveform.raw`: `final_value`, `avg`, `min`, `max`, `pp`, `rms`.
 
@@ -59,7 +60,7 @@ set filetype=binary
 write waveform.raw all
 ```
 
-Checks can target any signal present in the raw variable table, such as `v(out)` or `i(v1)`. The waveform reader auto-detects ngspice `Binary:` and `Values:` raw files, so older ASCII artifacts remain readable.
+Checks can target any signal present in the raw variable table, such as `v(out)` or `i(v1)`. The waveform reader auto-detects ngspice `Binary:` and `Values:` raw files, so older ASCII artifacts remain readable. Every successful run exports `waveform.csv` for external tools and `waveform-summary.json` with per-signal sample count, first/last, min/max, average, peak-to-peak, and RMS.
 
 ## Model Check
 
