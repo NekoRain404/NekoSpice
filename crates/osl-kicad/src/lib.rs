@@ -999,6 +999,8 @@ impl KicadSchematic {
             on_board: None,
             dnp: None,
             fields_autoplaced: None,
+            stroke: None,
+            fill: None,
             properties: sheet_properties(name, file, at, size),
             pins: checked_pins,
             instances: Vec::new(),
@@ -2113,6 +2115,7 @@ impl KicadSchematic {
                 "  \"styled_junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
                 "  \"sheet_count\": {},\n",
+                "  \"styled_sheet_count\": {},\n",
                 "  \"sheet_pin_count\": {},\n",
                 "  \"text_count\": {},\n",
                 "  \"text_box_count\": {},\n",
@@ -2177,6 +2180,7 @@ impl KicadSchematic {
             self.styled_junction_count(),
             self.no_connects.len(),
             self.sheets.len(),
+            self.styled_sheet_count(),
             self.sheets
                 .iter()
                 .map(|sheet| sheet.pins.len())
@@ -2330,6 +2334,13 @@ impl KicadSchematic {
         self.junctions
             .iter()
             .filter(|junction| junction.diameter.is_some() || junction.color.is_some())
+            .count()
+    }
+
+    fn styled_sheet_count(&self) -> usize {
+        self.sheets
+            .iter()
+            .filter(|sheet| sheet.stroke.is_some() || sheet.fill.is_some())
             .count()
     }
 
@@ -2863,6 +2874,8 @@ impl KicadCanvasScene {
                     file: sheet.sheet_file().unwrap_or_default().to_string(),
                     at: sheet.at,
                     size: sheet.size,
+                    stroke: sheet.stroke.clone(),
+                    fill: sheet.fill.clone(),
                     pins,
                     bounds: sheet_bounds.finish(),
                 }
@@ -3161,6 +3174,8 @@ pub struct KicadCanvasSheet {
     pub file: String,
     pub at: Option<KicadAt>,
     pub size: Option<KicadSize>,
+    pub stroke: Option<KicadStroke>,
+    pub fill: Option<KicadFill>,
     pub pins: Vec<KicadCanvasSheetPin>,
     pub bounds: Option<KicadBoundingBox>,
 }
@@ -5053,6 +5068,8 @@ pub struct KicadSheet {
     pub on_board: Option<bool>,
     pub dnp: Option<bool>,
     pub fields_autoplaced: Option<bool>,
+    pub stroke: Option<KicadStroke>,
+    pub fill: Option<KicadFill>,
     pub properties: Vec<KicadProperty>,
     pub pins: Vec<KicadSheetPin>,
     pub instances: Vec<KicadProjectInstance>,
@@ -5121,6 +5138,16 @@ impl KicadSheet {
             "fields_autoplaced",
             self.fields_autoplaced,
         );
+        if self.stroke.is_some() {
+            output.push_str(&format!("{} ", pad));
+            write_inline_stroke(output, self.stroke.as_ref(), 0.0);
+            output.push('\n');
+        }
+        if self.fill.is_some() {
+            output.push_str(&format!("{} ", pad));
+            write_inline_fill(output, self.fill.as_ref());
+            output.push('\n');
+        }
         if let Some(uuid) = &self.uuid {
             output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
         }
@@ -5884,7 +5911,9 @@ fn write_inline_fill(output: &mut String, fill: Option<&KicadFill>) {
             if let Some(fill_type) = &fill.fill_type {
                 output.push_str(&format!(" (type {})", sexpr_atom_or_string(fill_type)));
             } else {
-                output.push_str(" (type none)");
+                if fill.color.is_none() {
+                    output.push_str(" (type none)");
+                }
             }
             if let Some(color) = fill.color {
                 color.write_inline_color_sexpr(output);
@@ -6201,6 +6230,8 @@ fn parse_sheet(node: &Sexp) -> Option<KicadSheet> {
         on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
         dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
         fields_autoplaced: parse_optional_bool_child(items, "fields_autoplaced"),
+        stroke: child(items, "stroke").map(parse_stroke),
+        fill: child(items, "fill").map(parse_fill),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
@@ -8980,6 +9011,8 @@ mod tests {
     (at 20 10)
     (size 15 10)
     (exclude_from_sim no)
+    (stroke (width 0.3048) (type dash) (color 139 160 255 1))
+    (fill (color 247 255 168 0.3607843137))
     (uuid "aaaaaaaa-0000-0000-0000-000000000001")
     (property "Sheetname" "gain_stage" (at 20 9 0))
     (property "Sheetfile" "gain_stage.kicad_sch" (at 20 21 0))
@@ -9000,7 +9033,44 @@ mod tests {
         assert_eq!(schematic.sheets[0].pins.len(), 2);
         assert_eq!(schematic.sheets[0].pins[0].pin_type, "input");
         assert_eq!(schematic.sheets[0].bounding_box().unwrap().width(), 15.0);
+        assert_close(
+            schematic.sheets[0].stroke.as_ref().unwrap().width.unwrap(),
+            0.3048,
+        );
+        assert_eq!(
+            schematic.sheets[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash")
+        );
+        assert_eq!(
+            schematic.sheets[0].stroke.as_ref().unwrap().color,
+            Some(KicadColor {
+                red: 139.0,
+                green: 160.0,
+                blue: 255.0,
+                alpha: 1.0,
+            })
+        );
+        assert_eq!(schematic.sheets[0].fill.as_ref().unwrap().fill_type, None);
+        assert_eq!(
+            schematic.sheets[0].fill.as_ref().unwrap().color,
+            Some(KicadColor {
+                red: 247.0,
+                green: 255.0,
+                blue: 168.0,
+                alpha: 0.3607843137,
+            })
+        );
         assert!(schematic.to_summary_json().contains("\"sheet_count\": 1"));
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"styled_sheet_count\": 1")
+        );
         assert!(
             schematic
                 .to_summary_json()
@@ -9010,6 +9080,24 @@ mod tests {
         let scene = schematic.canvas_scene();
         assert_eq!(scene.sheets.len(), 1);
         assert_eq!(scene.sheets[0].pins.len(), 2);
+        assert_eq!(
+            scene.sheets[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash")
+        );
+        assert_eq!(
+            scene.sheets[0].fill.as_ref().unwrap().color,
+            Some(KicadColor {
+                red: 247.0,
+                green: 255.0,
+                blue: 168.0,
+                alpha: 0.3607843137,
+            })
+        );
         assert!(scene.to_summary_json().contains("\"sheet_count\": 1"));
         assert!(scene.to_summary_json().contains("\"sheet_pin_count\": 2"));
 
@@ -9027,8 +9115,30 @@ mod tests {
         );
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(sheet"));
+        assert!(roundtrip.contains("(stroke (width 0.3048) (type dash) (color 139 160 255 1))"));
+        assert!(roundtrip.contains("(fill (color 247 255 168 0.3607843137))"));
         assert!(roundtrip.contains("(property \"Sheetname\" \"gain_stage\""));
         assert!(roundtrip.contains("(pin \"in\" input"));
+        let reparsed =
+            parse_kicad_schematic(&roundtrip, "hierarchical_roundtrip.kicad_sch").unwrap();
+        assert_eq!(
+            reparsed.sheets[0]
+                .stroke
+                .as_ref()
+                .unwrap()
+                .stroke_type
+                .as_deref(),
+            Some("dash")
+        );
+        assert_eq!(
+            reparsed.sheets[0].fill.as_ref().unwrap().color,
+            Some(KicadColor {
+                red: 247.0,
+                green: 255.0,
+                blue: 168.0,
+                alpha: 0.3607843137,
+            })
+        );
     }
 
     #[test]

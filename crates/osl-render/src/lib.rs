@@ -230,12 +230,22 @@ fn render_sheet(output: &mut String, viewport: &SvgViewport, sheet: &KicadCanvas
         html_escape(&sheet.name),
         html_escape(&sheet.file)
     ));
+    let stroke = svg_stroke_color(sheet.stroke.as_ref(), "#b45309");
+    let stroke_width = svg_stroke_width(sheet.stroke.as_ref(), viewport, 1.8);
+    let dash_array = svg_stroke_dasharray(sheet.stroke.as_ref());
+    let fill = svg_fill_color(sheet.fill.as_ref(), "#fef3c7");
+    let fill_opacity = if fill == "none" { "1" } else { "0.18" };
     output.push_str(&format!(
-        "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"#b45309\" stroke-width=\"1.8\" fill=\"#fef3c7\" fill-opacity=\"0.18\"/>\n",
+        "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"{}\" stroke-width=\"{}\"{} fill=\"{}\" fill-opacity=\"{}\"/>\n",
         fmt(origin.x),
         fmt(origin.y),
         fmt(size.width * viewport.scale),
-        fmt(size.height * viewport.scale)
+        fmt(size.height * viewport.scale),
+        stroke,
+        fmt(stroke_width),
+        dash_array,
+        fill,
+        fill_opacity
     ));
     if !sheet.name.is_empty() {
         output.push_str(&format!(
@@ -737,6 +747,8 @@ mod tests {
   (sheet
     (at 20 10)
     (size 15 10)
+    (stroke (width 0.3048) (type dash) (color 139 160 255 1))
+    (fill (color 247 255 168 0.3607843137))
     (property "Sheetname" "gain_stage" (at 20 9 0))
     (property "Sheetfile" "gain_stage.kicad_sch" (at 20 21 0))
     (pin "in" input (at 20 15 180))
@@ -751,6 +763,10 @@ mod tests {
 
         assert!(svg.contains("data-sheet-name=\"gain_stage\""));
         assert!(svg.contains("gain_stage.kicad_sch"));
+        assert!(svg.contains("stroke=\"rgba(139,160,255,1)\""));
+        assert!(svg.contains("stroke-width=\"5.486\""));
+        assert!(svg.contains("stroke-dasharray=\"8 5\""));
+        assert!(svg.contains("fill=\"rgba(247,255,168,0.361)\""));
         assert!(svg.contains(">in</text>"));
         assert!(svg.contains(">out</text>"));
     }
