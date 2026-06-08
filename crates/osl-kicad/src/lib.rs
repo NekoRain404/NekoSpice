@@ -337,7 +337,7 @@ pub enum KicadSchematicEdit {
         at: Option<KicadAt>,
     },
     PlaceSymbol {
-        definition: KicadSymbolDef,
+        definition: Box<KicadSymbolDef>,
         reference: String,
         value: String,
         at: KicadAt,
@@ -513,7 +513,7 @@ impl KicadSchematic {
                 at,
                 unit,
                 uuid,
-            } => self.place_symbol(definition, &reference, &value, at, unit, uuid),
+            } => self.place_symbol(*definition, &reference, &value, at, unit, uuid),
             KicadSchematicEdit::AddWire { points, uuid } => self.add_wire(points, uuid),
             KicadSchematicEdit::AddBus { points, uuid } => self.add_bus(points, uuid),
             KicadSchematicEdit::AddBusEntry { at, size, uuid } => {
@@ -2232,6 +2232,7 @@ impl KicadSchematic {
                 "  \"hidden_property_count\": {},\n",
                 "  \"property_effect_count\": {},\n",
                 "  \"embedded_fonts\": {},\n",
+                "  \"library_unit_name_count\": {},\n",
                 "  \"library_graphic_count\": {}\n",
                 "}}"
             ),
@@ -2309,11 +2310,19 @@ impl KicadSchematic {
             self.hidden_property_count(),
             self.property_effect_count(),
             json_bool_option(self.embedded_fonts),
+            self.library_unit_name_count(),
             self.library_symbols
                 .iter()
                 .map(|symbol| symbol.graphics.len())
                 .sum::<usize>()
         )
+    }
+
+    fn library_unit_name_count(&self) -> usize {
+        self.library_symbols
+            .iter()
+            .map(|symbol| symbol.unit_names.len())
+            .sum()
     }
 
     fn embedded_project_instance_count(&self) -> usize {
@@ -3020,6 +3029,10 @@ impl KicadCanvasScene {
                     pins,
                     pin_names: definition.pin_names.clone(),
                     pin_numbers: definition.pin_numbers.clone(),
+                    unit_name: symbol
+                        .unit
+                        .and_then(|unit| definition.unit_names.get(&unit))
+                        .cloned(),
                     bounds: symbol_bounds,
                 })
             })
@@ -3389,6 +3402,7 @@ pub struct KicadCanvasSymbol {
     pub pins: Vec<KicadCanvasPin>,
     pub pin_names: Option<KicadPinDisplay>,
     pub pin_numbers: Option<KicadPinDisplay>,
+    pub unit_name: Option<String>,
     pub bounds: Option<KicadBoundingBox>,
 }
 
@@ -3868,6 +3882,11 @@ impl KicadSymbolLibrary {
                 usize::from(symbol.pin_names.is_some()) + usize::from(symbol.pin_numbers.is_some())
             })
             .sum::<usize>();
+        let unit_name_count = self
+            .symbols
+            .iter()
+            .map(|symbol| symbol.unit_names.len())
+            .sum::<usize>();
         let pin_text_effect_count = self
             .symbols
             .iter()
@@ -3981,6 +4000,7 @@ impl KicadSymbolLibrary {
                 "  \"body_style_scoped_item_count\": {},\n",
                 "  \"pin_count\": {},\n",
                 "  \"pin_display_setting_count\": {},\n",
+                "  \"unit_name_count\": {},\n",
                 "  \"pin_text_effect_count\": {},\n",
                 "  \"pin_alternate_count\": {},\n",
                 "  \"power_symbol_count\": {},\n",
@@ -4008,6 +4028,7 @@ impl KicadSymbolLibrary {
             body_style_scoped_item_count,
             pin_count,
             pin_display_setting_count,
+            unit_name_count,
             pin_text_effect_count,
             pin_alternate_count,
             power_symbol_count,
@@ -4444,6 +4465,7 @@ pub struct KicadSymbolDef {
     pub embedded_fonts: Option<bool>,
     pub pin_names: Option<KicadPinDisplay>,
     pub pin_numbers: Option<KicadPinDisplay>,
+    pub unit_names: BTreeMap<u32, String>,
     pub properties: Vec<KicadProperty>,
     pub graphics: Vec<KicadSymbolGraphic>,
     pub pins: Vec<KicadPinDef>,
@@ -4548,6 +4570,13 @@ impl KicadSymbolDef {
                     scope.body_style
                 ))
             ));
+            if let Some(unit_name) = self.unit_names.get(&scope.unit) {
+                output.push_str(&format!(
+                    "{}    (unit_name {})\n",
+                    pad,
+                    sexpr_string(unit_name)
+                ));
+            }
             for graphic in self.graphics.iter().filter(|graphic| {
                 graphic.unit == scope.unit && graphic.body_style == scope.body_style
             }) {
@@ -4576,6 +4605,10 @@ impl KicadSymbolDef {
             .chain(self.pins.iter().map(|pin| KicadSymbolItemScope {
                 unit: pin.unit,
                 body_style: pin.body_style,
+            }))
+            .chain(self.unit_names.keys().map(|unit| KicadSymbolItemScope {
+                unit: *unit,
+                body_style: 1,
             }))
             .collect::<BTreeSet<_>>();
         if scopes.is_empty() && self.extends.is_none() {
@@ -4609,6 +4642,7 @@ struct KicadResolvedSymbolDef {
     exclude_from_sim: Option<bool>,
     pin_names: Option<KicadPinDisplay>,
     pin_numbers: Option<KicadPinDisplay>,
+    unit_names: BTreeMap<u32, String>,
     properties: Vec<KicadProperty>,
     graphics: Vec<KicadSymbolGraphic>,
     pins: Vec<KicadPinDef>,
@@ -4621,6 +4655,7 @@ impl KicadResolvedSymbolDef {
             exclude_from_sim: symbol.exclude_from_sim,
             pin_names: symbol.pin_names.clone(),
             pin_numbers: symbol.pin_numbers.clone(),
+            unit_names: symbol.unit_names.clone(),
             properties: symbol.properties.clone(),
             graphics: symbol.graphics.clone(),
             pins: symbol.pins.clone(),
@@ -4737,6 +4772,9 @@ fn apply_symbol_inheritance_overrides(
         .pin_numbers
         .clone()
         .or_else(|| resolved.pin_numbers.clone());
+    for (unit, name) in &derived.unit_names {
+        resolved.unit_names.insert(*unit, name.clone());
+    }
     for property in &derived.properties {
         if is_effective_symbol_property_override(property) {
             upsert_symbol_property(&mut resolved.properties, property.clone());
@@ -7156,12 +7194,33 @@ fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
         embedded_fonts: child_value(items, "embedded_fonts").and_then(parse_kicad_bool_value),
         pin_names: child(items, "pin_names").map(parse_pin_display),
         pin_numbers: child(items, "pin_numbers").map(parse_pin_display),
+        unit_names: collect_symbol_unit_names(node),
         properties: direct_children(items, "property")
             .filter_map(parse_property)
             .collect(),
         graphics: collect_graphics(node),
         pins: collect_pin_defs(node),
     })
+}
+
+fn collect_symbol_unit_names(node: &Sexp) -> BTreeMap<u32, String> {
+    let mut unit_names = BTreeMap::new();
+    collect_symbol_unit_names_into(node, &mut unit_names);
+    unit_names
+}
+
+fn collect_symbol_unit_names_into(node: &Sexp, unit_names: &mut BTreeMap<u32, String>) {
+    if let Some(scope) = child_symbol_item_scope(node)
+        && scope.unit != 0
+        && let Some(unit_name) = child_value(list_items(node), "unit_name")
+    {
+        unit_names.insert(scope.unit, unit_name);
+    }
+    for child in list_items(node) {
+        if matches!(child, Sexp::List(_)) {
+            collect_symbol_unit_names_into(child, unit_names);
+        }
+    }
 }
 
 fn parse_symbol_power(node: &Sexp) -> KicadSymbolPower {
@@ -11539,6 +11598,99 @@ mod tests {
     }
 
     #[test]
+    fn preserves_kicad_symbol_unit_display_names() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:NamedUnits"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "NamedUnits" (at 0 -2.54 0))
+      (symbol "NamedUnits_1_1"
+        (unit_name "Power")
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "VIN") (number "1"))
+      )
+      (symbol "NamedUnits_2_1"
+        (unit_name "Logic")
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "IO") (number "2"))
+      )
+    )
+  )
+  (symbol
+    (lib_id "NekoSpice:NamedUnits")
+    (at 20 10 0)
+    (unit 2)
+    (property "Reference" "U1" (at 20 8 0))
+    (property "Value" "NamedUnits" (at 20 12 0))
+  )
+)"#,
+            "named_units.kicad_sch",
+        )
+        .unwrap();
+
+        let definition = schematic.symbol_definition("NekoSpice:NamedUnits").unwrap();
+        assert_eq!(
+            definition.unit_names.get(&1).map(String::as_str),
+            Some("Power")
+        );
+        assert_eq!(
+            definition.unit_names.get(&2).map(String::as_str),
+            Some("Logic")
+        );
+        assert_eq!(
+            schematic.canvas_scene().symbols[0].unit_name.as_deref(),
+            Some("Logic")
+        );
+        assert!(
+            schematic
+                .to_summary_json()
+                .contains("\"library_unit_name_count\": 2")
+        );
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(unit_name \"Power\")"));
+        assert!(exported.contains("(unit_name \"Logic\")"));
+        let reparsed = parse_kicad_schematic(&exported, "named_units_roundtrip.kicad_sch").unwrap();
+        assert_eq!(
+            reparsed
+                .symbol_definition("NekoSpice:NamedUnits")
+                .unwrap()
+                .unit_names
+                .get(&2)
+                .map(String::as_str),
+            Some("Logic")
+        );
+
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (generator "NekoSpice")
+  (symbol "NekoSpice:NamedUnits"
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "NamedUnits" (at 0 -2.54 0))
+    (symbol "NamedUnits_1_1"
+      (unit_name "Power")
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "VIN") (number "1"))
+    )
+    (symbol "NamedUnits_2_1"
+      (unit_name "Logic")
+      (pin passive line (at 2.54 0 180) (length 2.54) (name "IO") (number "2"))
+    )
+  )
+)"#,
+            "named_units.kicad_sym",
+        )
+        .unwrap();
+
+        assert!(library.to_summary_json().contains("\"unit_name_count\": 2"));
+        let exported_library = library.to_kicad_symbol_library_sexpr();
+        assert!(exported_library.contains("(unit_name \"Power\")"));
+        assert!(exported_library.contains("(unit_name \"Logic\")"));
+    }
+
+    #[test]
     fn roundtrips_kicad_schematic_fixture_through_writer() {
         let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -11834,7 +11986,7 @@ mod tests {
 
         schematic
             .apply_edit(KicadSchematicEdit::PlaceSymbol {
-                definition: capacitor,
+                definition: Box::new(capacitor),
                 reference: "C2".to_string(),
                 value: "47n".to_string(),
                 at: KicadAt {

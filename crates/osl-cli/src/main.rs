@@ -1810,7 +1810,7 @@ fn parse_kicad_place_symbol_edit(
         })?;
 
     Ok(KicadSchematicEdit::PlaceSymbol {
-        definition,
+        definition: Box::new(definition),
         reference: reference.to_string(),
         value: value.to_string(),
         at: parse_kicad_at(at, "symbol placement")?,
