@@ -53,9 +53,11 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --output repor
 - 实现 `osl model-check <netlist-or-directory>` 的最小模型诊断闭环。
 - 输出 `.subckt` pin list、`.model` 索引、unsupported directive、方言风险和兼容性评分。
 - 支持 LTspice `.asy` symbol pin mapping：解析 `PINATTR PinName` / `SpiceOrder` 并对齐 `.subckt` pin list。
+- 实现 `osl import <spice-netlist>` 的导入报告：组件数量、symbol 数量、directive 数量、include 和兼容性评分。
+- 准备一个 KiCad-style SPICE netlist fixture，并确认它可以被 ngspice 运行。
 - 补充文档和使用命令。
 - 建立 Git 工程。
-- 固化三天后下一步任务：measurement、sweep、KiCad/LTspice 导入、波形数据层。
+- 固化三天后下一步任务：measurement、sweep、KiCad/LTspice 规范化导入、波形数据层。
 
 验收：
 
@@ -65,6 +67,8 @@ cargo test --workspace
 cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
+cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output reports/import_001
+cargo run -p osl-cli -- run examples/kicad_import/kicad_rc.cir --output runs/kicad_rc_001
 ```
 
 ## 三天后继续做什么
@@ -72,5 +76,5 @@ cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol
 优先级从高到低：
 
 1. richer YAML parser：替换当前最小子集解析器。
-2. KiCad / LTspice import：解析 KiCad SPICE netlist 和更多 LTspice symbol 属性。
+2. normalized import：把 KiCad / LTspice 项目导入为 NekoSpice project、验证配置和可追溯 artifact。
 3. waveform data layer：LOD、mmap、viewport query。

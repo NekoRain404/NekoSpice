@@ -8,6 +8,7 @@ The current three-day build is a vertical slice:
 - `osl verify`: run a small YAML verification plan.
 - `osl bench`: run every `.cir` under a directory and collect timings.
 - `osl model-check`: scan imported SPICE models for `.subckt`, `.model`, LTspice symbol pin mapping, dialect risks, and unsupported directives.
+- `osl import`: inspect SPICE/KiCad-style netlists and generate an import compatibility report.
 - HTML and JSON reports for runs and verification batches.
 - Failure drilldown with failed checks, waveform summaries, parameters, logs, netlists, and waveform artifacts.
 - Measurement checks over ngspice binary or ASCII `waveform.raw`: `final_value`, `avg`, `min`, `max`, `pp`, `rms`.
@@ -26,6 +27,7 @@ cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --out
 cargo run -p osl-cli -- bench examples --output bench-results/basic_001
 cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --output reports/modelcheck_001
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
+cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output reports/import_001
 ```
 
 ## Verification Config
@@ -68,12 +70,22 @@ cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol
 
 `model-check` writes `model-check.json` and `report.html`. It extracts `.subckt` names and pin lists, indexes `.model` statements, flags unsupported or dialect-specific directives, and returns exit code `2` when error-level diagnostics are found. With `--symbol <ltspice.asy>`, it parses LTspice `PINATTR PinName` / `SpiceOrder` entries and verifies that symbol pin order matches the target `.subckt` pin list.
 
+## Import Report
+
+```bash
+cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
+cargo run -p osl-cli -- run examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc_run
+```
+
+`import` writes `import.json` and `report.html`. It detects KiCad/LTspice/generic SPICE flavor, counts components, symbols, directives, includes, and emits compatibility diagnostics before the netlist is handed to ngspice.
+
 ## Validation
 
 ```bash
 cargo fmt --check
 cargo test --workspace
 cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/basic
+cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
 bash -lc 'cargo run -p osl-cli -- verify examples/failing_validation.osl.yaml --output /tmp/nekospice_reports/failing; test $? -eq 2'
 bash -lc 'cargo run -p osl-cli -- model-check examples/vendor_model_issues --output /tmp/nekospice_modelcheck/bad; test $? -eq 2'
 bash -lc 'cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/bad_opamp.asy --output /tmp/nekospice_modelcheck/pinmap_bad; test $? -eq 2'

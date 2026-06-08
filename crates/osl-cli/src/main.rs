@@ -3,6 +3,7 @@ use osl_core::{
     make_run_id, parameters_json, read_text, write_text,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
+use osl_netlist::ImportReport;
 use osl_sim::{NgspiceCliBackend, SimulatorBackend};
 use osl_waveform::{MeasurementKind, WaveformSummary, measure, read_ngspice_raw};
 use std::env;
@@ -45,6 +46,7 @@ fn run_cli() -> OslResult<i32> {
         "verify" => verify_command(&args),
         "bench" => bench_command(&args),
         "model-check" => model_check_command(&args),
+        "import" => import_command(&args),
         "report" => report_command(&args),
         unknown => Err(OslError::InvalidInput(format!(
             "unknown command '{unknown}'. Run 'osl help'."
@@ -62,6 +64,7 @@ Usage:
   osl verify <project.osl.yaml> [--output <dir>] [--ngspice <path>] [--jobs <n>]
   osl bench <directory> [--output <dir>] [--ngspice <path>]
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
+  osl import <spice-netlist> [--output <dir>]
   osl report <run-or-verify-dir>
   osl --version
 
@@ -236,12 +239,42 @@ fn model_check_command(args: &[String]) -> OslResult<i32> {
     Ok(if report.error_count() == 0 { 0 } else { 2 })
 }
 
+fn import_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing netlist path for 'osl import'")?;
+    let output_dir = flag_value(args, "--output")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("reports").join(make_run_id("import")));
+
+    fs::create_dir_all(&output_dir)
+        .map_err(|err| OslError::io(format!("create {}", output_dir.display()), err))?;
+
+    let report = ImportReport::parse(Path::new(input))?;
+    write_text(&output_dir.join("import.json"), &report.to_json())?;
+    write_text(
+        &output_dir.join("report.html"),
+        &report.to_html(report_css()),
+    )?;
+
+    println!(
+        "import: flavor={}, components={}, symbols={}, directives={}, score={} -> {}",
+        report.flavor.as_str(),
+        report.component_count(),
+        report.symbol_count(),
+        report.directive_count(),
+        report.compatibility_score(),
+        output_dir.display()
+    );
+
+    Ok(if report.error_count() == 0 { 0 } else { 2 })
+}
+
 fn report_command(args: &[String]) -> OslResult<i32> {
     let dir = PathBuf::from(positional(args, 0, "missing directory for 'osl report'")?);
     let run_json = dir.join("run.json");
     let verify_json = dir.join("verify.json");
     let bench_json = dir.join("bench.json");
     let model_check_json = dir.join("model-check.json");
+    let import_json = dir.join("import.json");
 
     if run_json.is_file() {
         let content = read_text(&run_json)?;
@@ -259,11 +292,17 @@ fn report_command(args: &[String]) -> OslResult<i32> {
         return Ok(0);
     }
 
-    if verify_json.is_file() || bench_json.is_file() || model_check_json.is_file() {
+    if verify_json.is_file()
+        || bench_json.is_file()
+        || model_check_json.is_file()
+        || import_json.is_file()
+    {
         let source = if verify_json.is_file() {
             verify_json
         } else if model_check_json.is_file() {
             model_check_json
+        } else if import_json.is_file() {
+            import_json
         } else {
             bench_json
         };
@@ -283,7 +322,7 @@ fn report_command(args: &[String]) -> OslResult<i32> {
     }
 
     Err(OslError::InvalidInput(format!(
-        "{} does not contain run.json, verify.json, bench.json, or model-check.json",
+        "{} does not contain run.json, verify.json, bench.json, model-check.json, or import.json",
         dir.display()
     )))
 }
