@@ -39,10 +39,12 @@ cargo run -p osl-cli -- model-check examples/diode_rectifier/rectifier.cir --out
 cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/good_opamp.asy --output reports/pinmap_001
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output reports/import_001
 cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output reports/import_kicad_schematic_001
+cargo run -p osl-cli -- import examples/kicad_hierarchical --output reports/import_kicad_hierarchical_001
 cargo run -p osl-cli -- import examples/kicad_import/kicad_diode_include.cir --output reports/import_with_models_001
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output reports/kicad_schematic.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas --output reports/kicad_canvas_scene.json
 cargo run -p osl-cli -- kicad-check examples/kicad_schematic/rc.kicad_sch --output reports/kicad_check.json
+cargo run -p osl-cli -- kicad-check examples/kicad_hierarchical/kicad_hierarchical.kicad_sch --output reports/kicad_hierarchical_check.json
 cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output reports/rc_edited.kicad_sch place-symbol:NekoSpice:C:C2:47n:101.6,53.34 'add-wire:101.6,50.8;88.9,50.8' 'add-wire:101.6,55.88;88.9,55.88' 'add-text:.save v(out):45.72,35.56'
 cargo run -p osl-cli -- kicad-render examples/kicad_schematic/rc.kicad_sch --output reports/kicad_canvas_scene.svg
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/neko_spice.kicad_sym --output reports/kicad_symbol_library.json
@@ -102,6 +104,7 @@ cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
 cargo run -p osl-cli -- import examples/kicad_project --output /tmp/nekospice_import/kicad_project_dir
 cargo run -p osl-cli -- import examples/kicad_project/kicad_project.kicad_pro --output /tmp/nekospice_import/kicad_project_file
+cargo run -p osl-cli -- import examples/kicad_hierarchical --output /tmp/nekospice_import/kicad_hierarchical
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output /tmp/nekospice_import/ltspice_rc
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_rc/project/project.osl.yaml --output /tmp/nekospice_import/kicad_rc_verify
 ```
@@ -140,9 +143,12 @@ cargo run -p osl-cli -- import examples/kicad_project/kicad_project.kicad_pro --
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_project_file/project/project.osl.yaml --output /tmp/nekospice_import/kicad_project_file_verify
 cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_schematic
 cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_schematic/project/project.osl.yaml --output /tmp/nekospice_import/kicad_schematic_verify
+cargo run -p osl-cli -- import examples/kicad_hierarchical --output /tmp/nekospice_import/kicad_hierarchical
+cargo run -p osl-cli -- verify /tmp/nekospice_import/kicad_hierarchical/project/project.osl.yaml --output /tmp/nekospice_import/kicad_hierarchical_verify
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_schematic.json
 cargo run -p osl-cli -- kicad-inspect examples/kicad_schematic/rc.kicad_sch --canvas --output /tmp/nekospice_import/kicad_canvas_scene.json
 cargo run -p osl-cli -- kicad-check examples/kicad_schematic/rc.kicad_sch --output /tmp/nekospice_import/kicad_check.json
+cargo run -p osl-cli -- kicad-check examples/kicad_hierarchical/kicad_hierarchical.kicad_sch --output /tmp/nekospice_import/kicad_hierarchical_check.json
 cargo run -p osl-cli -- kicad-edit examples/kicad_schematic/rc.kicad_sch --library examples/kicad_schematic/neko_spice.kicad_sym --output /tmp/nekospice_import/rc_edited.kicad_sch place-symbol:NekoSpice:C:C2:47n:101.6,53.34 'add-wire:101.6,50.8;88.9,50.8' 'add-wire:101.6,55.88;88.9,55.88' 'add-global-label:sense:101.6,50.8' 'add-text:.save v(out):45.72,35.56'
 cargo run -p osl-cli -- import /tmp/nekospice_import/rc_edited.kicad_sch --output /tmp/nekospice_import/rc_edited_import
 cargo run -p osl-cli -- verify /tmp/nekospice_import/rc_edited_import/project/project.osl.yaml --output /tmp/nekospice_import/rc_edited_verify

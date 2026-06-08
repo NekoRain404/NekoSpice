@@ -78,6 +78,8 @@ cargo run -p osl-cli -- import examples/kicad_project/kicad_project.kicad_pro --
 cargo run -p osl-cli -- verify reports/kicad_project_file_001/project/project.osl.yaml --output reports/kicad_project_file_001_verify
 cargo run -p osl-cli -- import examples/kicad_schematic/rc.kicad_sch --output reports/kicad_schematic_import_001
 cargo run -p osl-cli -- verify reports/kicad_schematic_import_001/project/project.osl.yaml --output reports/kicad_schematic_import_001_verify
+cargo run -p osl-cli -- import examples/kicad_hierarchical --output reports/kicad_hierarchical_import_001
+cargo run -p osl-cli -- verify reports/kicad_hierarchical_import_001/project/project.osl.yaml --output reports/kicad_hierarchical_import_001_verify
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_rc.asc --output reports/ltspice_import_001
 cargo run -p osl-cli -- verify reports/ltspice_import_001/project/project.osl.yaml --output reports/ltspice_import_001_verify
 cargo run -p osl-cli -- import examples/ltspice_import/ltspice_subckt.asc --output reports/ltspice_subckt_import_001

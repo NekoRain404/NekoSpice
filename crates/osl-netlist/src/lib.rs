@@ -2671,6 +2671,41 @@ XU1 in out vcc vee GOODAMP
     }
 
     #[test]
+    fn imports_kicad_hierarchical_project_fixture() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let project_dir = workspace_root.join("examples/kicad_hierarchical");
+
+        let from_dir = read_import_input(&project_dir).unwrap();
+        let from_project_file =
+            read_import_input(&project_dir.join("kicad_hierarchical.kicad_pro")).unwrap();
+
+        assert_eq!(
+            from_dir.source_path,
+            project_dir.join("kicad_hierarchical.kicad_sch")
+        );
+        assert_eq!(from_dir.report.flavor, NetlistFlavor::KiCad);
+        assert_eq!(from_dir.report.error_count(), 0);
+        assert_eq!(from_dir.report.compatibility_score(), 100);
+        assert!(from_dir.source_netlist.contains("V1 in 0 DC 5"));
+        assert!(from_dir.source_netlist.contains("RLOAD out 0 1k"));
+        assert!(from_dir.source_netlist.contains("Rgain_stage_1 in out 2k"));
+        assert!(from_dir.source_netlist.contains(".op"));
+        assert!(
+            !from_dir
+                .source_netlist
+                .contains("Unsupported KiCad hierarchical sheet")
+        );
+        assert_eq!(
+            from_project_file.source_path,
+            project_dir.join("kicad_hierarchical.kicad_sch")
+        );
+        assert_eq!(from_project_file.source_netlist, from_dir.source_netlist);
+    }
+
+    #[test]
     fn prefers_kicad_project_named_schematic_over_other_sheets() {
         let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()

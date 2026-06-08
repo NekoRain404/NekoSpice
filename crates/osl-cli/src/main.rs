@@ -407,7 +407,9 @@ fn kicad_check_command(args: &[String]) -> OslResult<i32> {
         )));
     }
 
-    let report = read_kicad_schematic_with_libraries(input_path)?.check_report();
+    let schematic = read_kicad_schematic_with_libraries(input_path)?;
+    let report = schematic
+        .check_report_with_hierarchy(input_path.parent().unwrap_or_else(|| Path::new(".")))?;
     let json = report.to_json();
     if let Some(output) = output {
         write_text(Path::new(&output), &json)?;

@@ -713,6 +713,22 @@ impl KicadSchematic {
         }
     }
 
+    pub fn check_report_with_hierarchy(
+        &self,
+        base_dir: &Path,
+    ) -> OslResult<KicadSchematicCheckReport> {
+        let graph = self.connectivity_graph();
+        let exported = self.to_spice_netlist_with_hierarchy(base_dir)?;
+        Ok(KicadSchematicCheckReport {
+            source: self.source.clone(),
+            symbol_count: self.symbols.len(),
+            sheet_count: self.sheets.len(),
+            net_count: graph.nets.len(),
+            spice_directive_count: count_spice_directive_lines(&exported.netlist),
+            diagnostics: exported.diagnostics,
+        })
+    }
+
     pub fn to_spice_netlist(&self) -> OslResult<String> {
         let graph = self.connectivity_graph();
         let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
@@ -1827,6 +1843,16 @@ fn is_spice_analysis_directive(text: &str) -> bool {
         || text.starts_with(".ac")
         || text.starts_with(".dc")
         || text.starts_with(".op")
+}
+
+fn count_spice_directive_lines(netlist: &str) -> usize {
+    netlist
+        .lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            line.starts_with('.') && !line.eq_ignore_ascii_case(".end")
+        })
+        .count()
 }
 
 fn scoped_net_name(scope: &str, net: &str, aliases: &BTreeMap<String, String>) -> String {
@@ -4531,8 +4557,8 @@ mod tests {
         KicadAt, KicadDiagnosticSeverity, KicadLabelKind, KicadPoint, KicadSchematicEdit,
         parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
         parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
-        read_kicad_symbol_library, read_kicad_symbol_library_index,
-        read_kicad_symbol_library_table,
+        read_kicad_schematic_with_libraries, read_kicad_symbol_library,
+        read_kicad_symbol_library_index, read_kicad_symbol_library_table,
     };
     use std::fs;
     use std::path::Path;
@@ -4756,6 +4782,28 @@ mod tests {
         assert!(roundtrip.contains("(sheet"));
         assert!(roundtrip.contains("(property \"Sheetname\" \"gain_stage\""));
         assert!(roundtrip.contains("(pin \"in\" input"));
+    }
+
+    #[test]
+    fn checks_hierarchical_schematic_fixture_with_expansion() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let schematic_path =
+            workspace_root.join("examples/kicad_hierarchical/kicad_hierarchical.kicad_sch");
+        let schematic = read_kicad_schematic_with_libraries(&schematic_path).unwrap();
+        let report = schematic
+            .check_report_with_hierarchy(schematic_path.parent().unwrap())
+            .unwrap();
+
+        assert_eq!(report.sheet_count, 1);
+        assert_eq!(report.spice_directive_count, 1);
+        assert_eq!(report.error_count(), 0);
+        assert!(!report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "hierarchical-sheet-unsupported"
+                || diagnostic.code == "missing-spice-directive"
+        }));
     }
 
     #[test]
