@@ -1,6 +1,12 @@
-use osl_core::{
-    ParameterOverride, RunMetadata, RunStatus, html_escape, json_escape, parameters_json,
-};
+mod format;
+mod html;
+mod json;
+mod junit;
+mod markdown;
+
+pub use html::report_css;
+
+use osl_core::{ParameterOverride, RunMetadata, RunStatus};
 use osl_waveform::WaveformSummary;
 use std::path::Path;
 
@@ -37,7 +43,7 @@ impl VerifyRunResult {
             .to_string()
     }
 
-    fn artifact_href(&self, artifact: &str) -> String {
+    pub(crate) fn artifact_href(&self, artifact: &str) -> String {
         let run_dir = Path::new(&self.run_dir);
         let run_dir_name = self.run_dir_name();
         if run_dir
@@ -100,439 +106,20 @@ impl VerifyReport {
     }
 
     pub fn to_json(&self) -> String {
-        let failures = self
-            .results
-            .iter()
-            .flat_map(|result| {
-                result.failed_checks().map(|check| {
-                    format!(
-                        concat!(
-                            "    {{ \"run\": \"{}\", \"netlist\": \"{}\", \"run_dir\": \"{}\", ",
-                            "\"check\": \"{}\", \"signal\": \"{}\", \"value\": {}, ",
-                            "\"min\": {}, \"max\": {}, \"summary\": {}, \"message\": \"{}\" }}"
-                        ),
-                        json_escape(&result.name),
-                        json_escape(&result.netlist),
-                        json_escape(&result.run_dir),
-                        json_escape(&check.name),
-                        json_escape(&check.signal),
-                        option_f64_json(check.value),
-                        option_f64_json(check.min),
-                        option_f64_json(check.max),
-                        summary_json(check.summary),
-                        json_escape(&check.message)
-                    )
-                })
-            })
-            .collect::<Vec<_>>()
-            .join(",\n");
-        let runs = self
-            .results
-            .iter()
-            .map(|result| {
-                let parameters = parameters_json(&result.parameters, 8);
-                let checks = result
-                    .checks
-                    .iter()
-                    .map(|check| {
-                        format!(
-                            concat!(
-                                "        {{ \"name\": \"{}\", \"kind\": \"{}\", \"signal\": \"{}\", ",
-                                "\"from\": {}, \"to\": {}, \"value\": {}, \"min\": {}, \"max\": {}, \"passed\": {}, \"summary\": {}, \"message\": \"{}\" }}"
-                            ),
-                            json_escape(&check.name),
-                            json_escape(&check.kind),
-                            json_escape(&check.signal),
-                            option_f64_json(check.from),
-                            option_f64_json(check.to),
-                            option_f64_json(check.value),
-                            option_f64_json(check.min),
-                            option_f64_json(check.max),
-                            check.passed,
-                            summary_json(check.summary),
-                            json_escape(&check.message)
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join(",\n");
-                format!(
-                    concat!(
-                        "    {{\n",
-                        "      \"name\": \"{}\",\n",
-                        "      \"netlist\": \"{}\",\n",
-                        "      \"run_dir\": \"{}\",\n",
-                        "      \"status\": \"{}\",\n",
-                        "      \"simulation_status\": \"{}\",\n",
-                        "      \"exit_code\": {},\n",
-                        "      \"duration_ms\": {},\n",
-                        "      \"parameters\": [\n",
-                        "{}\n",
-                        "      ],\n",
-                        "      \"checks\": [\n",
-                        "{}\n",
-                        "      ]\n",
-                        "    }}"
-                    ),
-                    json_escape(&result.name),
-                    json_escape(&result.netlist),
-                    json_escape(&result.run_dir),
-                    result.status().as_str(),
-                    result.metadata.status.as_str(),
-                    result
-                        .metadata
-                        .exit_code
-                        .map(|value| value.to_string())
-                        .unwrap_or_else(|| "null".to_string()),
-                    result.metadata.duration_ms,
-                    parameters,
-                    checks
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(",\n");
-
-        format!(
-            concat!(
-                "{{\n",
-                "  \"schema_version\": 1,\n",
-                "  \"project\": \"{}\",\n",
-                "  \"passed\": {},\n",
-                "  \"failed\": {},\n",
-                "  \"failure_count\": {},\n",
-                "  \"failures\": [\n",
-                "{}\n",
-                "  ],\n",
-                "  \"runs\": [\n",
-                "{}\n",
-                "  ]\n",
-                "}}\n"
-            ),
-            json_escape(&self.project),
-            self.passed_count(),
-            self.failed_count(),
-            self.failure_count(),
-            failures,
-            runs
-        )
+        json::report_json(self)
     }
 
     pub fn to_html(&self) -> String {
-        let failure_rows = self
-            .results
-            .iter()
-            .flat_map(|result| {
-                result.failed_checks().map(|check| {
-                    format!(
-                        concat!(
-                            "<tr class=\"failed\"><td>{}</td><td>{}</td><td>{}</td>",
-                            "<td>{}</td><td>{}</td><td><a href=\"{}\">run</a> <a href=\"{}\">raw</a> <a href=\"{}\">csv</a> <a href=\"{}\">summary</a> <a href=\"{}\">log</a></td></tr>"
-                        ),
-                        html_escape(&result.name),
-                        html_escape(&parameters_text(&result.parameters)),
-                        html_escape(&check.name),
-                        html_escape(&check.message),
-                        html_escape(&summary_text(check.summary)),
-                        html_escape(&result.artifact_href("report.html")),
-                        html_escape(&result.artifact_href("waveform.raw")),
-                        html_escape(&result.artifact_href("waveform.csv")),
-                        html_escape(&result.artifact_href("waveform-summary.json")),
-                        html_escape(&result.artifact_href("ngspice.log"))
-                    )
-                })
-            })
-            .collect::<String>();
-        let failure_section = if self.failure_count() == 0 {
-            "<section class=\"summary\"><strong>No failed checks.</strong></section>".to_string()
-        } else {
-            format!(
-                concat!(
-                    "<section><h2>Failures</h2>",
-                    "<table><thead><tr><th>Run</th><th>Parameters</th><th>Check</th><th>Message</th><th>Summary</th><th>Artifacts</th></tr></thead>",
-                    "<tbody>{}</tbody></table></section>"
-                ),
-                failure_rows
-            )
-        };
-
-        let rows = self
-            .results
-            .iter()
-            .map(|result| {
-                let status = result.status().as_str();
-                let parameters = parameters_text(&result.parameters);
-                let checks = if result.checks.is_empty() {
-                    "no checks".to_string()
-                } else {
-                    result
-                        .checks
-                        .iter()
-                        .map(|check| {
-                            format!(
-                                "{}: {} ({}; {})",
-                                check.name,
-                                check.status_text(),
-                                check.message,
-                                summary_text(check.summary)
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                };
-                format!(
-                    concat!(
-                        "<tr class=\"{}\"><td>{}</td><td>{}</td><td>{}</td>",
-                        "<td>{}</td><td>{}</td><td><a href=\"{}\">report</a> <a href=\"{}\">run.json</a> <a href=\"{}\">raw</a> <a href=\"{}\">csv</a> <a href=\"{}\">summary</a> <a href=\"{}\">ngspice.log</a> <a href=\"{}\">input.cir</a></td><td>{}</td></tr>"
-                    ),
-                    status,
-                    html_escape(status),
-                    html_escape(&result.name),
-                    html_escape(&result.netlist),
-                    html_escape(&parameters),
-                    result.metadata.duration_ms,
-                    html_escape(&result.artifact_href("report.html")),
-                    html_escape(&result.artifact_href("run.json")),
-                    html_escape(&result.artifact_href("waveform.raw")),
-                    html_escape(&result.artifact_href("waveform.csv")),
-                    html_escape(&result.artifact_href("waveform-summary.json")),
-                    html_escape(&result.artifact_href("ngspice.log")),
-                    html_escape(&result.artifact_href("input.cir")),
-                    html_escape(&checks)
-                )
-            })
-            .collect::<String>();
-
-        format!(
-            concat!(
-                "<!doctype html><html><head><meta charset=\"utf-8\">",
-                "<title>NekoSpice Verification Report</title>{}</head><body>",
-                "<main><h1>{}</h1>",
-                "<section class=\"summary\"><strong>{}</strong> passed, <strong>{}</strong> failed, <strong>{}</strong> failed checks</section>",
-                "{}",
-                "<h2>Runs</h2>",
-                "<table><thead><tr><th>Status</th><th>Run</th><th>Netlist</th><th>Parameters</th><th>ms</th><th>Artifacts</th><th>Checks</th></tr></thead>",
-                "<tbody>{}</tbody></table>",
-                "</main></body></html>\n"
-            ),
-            report_css(),
-            html_escape(&self.project),
-            self.passed_count(),
-            self.failed_count(),
-            self.failure_count(),
-            failure_section,
-            rows
-        )
+        html::report_html(self)
     }
 
     pub fn to_junit_xml(&self) -> String {
-        let testcases = self
-            .results
-            .iter()
-            .map(junit_testcase_xml)
-            .collect::<String>();
-        format!(
-            concat!(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
-                "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" errors=\"0\" time=\"{}\">\n",
-                "{}",
-                "</testsuite>\n"
-            ),
-            xml_escape(&self.project),
-            self.results.len(),
-            self.failed_count(),
-            junit_seconds(
-                self.results
-                    .iter()
-                    .map(|result| result.metadata.duration_ms)
-                    .sum()
-            ),
-            testcases
-        )
-    }
-}
-
-fn junit_testcase_xml(result: &VerifyRunResult) -> String {
-    let testcase_open = format!(
-        "  <testcase classname=\"{}\" name=\"{}\" time=\"{}\">",
-        xml_escape(&result.netlist),
-        xml_escape(&result.name),
-        junit_seconds(result.metadata.duration_ms)
-    );
-    if result.status() == RunStatus::Passed {
-        return format!("{testcase_open}</testcase>\n");
+        junit::junit_xml(self)
     }
 
-    let message = result_failure_message(result);
-    let details = result_failure_details(result);
-    format!(
-        concat!(
-            "{}\n",
-            "    <failure message=\"{}\"><![CDATA[{}]]></failure>\n",
-            "  </testcase>\n"
-        ),
-        testcase_open,
-        xml_escape(&message),
-        cdata_escape(&details)
-    )
-}
-
-fn result_failure_message(result: &VerifyRunResult) -> String {
-    let failed_checks = result.failed_checks().count();
-    if result.metadata.status != RunStatus::Passed {
-        format!(
-            "simulation {} exit {:?}",
-            result.metadata.status.as_str(),
-            result.metadata.exit_code
-        )
-    } else if failed_checks == 1 {
-        "1 failed check".to_string()
-    } else {
-        format!("{failed_checks} failed checks")
+    pub fn to_markdown(&self) -> String {
+        markdown::report_markdown(self)
     }
-}
-
-fn result_failure_details(result: &VerifyRunResult) -> String {
-    let mut details = Vec::new();
-    details.push(format!("run: {}", result.name));
-    details.push(format!("netlist: {}", result.netlist));
-    details.push(format!("run_dir: {}", result.run_dir));
-    details.push(format!(
-        "simulation_status: {}",
-        result.metadata.status.as_str()
-    ));
-    details.push(format!("exit_code: {:?}", result.metadata.exit_code));
-    details.push(format!("duration_ms: {}", result.metadata.duration_ms));
-
-    let parameters = parameters_text(&result.parameters);
-    details.push(format!("parameters: {parameters}"));
-
-    for check in result.failed_checks() {
-        details.push(format!(
-            "check {} {} signal={} value={} min={} max={} summary={} message={}",
-            check.name,
-            check.status_text(),
-            check.signal,
-            option_f64_text(check.value),
-            option_f64_text(check.min),
-            option_f64_text(check.max),
-            summary_text(check.summary),
-            check.message
-        ));
-    }
-
-    details.join("\n")
-}
-
-pub fn report_css() -> &'static str {
-    concat!(
-        "<style>",
-        "body{margin:0;background:#f7f7f4;color:#1f2933;font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,sans-serif}",
-        "main{max-width:1100px;margin:0 auto;padding:32px}",
-        "h1{font-size:28px;margin:0 0 20px}",
-        "h2{font-size:18px;margin-top:24px}",
-        ".summary{background:#fff;border:1px solid #d9ded7;border-radius:6px;padding:12px 14px;margin-bottom:16px}",
-        "table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #d9ded7}",
-        "th,td{padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}",
-        "th{background:#ecefeb;font-weight:700}",
-        "tr.passed td:first-child{color:#0f766e;font-weight:700}",
-        "tr.warning td:first-child{color:#b45309;font-weight:700}",
-        "tr.failed td:first-child{color:#b91c1c;font-weight:700}",
-        "code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}",
-        "pre{white-space:pre-wrap;background:#fff;border:1px solid #d9ded7;border-radius:6px;padding:16px;overflow:auto}",
-        "dl{display:grid;grid-template-columns:120px 1fr;gap:8px 12px;background:#fff;border:1px solid #d9ded7;border-radius:6px;padding:14px}",
-        "dt{font-weight:700}",
-        "ul{background:#fff;border:1px solid #d9ded7;border-radius:6px;padding:14px 14px 14px 30px}",
-        "</style>"
-    )
-}
-
-fn option_f64_json(value: Option<f64>) -> String {
-    value
-        .map(|value| {
-            if value.is_finite() {
-                value.to_string()
-            } else {
-                "null".to_string()
-            }
-        })
-        .unwrap_or_else(|| "null".to_string())
-}
-
-fn option_f64_text(value: Option<f64>) -> String {
-    value
-        .map(|value| value.to_string())
-        .unwrap_or_else(|| "none".to_string())
-}
-
-fn summary_json(summary: Option<WaveformSummary>) -> String {
-    match summary {
-        Some(summary) => format!(
-            concat!(
-                "{{ \"samples\": {}, \"first\": {}, \"last\": {}, \"min\": {}, ",
-                "\"max\": {}, \"avg\": {}, \"pp\": {}, \"rms\": {} }}"
-            ),
-            summary.samples,
-            summary.first,
-            summary.last,
-            summary.min,
-            summary.max,
-            summary.avg,
-            summary.peak_to_peak,
-            summary.rms
-        ),
-        None => "null".to_string(),
-    }
-}
-
-fn summary_text(summary: Option<WaveformSummary>) -> String {
-    match summary {
-        Some(summary) => format!(
-            "samples={} first={} last={} min={} max={} avg={} pp={} rms={}",
-            summary.samples,
-            summary.first,
-            summary.last,
-            summary.min,
-            summary.max,
-            summary.avg,
-            summary.peak_to_peak,
-            summary.rms
-        ),
-        None => "summary unavailable".to_string(),
-    }
-}
-
-fn parameters_text(parameters: &[ParameterOverride]) -> String {
-    if parameters.is_empty() {
-        "none".to_string()
-    } else {
-        parameters
-            .iter()
-            .map(|parameter| format!("{}={}", parameter.name, parameter.value))
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-}
-
-fn junit_seconds(duration_ms: u128) -> String {
-    format!("{:.6}", duration_ms as f64 / 1000.0)
-}
-
-fn xml_escape(input: &str) -> String {
-    let mut escaped = String::with_capacity(input.len());
-    for character in input.chars() {
-        match character {
-            '&' => escaped.push_str("&amp;"),
-            '<' => escaped.push_str("&lt;"),
-            '>' => escaped.push_str("&gt;"),
-            '"' => escaped.push_str("&quot;"),
-            '\'' => escaped.push_str("&apos;"),
-            character => escaped.push(character),
-        }
-    }
-    escaped
-}
-
-fn cdata_escape(input: &str) -> String {
-    input.replace("]]>", "]]]]><![CDATA[>")
 }
 
 #[cfg(test)]
@@ -603,6 +190,35 @@ mod tests {
     }
 
     #[test]
+    fn renders_markdown_report_for_reviews() {
+        let report = VerifyReport {
+            project: "demo | review".to_string(),
+            results: vec![sample_run(
+                "/tmp/demo/runs/rc_fast",
+                false,
+                Some(WaveformSummary {
+                    samples: 2,
+                    first: 0.0,
+                    last: 1.0,
+                    min: 0.0,
+                    max: 1.0,
+                    avg: 0.5,
+                    peak_to_peak: 1.0,
+                    rms: 0.707,
+                }),
+            )],
+        };
+
+        let markdown = report.to_markdown();
+
+        assert!(markdown.contains("# NekoSpice Verification Report"));
+        assert!(markdown.contains("Project: `demo | review`"));
+        assert!(markdown.contains("| Run | Parameters | Check | Message | Summary | Artifacts |"));
+        assert!(markdown.contains("[report](runs/rc_fast/report.html)"));
+        assert!(markdown.contains("samples=2"));
+    }
+
+    #[test]
     fn bench_style_run_dirs_link_directly_to_child_dirs() {
         let report = VerifyReport {
             project: "bench".to_string(),
@@ -610,9 +226,12 @@ mod tests {
         };
 
         let html = report.to_html();
+        let markdown = report.to_markdown();
 
         assert!(html.contains("rc/report.html"));
         assert!(!html.contains("runs/rc/report.html"));
+        assert!(markdown.contains("[report](rc/report.html)"));
+        assert!(!markdown.contains("[report](runs/rc/report.html)"));
     }
 
     fn sample_run(
