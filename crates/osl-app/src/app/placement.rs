@@ -133,8 +133,10 @@ mod tests {
 
     #[test]
     fn placement_mode_starts_and_cancels_from_selected_symbol() {
-        let mut app = NekoSpiceApp::default();
-        app.selected_symbol_id = Some("NekoSpice:R".to_string());
+        let mut app = NekoSpiceApp {
+            selected_symbol_id: Some("NekoSpice:R".to_string()),
+            ..NekoSpiceApp::default()
+        };
 
         app.start_symbol_placement();
 

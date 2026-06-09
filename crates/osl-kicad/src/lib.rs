@@ -17361,7 +17361,7 @@ mod tests {
         assert_close(pin.name_effects().unwrap().font_size.unwrap().height, 1.016);
         assert_eq!(pin.name_effects().unwrap().font_bold, Some(true));
         assert_eq!(pin.name_effects().unwrap().font_italic, Some(true));
-        assert_eq!(pin.name_effects().unwrap().hide, true);
+        assert!(pin.name_effects().unwrap().hide);
         assert_eq!(
             pin.number_effects().unwrap().font_color,
             Some(KicadColor {
@@ -17417,10 +17417,7 @@ mod tests {
             scene.symbols[0].pin_names.as_ref().unwrap().offset.unwrap(),
             2.54,
         );
-        assert_eq!(
-            scene.symbols[0].pins[0].name_effects.as_ref().unwrap().hide,
-            true
-        );
+        assert!(scene.symbols[0].pins[0].name_effects.as_ref().unwrap().hide);
         assert_eq!(
             scene.symbols[0].pins[0]
                 .number_effects

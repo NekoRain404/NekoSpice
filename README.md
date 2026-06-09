@@ -173,6 +173,7 @@ KiCad symbol inheritance via `.kicad_sym` `(extends ...)` is resolved in the Rus
 ```bash
 cargo fmt --check
 cargo test --workspace
+cargo test -p osl-kicad --test kicad_demo_smoke -- --nocapture
 cargo run -p osl-cli -- verify examples/basic_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/basic
 cargo run -p osl-cli -- verify examples/structured_validation.osl.yaml --jobs 3 --output /tmp/nekospice_reports/structured
 cargo run -p osl-cli -- import examples/kicad_import/kicad_rc.cir --output /tmp/nekospice_import/kicad_rc
@@ -214,3 +215,5 @@ bash -lc 'cargo run -p osl-cli -- verify examples/failing_validation.osl.yaml --
 bash -lc 'cargo run -p osl-cli -- model-check examples/vendor_model_issues --output /tmp/nekospice_modelcheck/bad; test $? -eq 2'
 bash -lc 'cargo run -p osl-cli -- model-check examples/pin_mapping/good_opamp.lib --symbol examples/pin_mapping/bad_opamp.asy --output /tmp/nekospice_modelcheck/pinmap_bad; test $? -eq 2'
 ```
+
+`kicad_demo_smoke` is an external interoperability smoke test. It reads representative KiCad demo projects from `kicad-source-mirror-master/demos` when the local KiCad source mirror is present, or from `NEKOSPICE_KICAD_DEMOS` when set. The test opens KiCad `.kicad_pro`, `.kicad_sch`, and local `sym-lib-table` assets, builds Rust-native canvas scenes, and checks that simulation, hierarchy, bus, and large-graphic demo features survive the KiCad-compatible IR. If no demo directory is available, the test skips without adding KiCad sources or demo files to Git.
