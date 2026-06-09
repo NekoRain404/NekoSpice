@@ -56,6 +56,15 @@ impl GuiWaveformSummary {
             .iter()
             .find(|preview| same_signal(&preview.signal, signal))
     }
+
+    pub(crate) fn variable_summary_for_signal(
+        &self,
+        signal: &str,
+    ) -> Option<&GuiWaveformVariableSummary> {
+        self.variables
+            .iter()
+            .find(|variable| same_signal(&variable.name, signal))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +76,7 @@ pub(crate) struct GuiWaveformVariableSummary {
     pub(crate) last: f64,
     pub(crate) min: f64,
     pub(crate) max: f64,
+    pub(crate) avg: f64,
     pub(crate) peak_to_peak: f64,
     pub(crate) rms: f64,
 }
@@ -112,6 +122,7 @@ fn summarize_raw(raw_path: &Path) -> Result<GuiWaveformSummary, String> {
                 last: summary.last,
                 min: summary.min,
                 max: summary.max,
+                avg: summary.avg,
                 peak_to_peak: summary.peak_to_peak,
                 rms: summary.rms,
             })
@@ -239,6 +250,11 @@ Values:
         assert_eq!(summary.variable_count, 2);
         assert_eq!(summary.variables[1].name, "v(out)");
         assert_eq!(summary.variables[1].last, 4.0);
+        assert_eq!(summary.variables[1].avg, 3.0);
+        assert_eq!(
+            summary.variable_summary_for_signal("V(OUT)").unwrap().max,
+            4.0
+        );
         assert_eq!(summary.default_signal_name(), Some("v(out)"));
         assert_eq!(summary.previews.len(), 1);
         assert_eq!(summary.previews[0].source_points, 2);

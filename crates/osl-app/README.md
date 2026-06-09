@@ -16,6 +16,8 @@ search stay in `osl-kicad`.
 - `app/simulation_panel.rs`: simulation directive editor, schematic diagnostics,
   SPICE netlist preview, and ngspice run controls routed through the document
   and simulation adapters.
+- `app/simulation_waveform_panel.rs`: GUI-only waveform result panel for signal
+  selection, compact measurement display, and preview-envelope drawing.
 - `app/schematic_tools/mod.rs`: schematic tool UI, canvas click routing, and GUI calls into the document adapter.
 - `app/schematic_tools/state.rs`: active tool state, pending wire/bus starts, sheet options, and other tool-local inputs.
 - `app/schematic_tools/preview.rs`: transient canvas previews for active schematic drawing tools.
