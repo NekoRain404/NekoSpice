@@ -1,5 +1,5 @@
 use super::NekoSpiceApp;
-use crate::simulation::GuiSimulationRun;
+use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
 use eframe::egui::{self, Color32};
 use osl_core::RunStatus;
 use osl_kicad::{KicadDiagnosticSeverity, KicadSimulationDirective, KicadSimulationDirectiveKind};
@@ -7,13 +7,14 @@ use std::path::Path;
 
 const NETLIST_PREVIEW_LINES: usize = 18;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct SimulationPanelState {
     pub(super) directive_kind: KicadSimulationDirectiveKind,
     pub(super) directive_body: String,
     pub(super) show_netlist: bool,
     pub(super) last_run: Option<GuiSimulationRun>,
     pub(super) last_error: Option<String>,
+    pub(super) active_task: Option<GuiSimulationTask>,
 }
 
 impl Default for SimulationPanelState {
@@ -24,21 +25,30 @@ impl Default for SimulationPanelState {
             show_netlist: true,
             last_run: None,
             last_error: None,
+            active_task: None,
         }
     }
 }
 
 impl NekoSpiceApp {
     pub(super) fn draw_simulation_panel(&mut self, ui: &mut egui::Ui) {
+        self.poll_simulation_task();
         ui.heading("Simulation");
         self.draw_simulation_directive_editor(ui);
 
+        let is_running = self.simulation_panel.active_task.is_some();
         ui.horizontal(|ui| {
             if ui
-                .add_enabled(self.document.is_some(), egui::Button::new("Run ngspice"))
+                .add_enabled(
+                    self.document.is_some() && !is_running,
+                    egui::Button::new("Run ngspice"),
+                )
                 .clicked()
             {
                 self.run_simulation_from_panel();
+            }
+            if is_running {
+                ui.label("Running");
             }
         });
         self.draw_simulation_run_status(ui);
@@ -161,7 +171,29 @@ impl NekoSpiceApp {
             return;
         };
         let runs_root = Path::new("runs").join("gui");
-        match crate::simulation::run_document_with_ngspice(document, &runs_root) {
+        match crate::simulation::GuiSimulationJob::from_document(document, &runs_root) {
+            Ok(job) => {
+                self.simulation_panel.last_run = None;
+                self.simulation_panel.last_error = None;
+                self.simulation_panel.active_task = Some(GuiSimulationTask::spawn_ngspice(job));
+                self.status_message = Some("Simulation started".to_string());
+            }
+            Err(error) => {
+                self.status_message = Some(error.clone());
+                self.simulation_panel.last_error = Some(error);
+            }
+        }
+    }
+
+    fn poll_simulation_task(&mut self) {
+        let Some(task) = &self.simulation_panel.active_task else {
+            return;
+        };
+        let Some(result) = task.try_finish() else {
+            return;
+        };
+        self.simulation_panel.active_task = None;
+        match result {
             Ok(run) => {
                 self.status_message = Some(format!(
                     "Simulation {} in {} ms",
@@ -180,6 +212,9 @@ impl NekoSpiceApp {
     }
 
     fn draw_simulation_run_status(&mut self, ui: &mut egui::Ui) {
+        if self.simulation_panel.active_task.is_some() {
+            ui.label("Background simulation is running");
+        }
         if let Some(error) = &self.simulation_panel.last_error {
             ui.colored_label(severity_color(KicadDiagnosticSeverity::Error), error);
         }

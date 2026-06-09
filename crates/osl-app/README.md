@@ -24,7 +24,8 @@ search stay in `osl-kicad`.
 - `document.rs`: editable KiCad schematic adapter around `KicadSchematicEdit`,
   structured simulation directive updates, check reports, and netlist previews.
 - `simulation.rs`: GUI-facing simulation run adapter that writes the current
-  schematic netlist to a run directory and invokes `osl-sim` backends.
+  schematic netlist to a run directory and invokes `osl-sim` backends on a
+  background worker.
 - `library.rs`: GUI-facing symbol-library table, definition, dependency, and preview adapter around `KicadSymbolLibraryIndex`.
 - `placement_config.rs`: GUI-neutral symbol placement scope (`unit` / `body_style` / pin alternates) shared by preview and document edits.
 - `viewport.rs`: world/screen transforms, zoom, pan, fit-to-scene, and culling bounds.
