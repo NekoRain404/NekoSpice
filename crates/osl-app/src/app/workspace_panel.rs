@@ -5,8 +5,20 @@ use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
 
 impl NekoSpiceApp {
+    pub(super) fn draw_left_context_panel(&mut self, ui: &mut egui::Ui) {
+        match self.active_workspace {
+            StudioWorkspace::Home => self.draw_home_project_context(ui),
+            StudioWorkspace::Schematic
+            | StudioWorkspace::Library
+            | StudioWorkspace::Simulation
+            | StudioWorkspace::Reports
+            | StudioWorkspace::Settings => self.draw_project_sidebar(ui),
+        }
+    }
+
     pub(super) fn draw_right_workspace_panel(&mut self, ui: &mut egui::Ui) {
         match self.active_workspace {
+            StudioWorkspace::Home => self.draw_home_insights_panel(ui),
             StudioWorkspace::Schematic => self.draw_schematic_workspace_panel(ui),
             StudioWorkspace::Library => self.draw_library_browser(ui),
             StudioWorkspace::Simulation => self.draw_simulation_panel(ui),

@@ -7,7 +7,13 @@ use osl_kicad::{KicadCanvasHit, KicadCanvasScene, KicadPoint};
 use std::path::PathBuf;
 
 mod canvas_panel;
+mod center_workspace;
 mod diagnostics_panel;
+mod home_dashboard;
+mod home_insights_panel;
+mod home_project_context;
+mod home_sections;
+mod home_widgets;
 mod localization;
 mod navigation;
 mod navigation_panel;

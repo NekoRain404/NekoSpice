@@ -9,16 +9,29 @@ search stay in `osl-kicad`.
 - `lib.rs`: public crate entry points and shared fixture defaults.
 - `app.rs`: application state, document/library loading, and edit commands.
 - `app/canvas_panel.rs`: canvas widget input, shortcuts, painter routing, and scene loading helper.
-- `app/navigation.rs`: Studio workspace tabs and labels for schematic, library,
-  simulation, report, and settings contexts.
+- `app/center_workspace.rs`: center workspace router. Home owns the dashboard;
+  schematic-oriented workspaces keep using the framed canvas until their own
+  center surfaces are split out.
+- `app/home_dashboard.rs`: Home center workspace composition and high-level
+  dashboard ordering.
+- `app/home_insights_panel.rs`: Home right-side assistant, insights, and
+  shortcut surfaces.
+- `app/home_project_context.rs`: Home left-side project, schematic health, and
+  library scope context cards.
+- `app/home_sections.rs`: Home dashboard sections such as recent projects, quick
+  actions, templates, queue, solver health, measurements, and recommendations.
+- `app/home_widgets.rs`: Home-only responsive layout helpers and small display
+  rows/cards. Shared widgets still belong in `app/widgets.rs`.
+- `app/navigation.rs`: Studio workspace tabs and labels for home, schematic,
+  library, simulation, report, and settings contexts.
 - `app/panels.rs`: Studio shell layout compositor only. It mounts the chrome
   regions and delegates all panel content to focused modules.
 - `app/navigation_panel.rs`: left Studio workspace navigation and renderer /
   solver system summary.
 - `app/project_panel.rs`: active schematic path, project health, selection, and
   edit command sidebar.
-- `app/workspace_panel.rs`: right workspace router for schematic tools,
-  library, simulation, and reports contexts.
+- `app/workspace_panel.rs`: left/right workspace context routers for home,
+  schematic tools, library, simulation, reports, and settings contexts.
 - `app/diagnostics_panel.rs`: reusable document diagnostic summary and scroll
   list for schematic-focused surfaces.
 - `app/studio_toolbar.rs`: top action buttons and the framed canvas mounting

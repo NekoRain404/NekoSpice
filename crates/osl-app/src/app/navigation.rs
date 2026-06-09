@@ -3,6 +3,7 @@ use super::localization::StudioLocale;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) enum StudioWorkspace {
     #[default]
+    Home,
     Schematic,
     Library,
     Simulation,
@@ -11,7 +12,8 @@ pub(super) enum StudioWorkspace {
 }
 
 impl StudioWorkspace {
-    pub(super) const ALL: [Self; 5] = [
+    pub(super) const ALL: [Self; 6] = [
+        Self::Home,
         Self::Schematic,
         Self::Library,
         Self::Simulation,
@@ -21,6 +23,7 @@ impl StudioWorkspace {
 
     pub(super) fn label(self) -> &'static str {
         match self {
+            Self::Home => "Home",
             Self::Schematic => "Schematic",
             Self::Library => "Library",
             Self::Simulation => "Simulation",
@@ -33,6 +36,7 @@ impl StudioWorkspace {
         match locale {
             StudioLocale::English => self.label(),
             StudioLocale::SimplifiedChinese => match self {
+                Self::Home => "首页",
                 Self::Schematic => "原理图",
                 Self::Library => "符号库",
                 Self::Simulation => "仿真",
@@ -44,6 +48,7 @@ impl StudioWorkspace {
 
     pub(super) fn icon(self) -> &'static str {
         match self {
+            Self::Home => "HME",
             Self::Schematic => "SCH",
             Self::Library => "LIB",
             Self::Simulation => "SIM",
@@ -54,6 +59,7 @@ impl StudioWorkspace {
 
     pub(super) fn caption(self) -> &'static str {
         match self {
+            Self::Home => "Project dashboard and engineering shortcuts",
             Self::Schematic => "Edit KiCad-compatible sheets",
             Self::Library => "Browse symbols and placement scope",
             Self::Simulation => "Run ngspice and inspect outputs",
@@ -66,6 +72,7 @@ impl StudioWorkspace {
         match locale {
             StudioLocale::English => self.caption(),
             StudioLocale::SimplifiedChinese => match self {
+                Self::Home => "项目看板和工程快捷入口",
                 Self::Schematic => "编辑兼容 KiCad 的图纸",
                 Self::Library => "浏览符号和放置范围",
                 Self::Simulation => "运行 ngspice 并检查输出",
@@ -83,7 +90,8 @@ mod tests {
 
     #[test]
     fn studio_workspaces_have_stable_labels() {
-        assert_eq!(StudioWorkspace::ALL.len(), 5);
+        assert_eq!(StudioWorkspace::ALL.len(), 6);
+        assert_eq!(StudioWorkspace::default(), StudioWorkspace::Home);
         assert_eq!(StudioWorkspace::Schematic.label(), "Schematic");
         assert_eq!(
             StudioWorkspace::Schematic.localized_label(StudioLocale::SimplifiedChinese),
