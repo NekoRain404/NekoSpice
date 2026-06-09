@@ -159,7 +159,8 @@ impl NekoSpiceApp {
         self.draw_grid(&painter, rect);
 
         if let Some(scene) = &self.scene {
-            self.draw_scene(&painter, rect, scene);
+            let visible_bounds = self.viewport.visible_world_bounds(rect);
+            self.draw_scene(&painter, rect, scene, visible_bounds);
             if let Some(hit) = &self.selected_hit {
                 self.draw_bounds(
                     &painter,
@@ -204,11 +205,23 @@ impl NekoSpiceApp {
         }
     }
 
-    fn draw_scene(&self, painter: &egui::Painter, rect: Rect, scene: &KicadCanvasScene) {
+    fn draw_scene(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        scene: &KicadCanvasScene,
+        visible_bounds: KicadBoundingBox,
+    ) {
         for sheet in &scene.sheets {
+            if !item_visible(sheet.bounds, visible_bounds) {
+                continue;
+            }
             self.draw_sheet(painter, rect, sheet);
         }
         for rule_area in &scene.rule_areas {
+            if !item_visible(rule_area.bounds, visible_bounds) {
+                continue;
+            }
             self.draw_polyline(
                 painter,
                 rect,
@@ -219,9 +232,15 @@ impl NekoSpiceApp {
             );
         }
         for graphic in &scene.graphics {
+            if !item_visible(graphic.bounds(), visible_bounds) {
+                continue;
+            }
             self.draw_graphic(painter, rect, graphic, Color32::from_rgb(90, 90, 90));
         }
         for symbol in &scene.symbols {
+            if !item_visible(symbol.bounds, visible_bounds) {
+                continue;
+            }
             for graphic in &symbol.graphics {
                 self.draw_graphic(painter, rect, graphic, Color32::from_rgb(25, 25, 25));
             }
@@ -247,6 +266,9 @@ impl NekoSpiceApp {
             }
         }
         for wire in &scene.wires {
+            if !item_visible(wire.bounds, visible_bounds) {
+                continue;
+            }
             self.draw_polyline(
                 painter,
                 rect,
@@ -257,6 +279,9 @@ impl NekoSpiceApp {
             );
         }
         for bus in &scene.buses {
+            if !item_visible(bus.bounds, visible_bounds) {
+                continue;
+            }
             self.draw_polyline(
                 painter,
                 rect,
@@ -267,9 +292,15 @@ impl NekoSpiceApp {
             );
         }
         for entry in &scene.bus_entries {
+            if !item_visible(entry.bounds, visible_bounds) {
+                continue;
+            }
             self.draw_bus_entry(painter, rect, entry);
         }
         for label in &scene.directive_labels {
+            if !item_visible(label.bounds, visible_bounds) {
+                continue;
+            }
             if let Some(bounds) = label.bounds {
                 self.draw_bounds(painter, rect, bounds, Color32::from_rgb(180, 95, 35), 1.0);
             }
@@ -285,6 +316,9 @@ impl NekoSpiceApp {
             }
         }
         for label in &scene.labels {
+            if !item_visible(label.bounds, visible_bounds) {
+                continue;
+            }
             if let Some(at) = label.at {
                 painter.text(
                     self.viewport
@@ -297,6 +331,9 @@ impl NekoSpiceApp {
             }
         }
         for text in &scene.text_items {
+            if !item_visible(text.bounds, visible_bounds) {
+                continue;
+            }
             if let Some(at) = text.at {
                 let color = if text.is_spice_directive {
                     Color32::from_rgb(165, 45, 45)
@@ -314,15 +351,24 @@ impl NekoSpiceApp {
             }
         }
         for text_box in &scene.text_boxes {
+            if !item_visible(text_box.bounds, visible_bounds) {
+                continue;
+            }
             if let Some(bounds) = text_box.bounds {
                 self.draw_bounds(painter, rect, bounds, Color32::from_rgb(120, 120, 120), 1.0);
             }
         }
         for junction in &scene.junctions {
+            if !junction.bounds.intersects(visible_bounds) {
+                continue;
+            }
             let center = self.viewport.world_to_screen(rect, junction.at);
             painter.circle_filled(center, 3.0, Color32::from_rgb(0, 150, 72));
         }
         for marker in &scene.no_connects {
+            if !marker.bounds.intersects(visible_bounds) {
+                continue;
+            }
             let center = self.viewport.world_to_screen(rect, marker.at);
             let size = 5.0;
             painter.line_segment(
@@ -572,12 +618,32 @@ impl CanvasViewport {
         let after_screen = self.world_to_screen(rect, before);
         self.pan += screen_point - after_screen;
     }
+
+    fn visible_world_bounds(self, rect: Rect) -> KicadBoundingBox {
+        let top_left = self.screen_to_world(rect, rect.left_top());
+        let bottom_right = self.screen_to_world(rect, rect.right_bottom());
+        KicadBoundingBox {
+            min: KicadPoint {
+                x: top_left.x.min(bottom_right.x),
+                y: top_left.y.min(bottom_right.y),
+            },
+            max: KicadPoint {
+                x: top_left.x.max(bottom_right.x),
+                y: top_left.y.max(bottom_right.y),
+            },
+        }
+    }
 }
 
 pub fn load_canvas_scene(path: &Path) -> Result<KicadCanvasScene, String> {
     read_kicad_schematic_with_libraries(path)
         .map(|schematic| schematic.canvas_scene())
         .map_err(|error| error.to_string())
+}
+
+fn item_visible(bounds: Option<KicadBoundingBox>, visible_bounds: KicadBoundingBox) -> bool {
+    // Scene geometry stays in osl-kicad; the GUI only decides whether an item can affect this viewport.
+    bounds.is_none_or(|bounds| bounds.intersects(visible_bounds))
 }
 
 #[cfg(test)]
@@ -607,5 +673,34 @@ mod tests {
         let roundtrip = viewport.screen_to_world(rect, screen);
         assert!((roundtrip.x - world.x).abs() < 1e-6);
         assert!((roundtrip.y - world.y).abs() < 1e-6);
+    }
+
+    #[test]
+    fn viewport_exposes_visible_world_bounds_for_canvas_culling() {
+        let viewport = CanvasViewport {
+            zoom: 10.0,
+            pan: Vec2::ZERO,
+        };
+        let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(200.0, 100.0));
+        let visible = viewport.visible_world_bounds(rect);
+
+        assert!((visible.min.x + 10.0).abs() < 1e-6);
+        assert!((visible.max.x - 10.0).abs() < 1e-6);
+        assert!((visible.min.y + 5.0).abs() < 1e-6);
+        assert!((visible.max.y - 5.0).abs() < 1e-6);
+        assert!(item_visible(
+            Some(KicadBoundingBox {
+                min: KicadPoint { x: 9.0, y: 4.0 },
+                max: KicadPoint { x: 12.0, y: 6.0 },
+            }),
+            visible
+        ));
+        assert!(!item_visible(
+            Some(KicadBoundingBox {
+                min: KicadPoint { x: 12.0, y: 6.0 },
+                max: KicadPoint { x: 14.0, y: 8.0 },
+            }),
+            visible
+        ));
     }
 }

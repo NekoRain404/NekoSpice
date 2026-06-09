@@ -202,7 +202,7 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 
 当前进展：
 
-- 已新增 `osl-app` / `nekospice` GUI alpha crate，使用 `eframe` 并显式选择 `wgpu` renderer，先复用 Rust-native KiCad canvas scene 和 `KicadCanvasScene::hit_test` 后端实现打开 `.kicad_sch`、基础原理图显示、缩放、平移、fit 和点击选择。后续把当前 egui painter 原型替换为 schematic / waveform 专用 wgpu 批渲染 pipeline。
+- 已新增 `osl-app` / `nekospice` GUI alpha crate，使用 `eframe` 并显式选择 `wgpu` renderer，先复用 Rust-native KiCad canvas scene 和 `KicadCanvasScene::hit_test` 后端实现打开 `.kicad_sch`、基础原理图显示、缩放、平移、fit 和点击选择。GUI 侧只负责视窗与绘制策略，KiCad item bounds / intersection 等几何能力由 `osl-kicad` 暴露并复用；当前已按可见世界 bounds 做 viewport culling，后续把 egui painter 原型替换为 schematic / waveform 专用 wgpu 批渲染 pipeline。
 
 验收标准：
 

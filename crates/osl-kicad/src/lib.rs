@@ -4867,7 +4867,7 @@ impl KicadCanvasGraphic {
         }
     }
 
-    fn bounds(&self) -> Option<KicadBoundingBox> {
+    pub fn bounds(&self) -> Option<KicadBoundingBox> {
         match self {
             Self::Polyline { points, .. } | Self::Bezier { points, .. } => {
                 kicad_points_bounds(points, KICAD_CANVAS_LINE_BOUNDS_PADDING)
@@ -8051,11 +8051,18 @@ impl KicadBoundingBox {
         }
     }
 
-    fn contains(self, point: KicadPoint) -> bool {
+    pub fn contains(self, point: KicadPoint) -> bool {
         point.x >= self.min.x
             && point.x <= self.max.x
             && point.y >= self.min.y
             && point.y <= self.max.y
+    }
+
+    pub fn intersects(self, other: KicadBoundingBox) -> bool {
+        self.min.x <= other.max.x
+            && self.max.x >= other.min.x
+            && self.min.y <= other.max.y
+            && self.max.y >= other.min.y
     }
 
     fn area(self) -> f64 {
@@ -12203,9 +12210,9 @@ fn uuid_from_hashes(left: u64, right: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        KicadAt, KicadCanvasScene, KicadColor, KicadDiagnosticSeverity, KicadGraphic,
-        KicadIndexedSymbolBodyStyle, KicadIndexedSymbolUnit, KicadLabelKind, KicadPoint,
-        KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolBodyStyles,
+        KicadAt, KicadBoundingBox, KicadCanvasScene, KicadColor, KicadDiagnosticSeverity,
+        KicadGraphic, KicadIndexedSymbolBodyStyle, KicadIndexedSymbolUnit, KicadLabelKind,
+        KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolBodyStyles,
         KicadSymbolLibraryIndexQuery, KicadSymbolPlacement, KicadSymbolPower, parse_kicad_project,
         parse_kicad_schematic, parse_kicad_symbol_library, parse_kicad_symbol_library_table,
         parse_sexpr, read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
@@ -12215,6 +12222,23 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::path::Path;
+
+    #[test]
+    fn bounding_boxes_report_intersections() {
+        let bounds = KicadBoundingBox {
+            min: KicadPoint { x: 10.0, y: 20.0 },
+            max: KicadPoint { x: 30.0, y: 40.0 },
+        };
+        assert!(bounds.contains(KicadPoint { x: 20.0, y: 30.0 }));
+        assert!(bounds.intersects(KicadBoundingBox {
+            min: KicadPoint { x: 25.0, y: 35.0 },
+            max: KicadPoint { x: 45.0, y: 55.0 },
+        }));
+        assert!(!bounds.intersects(KicadBoundingBox {
+            min: KicadPoint { x: 31.0, y: 41.0 },
+            max: KicadPoint { x: 45.0, y: 55.0 },
+        }));
+    }
 
     #[test]
     fn parses_kicad_schematic_fixture() {
