@@ -13,6 +13,8 @@ search stay in `osl-kicad`.
 - `app/placement.rs`: symbol placement mode state, repeat placement, and post-edit selection refresh.
 - `app/runtime.rs`: native window options, wgpu renderer selection, and initial egui style.
 - `app/selection_properties.rs`: selected symbol property editor state sync and `KicadSchematicEdit::{SetSymbolProperty, ConfigureSymbol}` routing.
+- `app/simulation_artifacts_panel.rs`: run artifact drilldown for GUI
+  simulation results, including artifact kind, file name, and size.
 - `app/simulation_panel.rs`: simulation directive editor, schematic diagnostics,
   SPICE netlist preview, and ngspice run controls routed through the document
   and simulation adapters.
@@ -50,5 +52,7 @@ search stay in `osl-kicad`.
   widgets should not invoke simulator processes directly.
 - Run artifact export, artifact classification, and refreshed `run.json`
   metadata should stay in `osl-sim` so CLI and GUI runs remain consistent.
+  Single-run `report.html` generation belongs to the same shared artifact
+  finalizer.
 - Waveform panels should consume precomputed GUI DTOs from `waveform_summary.rs`
   so drawing code does not parse raw files or scan full waveform arrays.

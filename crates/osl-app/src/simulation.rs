@@ -223,12 +223,19 @@ Values:
         assert_eq!(summary.variables[1].name, "v(out)");
         assert!(run.output_dir.join("waveform.csv").is_file());
         assert!(run.output_dir.join("waveform-summary.json").is_file());
+        assert!(run.output_dir.join("report.html").is_file());
         assert!(run.output_dir.join("run.json").is_file());
         assert!(
             run.metadata
                 .artifacts
                 .iter()
                 .any(|artifact| artifact.path == "waveform-summary.json")
+        );
+        assert!(
+            run.metadata
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.path == "report.html" && artifact.kind == "report")
         );
         let _ = fs::remove_dir_all(runs_root);
     }
@@ -255,6 +262,7 @@ Values:
         assert!(run.output_dir.join("schematic.cir").is_file());
         assert!(matches!(run.waveform, GuiWaveformSummaryState::Ready(_)));
         assert!(run.output_dir.join("waveform.csv").is_file());
+        assert!(run.output_dir.join("report.html").is_file());
         let _ = fs::remove_dir_all(runs_root);
     }
 }

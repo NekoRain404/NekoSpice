@@ -12,6 +12,7 @@ mod placement;
 mod runtime;
 mod schematic_tools;
 mod selection_properties;
+mod simulation_artifacts_panel;
 mod simulation_panel;
 mod simulation_waveform_panel;
 mod symbol_browser;

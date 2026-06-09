@@ -12,7 +12,7 @@ use osl_kicad::{
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
 use osl_render::render_kicad_scene_svg;
-use osl_sim::{NgspiceCliBackend, SimulatorBackend, finalize_run_artifacts, refresh_run_artifacts};
+use osl_sim::{NgspiceCliBackend, SimulatorBackend, finalize_run_artifacts};
 use osl_waveform::{
     MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
 };
@@ -1550,46 +1550,8 @@ impl VerifyReport {
     }
 }
 
-fn write_single_run_report(output_dir: &Path, metadata: &RunMetadata) -> OslResult<()> {
-    let artifact_items = metadata
-        .artifacts
-        .iter()
-        .map(|artifact| {
-            format!(
-                "<li><a href=\"{}\"><code>{}</code></a> <span>{}</span></li>",
-                html_escape(&artifact.path),
-                html_escape(&artifact.path),
-                html_escape(&artifact.kind)
-            )
-        })
-        .collect::<String>();
-    let html = format!(
-        concat!(
-            "<!doctype html><html><head><meta charset=\"utf-8\">",
-            "<title>NekoSpice Run Report</title>{}</head><body>",
-            "<main><h1>{}</h1>",
-            "<section class=\"summary\"><strong>Status:</strong> {} <strong>Duration:</strong> {} ms</section>",
-            "<dl><dt>Backend</dt><dd>{}</dd><dt>Netlist</dt><dd>{}</dd><dt>Output</dt><dd>{}</dd></dl>",
-            "<h2>Artifacts</h2><ul>{}</ul>",
-            "</main></body></html>\n"
-        ),
-        report_css(),
-        html_escape(&metadata.run_id),
-        html_escape(metadata.status.as_str()),
-        metadata.duration_ms,
-        html_escape(&metadata.backend),
-        html_escape(&metadata.source_netlist),
-        html_escape(&metadata.output_dir),
-        artifact_items
-    );
-    write_text(&output_dir.join("report.html"), &html)
-}
-
 fn finalize_run_output(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
-    finalize_run_artifacts(output_dir, metadata)?;
-    write_single_run_report(output_dir, metadata)?;
-    refresh_run_artifacts(output_dir, metadata)?;
-    write_text(&output_dir.join("run.json"), &metadata.to_json())
+    finalize_run_artifacts(output_dir, metadata)
 }
 
 fn report_css() -> &'static str {
