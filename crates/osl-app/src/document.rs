@@ -1,7 +1,7 @@
 use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSchematic,
-    KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolDef,
+    KicadSchematicEdit, KicadSheetPin, KicadSimulationDirectiveKind, KicadSize, KicadSymbolDef,
     read_kicad_schematic_with_libraries, write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
@@ -165,6 +165,20 @@ impl KicadGuiDocument {
     ) -> Result<KicadEditSummary, String> {
         self.apply_edit(KicadSchematicEdit::AddText {
             text,
+            at,
+            uuid: None,
+        })
+    }
+
+    pub(crate) fn set_simulation_directive(
+        &mut self,
+        kind: KicadSimulationDirectiveKind,
+        body: String,
+        at: Option<KicadAt>,
+    ) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::SetSimulationDirective {
+            kind,
+            body,
             at,
             uuid: None,
         })
@@ -474,6 +488,17 @@ mod tests {
             )
             .unwrap();
         document
+            .set_simulation_directive(
+                osl_kicad::KicadSimulationDirectiveKind::Tran,
+                "2u 2m".to_string(),
+                Some(KicadAt {
+                    x: 45.72,
+                    y: 40.64,
+                    rotation: 0.0,
+                }),
+            )
+            .unwrap();
+        document
             .add_junction(KicadPoint { x: 101.6, y: 50.8 })
             .unwrap();
         document
@@ -541,6 +566,12 @@ mod tests {
                 .text_items
                 .iter()
                 .any(|text| text.text == ".save v(out)")
+        );
+        assert!(
+            scene
+                .text_items
+                .iter()
+                .any(|text| text.text == ".tran 2u 2m")
         );
         assert!(scene.junctions.iter().any(|junction| {
             (junction.at.x - 101.6).abs() < 1e-6 && (junction.at.y - 50.8).abs() < 1e-6

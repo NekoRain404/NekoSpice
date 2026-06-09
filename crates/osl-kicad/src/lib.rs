@@ -21,6 +21,7 @@ mod schematic_io;
 mod schematic_summary;
 mod sexpr;
 mod sheet;
+mod simulation;
 mod spice_export;
 mod style;
 mod symbol_library;
@@ -70,6 +71,9 @@ pub use schematic_io::{
 };
 pub use sexpr::{Sexp, parse_sexpr};
 pub use sheet::{KicadSheet, KicadSheetPin};
+pub use simulation::{
+    KicadSimulationDirective, KicadSimulationDirectiveKind, KicadSimulationDirectiveUpdate,
+};
 pub use style::{KicadColor, KicadFill, KicadMargins, KicadStroke, KicadTextEffects};
 pub use symbol_library::{
     KicadSymbolLibrary, KicadSymbolLibraryTable, KicadSymbolLibraryTableRow,
@@ -102,7 +106,8 @@ use osl_core::{OslError, OslResult, read_text, write_text};
 use pins::{compare_pin_numbers, kicad_pin_alternate_value, kicad_pin_display_value};
 use sexpr::{child, format_number, list_value};
 use sheet::sheet_properties;
-use spice_export::{is_spice_analysis_directive, spice_primitive_for_device};
+use simulation::is_spice_analysis_directive_text;
+use spice_export::spice_primitive_for_device;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -247,6 +252,17 @@ impl KicadSchematic {
                 uuid,
             } => self.add_sheet(&name, &file, at, size, pins, uuid),
             KicadSchematicEdit::AddText { text, at, uuid } => self.add_text(text, at, uuid),
+            KicadSchematicEdit::SetSimulationDirective {
+                kind,
+                body,
+                at,
+                uuid,
+            } => self.set_simulation_directive(KicadSimulationDirectiveUpdate {
+                kind,
+                body,
+                at,
+                uuid,
+            }),
         }
     }
 
@@ -1705,7 +1721,7 @@ impl KicadSchematic {
         }
         if !directives
             .iter()
-            .any(|directive| is_spice_analysis_directive(&directive.text))
+            .any(|directive| is_spice_analysis_directive_text(&directive.text))
         {
             diagnostics.push(kicad_schematic_diagnostic(
                 KicadDiagnosticSeverity::Warning,
@@ -1734,7 +1750,12 @@ impl KicadSchematic {
             })
     }
 
-    fn edit_uuid(&self, uuid: Option<String>, namespace: &str, payload: &str) -> OslResult<String> {
+    pub(crate) fn edit_uuid(
+        &self,
+        uuid: Option<String>,
+        namespace: &str,
+        payload: &str,
+    ) -> OslResult<String> {
         self.edit_uuid_excluding(uuid, namespace, payload, &BTreeSet::new())
     }
 
@@ -1771,7 +1792,7 @@ impl KicadSchematic {
         unreachable!("unbounded UUID search should always find a free candidate")
     }
 
-    fn used_uuids(&self) -> BTreeSet<String> {
+    pub(crate) fn used_uuids(&self) -> BTreeSet<String> {
         let mut uuids = BTreeSet::new();
         if let Some(uuid) = &self.uuid {
             uuids.insert(uuid.clone());
@@ -2178,12 +2199,12 @@ mod tests {
     use super::{
         KicadAt, KicadBoundingBox, KicadCanvasScene, KicadColor, KicadDiagnosticSeverity,
         KicadGraphic, KicadIndexedSymbolBodyStyle, KicadIndexedSymbolUnit, KicadLabelKind,
-        KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolBodyStyles,
-        KicadSymbolLibraryIndexQuery, KicadSymbolPlacement, KicadSymbolPower, parse_kicad_project,
-        parse_kicad_schematic, parse_kicad_symbol_library, parse_kicad_symbol_library_table,
-        parse_sexpr, read_kicad_project, read_kicad_schematic, read_kicad_schematic_with_libraries,
-        read_kicad_symbol_library, read_kicad_symbol_library_index,
-        read_kicad_symbol_library_table,
+        KicadPoint, KicadSchematicEdit, KicadSheetPin, KicadSimulationDirectiveKind, KicadSize,
+        KicadSymbolBodyStyles, KicadSymbolLibraryIndexQuery, KicadSymbolPlacement,
+        KicadSymbolPower, parse_kicad_project, parse_kicad_schematic, parse_kicad_symbol_library,
+        parse_kicad_symbol_library_table, parse_sexpr, read_kicad_project, read_kicad_schematic,
+        read_kicad_schematic_with_libraries, read_kicad_symbol_library,
+        read_kicad_symbol_library_index, read_kicad_symbol_library_table,
     };
     use std::collections::BTreeMap;
     use std::fs;
@@ -5402,6 +5423,62 @@ mod tests {
                 .iter()
                 .any(|directive| directive.text == ".save v(sense)")
         );
+    }
+
+    #[test]
+    fn sets_structured_simulation_directives_and_roundtrips() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let mut schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::SetSimulationDirective {
+                kind: KicadSimulationDirectiveKind::Tran,
+                body: "2u 2m".to_string(),
+                at: Some(KicadAt {
+                    x: 30.48,
+                    y: 20.32,
+                    rotation: 0.0,
+                }),
+                uuid: Some("aaaaaaaa-0000-4000-8000-000000000001".to_string()),
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::SetSimulationDirective {
+                kind: KicadSimulationDirectiveKind::Save,
+                body: "v(out)".to_string(),
+                at: Some(KicadAt {
+                    x: 30.48,
+                    y: 25.4,
+                    rotation: 0.0,
+                }),
+                uuid: Some("aaaaaaaa-0000-4000-8000-000000000002".to_string()),
+            })
+            .unwrap();
+
+        let directives = schematic.simulation_directives();
+        assert!(directives.iter().any(|directive| {
+            directive.kind == KicadSimulationDirectiveKind::Tran
+                && directive.text == ".tran 2u 2m"
+                && directive.uuid.as_deref() == Some("77777777-7777-7777-7777-777777777777")
+        }));
+        assert!(directives.iter().any(|directive| {
+            directive.kind == KicadSimulationDirectiveKind::Save
+                && directive.text == ".save v(out)"
+                && directive.uuid.as_deref() == Some("aaaaaaaa-0000-4000-8000-000000000002")
+        }));
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(text \".tran 2u 2m\""));
+        assert!(exported.contains("(text \".save v(out)\""));
+        let reparsed = parse_kicad_schematic(&exported, "simulation_directives.kicad_sch").unwrap();
+        assert!(reparsed.simulation_directives().iter().any(|directive| {
+            directive.kind == KicadSimulationDirectiveKind::Save && directive.text == ".save v(out)"
+        }));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use crate::{
     KicadAt, KicadGraphic, KicadLabelKind, KicadPoint, KicadProperty, KicadSheet, KicadSheetPin,
-    KicadSize, KicadSymbolDef, KicadTable, coordinate_key, format_number,
+    KicadSimulationDirectiveKind, KicadSize, KicadSymbolDef, KicadTable, coordinate_key,
+    format_number,
 };
 use osl_core::{OslError, OslResult};
 use std::collections::BTreeMap;
@@ -81,6 +82,12 @@ pub enum KicadSchematicEdit {
     AddText {
         text: String,
         at: KicadAt,
+        uuid: Option<String>,
+    },
+    SetSimulationDirective {
+        kind: KicadSimulationDirectiveKind,
+        body: String,
+        at: Option<KicadAt>,
         uuid: Option<String>,
     },
 }

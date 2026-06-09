@@ -1,11 +1,12 @@
 use crate::connectivity::normalize_net_name;
 use crate::diagnostics::kicad_schematic_diagnostic;
+use crate::simulation::is_spice_analysis_directive_text;
 use crate::symbols::symbol_ordered_pins;
 use crate::transform::transform_symbol_point;
 use crate::{
     KicadDiagnosticSeverity, KicadHierarchyNetlist, KicadNetGraph, KicadSchematic,
     KicadSchematicCheckReport, KicadSchematicDiagnostic, KicadSheet, KicadSymbolInstance,
-    KicadTextItem, read_kicad_schematic_with_libraries,
+    read_kicad_schematic_with_libraries,
 };
 use osl_core::OslResult;
 use std::collections::{BTreeMap, BTreeSet};
@@ -91,7 +92,7 @@ impl KicadSchematic {
         let has_analysis_directive = export
             .directives
             .iter()
-            .any(|directive| is_spice_analysis_directive(directive));
+            .any(|directive| is_spice_analysis_directive_text(directive));
         let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
         lines.extend(export.includes);
         lines.extend(export.components);
@@ -119,13 +120,6 @@ impl KicadSchematic {
             netlist: format!("{}\n", lines.join("\n")),
             diagnostics,
         })
-    }
-
-    pub fn spice_directives(&self) -> Vec<&KicadTextItem> {
-        self.text_items
-            .iter()
-            .filter(|item| item.text.trim_start().starts_with('.'))
-            .collect()
     }
 
     pub fn spice_include_directives(&self) -> Vec<String> {
@@ -544,14 +538,6 @@ fn is_hierarchy_root_nonfatal_diagnostic(
         "hierarchical-sheet-unsupported" | "simulation-disabled-sheet"
     ) || (diagnostic.code == "missing-spice-directive" && has_spice_directive)
         || (diagnostic.code == "missing-analysis-directive" && has_analysis_directive)
-}
-
-pub(crate) fn is_spice_analysis_directive(text: &str) -> bool {
-    let text = text.trim_start().to_ascii_lowercase();
-    text.starts_with(".tran")
-        || text.starts_with(".ac")
-        || text.starts_with(".dc")
-        || text.starts_with(".op")
 }
 
 fn scoped_net_name(scope: &str, net: &str, aliases: &BTreeMap<String, String>) -> String {

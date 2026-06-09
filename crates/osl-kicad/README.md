@@ -17,9 +17,12 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
   metadata/style/count aggregation helpers.
 - `schematic_io.rs` owns top-level `.kicad_sch` read/write entry points, root
   S-expression parsing, and schematic-level writer orchestration.
+- `simulation.rs` owns structured SPICE/simulation directive discovery,
+  directive kind classification, directive text normalization, and the
+  schematic edit helper for KiCad-compatible simulation text items.
 - `spice_export.rs` owns schematic-to-SPICE export, hierarchy expansion,
-  SPICE directive/include collection, symbol-to-device mapping, and hierarchy
-  net alias scoping.
+  SPICE include collection, symbol-to-device mapping, and hierarchy net alias
+  scoping.
 - `style.rs` owns reusable KiCad stroke/fill/color/text-effects/margins IR,
   default text effects, style parse/write helpers, and style JSON projection
   helpers shared by schematic, symbol, canvas, and renderer paths.

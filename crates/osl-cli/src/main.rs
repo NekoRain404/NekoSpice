@@ -4,10 +4,10 @@ use osl_core::{
 };
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
-    KicadSize, KicadSymbolDef, KicadSymbolLibraryIndexQuery, normalize_symbol_mirror,
-    read_kicad_project, read_kicad_schematic_with_libraries, read_kicad_symbol_library,
-    read_kicad_symbol_library_index, read_kicad_symbol_library_table, write_kicad_schematic,
-    write_kicad_symbol_library,
+    KicadSimulationDirectiveKind, KicadSize, KicadSymbolDef, KicadSymbolLibraryIndexQuery,
+    normalize_symbol_mirror, read_kicad_project, read_kicad_schematic_with_libraries,
+    read_kicad_symbol_library, read_kicad_symbol_library_index, read_kicad_symbol_library_table,
+    write_kicad_schematic, write_kicad_symbol_library,
 };
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
@@ -95,6 +95,7 @@ Usage:
       move-symbol:<reference>:<x,y>[:rotation]
       set-property:<reference>:<name>=<value>[:x,y[,rotation]]
       place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]
+      set-simulation-directive:<kind>:<body>[:x,y[,rotation]][:uuid=<uuid>]
   osl kicad-render <file.kicad_sch-or-file.kicad_sym> [--symbol <name>] [--unit <n>] [--body-style <n>] --output <file.svg>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
   osl report <run-or-verify-dir>
@@ -1836,6 +1837,7 @@ fn parse_kicad_edit_op(
         }
         "add-sheet" => parse_kicad_add_sheet_edit(payload),
         "add-text" => parse_kicad_add_text_edit(payload),
+        "set-simulation-directive" => parse_kicad_set_simulation_directive_edit(payload),
         _ => Err(OslError::InvalidInput(format!(
             "unsupported kicad-edit op '{name}'"
         ))),
@@ -2078,6 +2080,30 @@ fn parse_kicad_add_text_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
     Ok(KicadSchematicEdit::AddText {
         text: text.to_string(),
         at: parse_kicad_at(at, "text position")?,
+        uuid,
+    })
+}
+
+fn parse_kicad_set_simulation_directive_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let (payload, uuid) = split_payload_uuid(payload);
+    let (kind, rest) = payload.split_once(':').ok_or_else(|| {
+        OslError::InvalidInput(
+            "set-simulation-directive expects set-simulation-directive:<kind>:<body>[:x,y[,rotation]]"
+                .to_string(),
+        )
+    })?;
+    let kind = kind.parse::<KicadSimulationDirectiveKind>()?;
+    let (body, at) = match rest.rsplit_once(':') {
+        Some((body, at)) => match parse_kicad_at(at, "simulation directive position") {
+            Ok(at) => (body, Some(at)),
+            Err(_) => (rest, None),
+        },
+        None => (rest, None),
+    };
+    Ok(KicadSchematicEdit::SetSimulationDirective {
+        kind,
+        body: body.to_string(),
+        at,
         uuid,
     })
 }
@@ -2579,7 +2605,10 @@ mod tests {
         SweepDimension, VerifyConfig, VerifyRun, flag_value, has_flag, parse_kicad_edit_ops,
         parse_kicad_point, parse_number, parse_positive_u32, positionals,
     };
-    use osl_kicad::{KicadLabelKind, KicadSchematicEdit, parse_kicad_symbol_library};
+    use osl_kicad::{
+        KicadLabelKind, KicadSchematicEdit, KicadSimulationDirectiveKind,
+        parse_kicad_symbol_library,
+    };
     use std::path::PathBuf;
 
     #[test]
@@ -2632,6 +2661,7 @@ mod tests {
             "add-junction:88.9,45.72",
             "add-no-connect:101.6,45.72",
             "add-global-label:sense:88.9,45.72",
+            "set-simulation-directive:tran:2u 2m:30.48,20.32:uuid=aaaaaaaa-0000-4000-8000-000000000001",
             "delete-item:22222222-2222-2222-2222-222222222222",
         ]
         .iter()
@@ -2650,12 +2680,13 @@ mod tests {
                 "add-junction:88.9,45.72",
                 "add-no-connect:101.6,45.72",
                 "add-global-label:sense:88.9,45.72",
+                "set-simulation-directive:tran:2u 2m:30.48,20.32:uuid=aaaaaaaa-0000-4000-8000-000000000001",
                 "delete-item:22222222-2222-2222-2222-222222222222",
             ]
         );
 
         let edits = parse_kicad_edit_ops(&args, &[]).unwrap();
-        assert_eq!(edits.len(), 9);
+        assert_eq!(edits.len(), 10);
         match &edits[0] {
             KicadSchematicEdit::MoveSymbol { reference, to, .. } => {
                 assert_eq!(reference, "R1");
@@ -2710,6 +2741,23 @@ mod tests {
             edit => panic!("expected add-label edit, got {edit:?}"),
         }
         match &edits[8] {
+            KicadSchematicEdit::SetSimulationDirective {
+                kind,
+                body,
+                at,
+                uuid,
+            } => {
+                assert_eq!(*kind, KicadSimulationDirectiveKind::Tran);
+                assert_eq!(body, "2u 2m");
+                assert_close(at.unwrap().x, 30.48);
+                assert_eq!(
+                    uuid.as_deref(),
+                    Some("aaaaaaaa-0000-4000-8000-000000000001")
+                );
+            }
+            edit => panic!("expected set-simulation-directive edit, got {edit:?}"),
+        }
+        match &edits[9] {
             KicadSchematicEdit::DeleteItem { uuid } => {
                 assert_eq!(uuid, "22222222-2222-2222-2222-222222222222");
             }
