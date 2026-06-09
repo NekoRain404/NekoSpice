@@ -772,6 +772,9 @@ impl KicadSchematic {
             }
             return Ok(move_summary("table", uuid));
         }
+        if move_table_cell_by_uuid(&mut self.tables, uuid, delta) {
+            return Ok(move_summary("table-cell", uuid));
+        }
         if self
             .groups
             .iter()
@@ -847,6 +850,9 @@ impl KicadSchematic {
         }
         if remove_by_uuid(&mut self.tables, uuid, |table| table.uuid.as_deref()) {
             return Ok(delete_summary("table", uuid));
+        }
+        if remove_table_cell_by_uuid(&mut self.tables, uuid) {
+            return Ok(delete_summary("table-cell", uuid));
         }
         if remove_by_uuid(&mut self.groups, uuid, |group| group.uuid.as_deref()) {
             return Ok(delete_summary("group", uuid));
@@ -3309,6 +3315,29 @@ fn remove_by_uuid<T>(
     } else {
         false
     }
+}
+
+fn remove_table_cell_by_uuid(tables: &mut [KicadTable], uuid: &str) -> bool {
+    for table in tables {
+        if remove_by_uuid(&mut table.cells, uuid, |cell| cell.uuid.as_deref()) {
+            return true;
+        }
+    }
+    false
+}
+
+fn move_table_cell_by_uuid(tables: &mut [KicadTable], uuid: &str, delta: KicadPoint) -> bool {
+    for table in tables {
+        if let Some(cell) = table
+            .cells
+            .iter_mut()
+            .find(|cell| cell.uuid.as_deref() == Some(uuid))
+        {
+            translate_optional_at(&mut cell.at, delta);
+            return true;
+        }
+    }
+    false
 }
 
 fn translate_point(point: &mut KicadPoint, delta: KicadPoint) {
@@ -15224,6 +15253,76 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.to_string().contains("was not found"));
+    }
+
+    #[test]
+    fn edits_kicad_table_cells_by_uuid_and_roundtrips() {
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (table
+    (column_count 2)
+    (uuid "67676767-6767-4767-8767-676767676767")
+    (column_widths 20 20)
+    (row_heights 5)
+    (cells
+      (table_cell "Move me"
+        (at 10 10 45)
+        (size 20 5)
+        (uuid "68686868-6868-4868-8868-686868686868")
+      )
+      (table_cell "Delete me"
+        (at 30 10 0)
+        (size 20 5)
+        (uuid "69696969-6969-4969-8969-696969696969")
+      )
+    )
+  )
+)"#,
+            "table_cell_edits.kicad_sch",
+        )
+        .unwrap();
+
+        let move_summary = schematic
+            .apply_edit(KicadSchematicEdit::MoveItem {
+                uuid: "68686868-6868-4868-8868-686868686868".to_string(),
+                delta: KicadPoint { x: 2.54, y: -1.27 },
+            })
+            .unwrap();
+        assert_eq!(move_summary.operation, "move-table-cell");
+        assert_close(schematic.tables[0].cells[0].at.unwrap().x, 12.54);
+        assert_close(schematic.tables[0].cells[0].at.unwrap().y, 8.73);
+        assert_close(schematic.tables[0].cells[1].at.unwrap().x, 30.0);
+
+        let delete_summary = schematic
+            .apply_edit(KicadSchematicEdit::DeleteItem {
+                uuid: "69696969-6969-4969-8969-696969696969".to_string(),
+            })
+            .unwrap();
+        assert_eq!(delete_summary.operation, "delete-table-cell");
+        assert_eq!(schematic.tables.len(), 1);
+        assert_eq!(schematic.tables[0].cells.len(), 1);
+        assert_eq!(schematic.tables[0].cells[0].text, "Move me");
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(table"));
+        assert!(exported.contains("(table_cell \"Move me\""));
+        assert!(exported.contains("(at 12.54 8.73 45)"));
+        assert!(!exported.contains("Delete me"));
+        assert!(!exported.contains("69696969-6969-4969-8969-696969696969"));
+        let reparsed =
+            parse_kicad_schematic(&exported, "table_cell_edits_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.tables.len(), 1);
+        assert_eq!(reparsed.tables[0].cells.len(), 1);
+        assert_eq!(
+            reparsed.tables[0].cells[0].uuid.as_deref(),
+            Some("68686868-6868-4868-8868-686868686868")
+        );
+        assert_close(reparsed.tables[0].cells[0].at.unwrap().x, 12.54);
+        assert_eq!(reparsed.canvas_scene().tables[0].cells.len(), 1);
     }
 
     #[test]
