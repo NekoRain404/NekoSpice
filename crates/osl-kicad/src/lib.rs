@@ -4236,32 +4236,44 @@ impl KicadCanvasScene {
             );
         }
         for wire in &self.wires {
-            push_canvas_hit(
+            push_canvas_polyline_hit(
                 &mut hits,
-                "wire",
-                wire.uuid.clone(),
-                "wire".to_string(),
-                wire.bounds,
+                KicadCanvasPolylineHit {
+                    kind: "wire",
+                    uuid: wire.uuid.clone(),
+                    label: "wire".to_string(),
+                    bounds: wire.bounds,
+                    points: &wire.points,
+                    stroke: wire.stroke.as_ref(),
+                },
                 point,
             );
         }
         for bus in &self.buses {
-            push_canvas_hit(
+            push_canvas_polyline_hit(
                 &mut hits,
-                "bus",
-                bus.uuid.clone(),
-                "bus".to_string(),
-                bus.bounds,
+                KicadCanvasPolylineHit {
+                    kind: "bus",
+                    uuid: bus.uuid.clone(),
+                    label: "bus".to_string(),
+                    bounds: bus.bounds,
+                    points: &bus.points,
+                    stroke: bus.stroke.as_ref(),
+                },
                 point,
             );
         }
         for entry in &self.bus_entries {
-            push_canvas_hit(
+            push_canvas_polyline_hit(
                 &mut hits,
-                "bus-entry",
-                entry.uuid.clone(),
-                "bus-entry".to_string(),
-                entry.bounds,
+                KicadCanvasPolylineHit {
+                    kind: "bus-entry",
+                    uuid: entry.uuid.clone(),
+                    label: "bus-entry".to_string(),
+                    bounds: entry.bounds,
+                    points: &[entry.at, entry.end()],
+                    stroke: entry.stroke.as_ref(),
+                },
                 point,
             );
         }
@@ -5191,6 +5203,33 @@ fn push_canvas_hit(
             kind: kind.to_string(),
             uuid,
             label,
+            bounds,
+        });
+    }
+}
+
+struct KicadCanvasPolylineHit<'a> {
+    kind: &'a str,
+    uuid: Option<String>,
+    label: String,
+    bounds: Option<KicadBoundingBox>,
+    points: &'a [KicadPoint],
+    stroke: Option<&'a KicadStroke>,
+}
+
+fn push_canvas_polyline_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    item: KicadCanvasPolylineHit<'_>,
+    point: KicadPoint,
+) {
+    let Some(bounds) = item.bounds else {
+        return;
+    };
+    if bounds.contains(point) && kicad_polyline_hits_point(item.points, item.stroke, point) {
+        hits.push(KicadCanvasHit {
+            kind: item.kind.to_string(),
+            uuid: item.uuid,
+            label: item.label,
             bounds,
         });
     }
@@ -7799,6 +7838,52 @@ fn kicad_points_bounds(points: &[KicadPoint], padding: f64) -> Option<KicadBound
         bounds.include(*point);
     }
     bounds.finish().map(|bounds| bounds.padded(padding))
+}
+
+fn kicad_polyline_hits_point(
+    points: &[KicadPoint],
+    stroke: Option<&KicadStroke>,
+    point: KicadPoint,
+) -> bool {
+    if points.is_empty() {
+        return false;
+    }
+    let tolerance = kicad_stroke_hit_tolerance(stroke);
+    if points.len() == 1 {
+        return kicad_point_distance(points[0], point) <= tolerance;
+    }
+    points
+        .windows(2)
+        .any(|segment| kicad_point_segment_distance(point, segment[0], segment[1]) <= tolerance)
+}
+
+fn kicad_stroke_hit_tolerance(stroke: Option<&KicadStroke>) -> f64 {
+    let stroke_radius = stroke.and_then(|stroke| stroke.width).unwrap_or(0.0).abs() / 2.0;
+    KICAD_CANVAS_LINE_BOUNDS_PADDING.max(stroke_radius)
+}
+
+fn kicad_point_distance(left: KicadPoint, right: KicadPoint) -> f64 {
+    let dx = left.x - right.x;
+    let dy = left.y - right.y;
+    (dx * dx + dy * dy).sqrt()
+}
+
+fn kicad_point_segment_distance(point: KicadPoint, start: KicadPoint, end: KicadPoint) -> f64 {
+    let segment_x = end.x - start.x;
+    let segment_y = end.y - start.y;
+    let segment_len_sq = segment_x * segment_x + segment_y * segment_y;
+    if segment_len_sq <= f64::EPSILON {
+        return kicad_point_distance(point, start);
+    }
+
+    let projection =
+        ((point.x - start.x) * segment_x + (point.y - start.y) * segment_y) / segment_len_sq;
+    let projection = projection.clamp(0.0, 1.0);
+    let closest = KicadPoint {
+        x: start.x + projection * segment_x,
+        y: start.y + projection * segment_y,
+    };
+    kicad_point_distance(point, closest)
 }
 
 fn kicad_at_bounds(at: Option<KicadAt>, padding: f64) -> Option<KicadBoundingBox> {
@@ -14999,6 +15084,45 @@ mod tests {
             .hit_test(KicadPoint { x: 10.0, y: 10.0 });
         assert_eq!(empty_report.hit_count, 0);
         assert!(empty_report.hits.is_empty());
+    }
+
+    #[test]
+    fn hit_tests_line_items_by_segment_distance() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-1111-1111-111111111111")
+  (paper "A4")
+  (wire (pts (xy 10 10) (xy 30 10)) (stroke (width 0) (type default)) (uuid "22222222-2222-2222-2222-222222222222"))
+  (bus (pts (xy 10 20) (xy 30 20)) (stroke (width 0) (type default)) (uuid "33333333-3333-3333-3333-333333333333"))
+  (bus_entry (at 30 20) (size 2.54 -2.54) (stroke (width 0) (type default)) (uuid "44444444-4444-4444-4444-444444444444"))
+)"#,
+            "line_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+
+        let wire_hit = scene.hit_test(KicadPoint { x: 20.0, y: 10.4 });
+        assert!(wire_hit.hits.iter().any(|hit| hit.kind == "wire"
+            && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222")));
+
+        let wire_miss_inside_bounds = scene.hit_test(KicadPoint { x: 20.0, y: 10.7 });
+        assert!(
+            !wire_miss_inside_bounds
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "wire"
+                    && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222"))
+        );
+
+        let bus_hit = scene.hit_test(KicadPoint { x: 20.0, y: 20.4 });
+        assert!(bus_hit.hits.iter().any(|hit| hit.kind == "bus"
+            && hit.uuid.as_deref() == Some("33333333-3333-3333-3333-333333333333")));
+
+        let entry_hit = scene.hit_test(KicadPoint { x: 31.27, y: 18.73 });
+        assert!(entry_hit.hits.iter().any(|hit| hit.kind == "bus-entry"
+            && hit.uuid.as_deref() == Some("44444444-4444-4444-4444-444444444444")));
     }
 
     #[test]
