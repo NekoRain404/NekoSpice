@@ -4301,14 +4301,7 @@ impl KicadCanvasScene {
             );
         }
         for label in &self.directive_labels {
-            push_canvas_hit(
-                &mut hits,
-                "directive-label",
-                label.uuid.clone(),
-                label.text.clone(),
-                label.bounds,
-                point,
-            );
+            push_canvas_directive_label_hit(&mut hits, label, point);
         }
         for label in &self.labels {
             push_canvas_hit(
@@ -5356,6 +5349,39 @@ fn push_canvas_sheet_pin_hit(
         },
         point,
     );
+}
+
+fn push_canvas_directive_label_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    label: &KicadCanvasDirectiveLabel,
+    point: KicadPoint,
+) {
+    let Some(bounds) = label.bounds else {
+        return;
+    };
+    if bounds.contains(point) && kicad_canvas_directive_label_hits_point(label, point) {
+        hits.push(KicadCanvasHit {
+            kind: "directive-label".to_string(),
+            uuid: label.uuid.clone(),
+            label: label.text.clone(),
+            bounds,
+        });
+    }
+}
+
+fn kicad_canvas_directive_label_hits_point(
+    label: &KicadCanvasDirectiveLabel,
+    point: KicadPoint,
+) -> bool {
+    if let Some(at) = label.at {
+        let points = [at.point(), pin_body_end(at, label.length.unwrap_or(2.54))];
+        if kicad_polyline_hits_point(&points, None, point) {
+            return true;
+        }
+    }
+
+    kicad_text_bounds(&label.text, label.at, label.effects.as_ref())
+        .is_some_and(|bounds| bounds.contains(point))
 }
 
 fn push_canvas_table_hit(
@@ -16159,6 +16185,56 @@ mod tests {
             && hit.uuid.as_deref() == Some("11111111-1111-4111-8111-111111111111")));
         assert!(!corner_miss.hits.iter().any(|hit| hit.kind == "sheet"
             && hit.uuid.as_deref() == Some("33333333-3333-4333-8333-333333333333")));
+    }
+
+    #[test]
+    fn hit_tests_directive_labels_by_segment_and_text_bounds() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-4111-8111-111111111111")
+  (paper "A4")
+  (lib_symbols)
+  (netclass_flag ""
+    (length 3.81)
+    (shape dot)
+    (at 50 40 0)
+    (effects (font (size 1.27 1.27)))
+    (uuid "22222222-2222-4222-8222-222222222222")
+    (property "Net Class" "HV" (at 50 38 0))
+  )
+)"#,
+            "directive_label_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+        let label = &scene.directive_labels[0];
+        let bounds = label.bounds.unwrap();
+        assert!(bounds.width() > 4.0);
+        assert!(bounds.height() > 2.0);
+
+        let segment_hit = scene.hit_test(KicadPoint { x: 52.0, y: 40.4 });
+        assert!(
+            segment_hit
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "directive-label"
+                    && hit.uuid.as_deref() == Some("22222222-2222-4222-8222-222222222222"))
+        );
+
+        let text_hit = scene.hit_test(KicadPoint { x: 51.0, y: 41.0 });
+        assert!(text_hit.hits.iter().any(|hit| hit.kind == "directive-label"
+            && hit.uuid.as_deref() == Some("22222222-2222-4222-8222-222222222222")));
+
+        let bounds_only_miss = scene.hit_test(KicadPoint { x: 54.0, y: 41.5 });
+        assert!(
+            !bounds_only_miss
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "directive-label"
+                    && hit.uuid.as_deref() == Some("22222222-2222-4222-8222-222222222222"))
+        );
     }
 
     #[test]
