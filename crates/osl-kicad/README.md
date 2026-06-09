@@ -1,0 +1,22 @@
+# osl-kicad
+
+`osl-kicad` is the Rust-native KiCad-compatible schematic, project, symbol
+library, canvas-scene, edit, and netlist foundation for NekoSpice.
+
+## Boundaries
+
+- `lib.rs` currently exposes the public KiCad API and still owns the main
+  parser, writer, schematic IR, symbol library index, canvas scene, edit
+  commands, diagnostics, and schematic-to-SPICE export.
+- `geometry.rs` owns reusable schematic/canvas geometry: bounding boxes,
+  point/segment distances, rotated rectangles, sheet pin and no-connect marker
+  geometry, text bounds estimation, polygon/polyline/Bezier/arc hit-testing, and
+  circular arc sampling used by both canvas hit-tests and render/export helpers.
+
+## Refactor Direction
+
+Keep file-format parsing, IR mutation, symbol-library resolution, canvas scene
+projection, and geometry math in separate modules. Future cleanup should peel
+off symbol library indexing, canvas scene construction, and schematic edit
+commands while preserving the public API consumed by `osl-app`, `osl-render`,
+`osl-netlist`, and `osl-cli`.
