@@ -17,6 +17,6 @@ results into this crate.
   presentation logic.
 - Report bundle writers define the canonical verify/bench artifact names:
   `verify.json` or `bench.json`, `report.html`, `report.md`, and `junit.xml`.
-- Directory report writers rebuild `report.html` from existing run, verify,
-  bench, model-check, or import JSON artifacts without duplicating templates in
-  CLI code.
+- Directory report writers reuse an existing `report.html` and can generate a
+  fallback report from run, verify, bench, model-check, or import JSON artifacts
+  without duplicating templates in CLI code.

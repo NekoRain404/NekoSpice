@@ -34,6 +34,11 @@ const REPORT_SOURCES: &[DirectoryReportSource] = &[
 ];
 
 pub fn write_report_directory_html(dir: &Path) -> OslResult<PathBuf> {
+    let output_path = dir.join(REPORT_HTML);
+    if output_path.is_file() {
+        return Ok(output_path);
+    }
+
     let source = select_report_source(dir).ok_or_else(|| {
         OslError::InvalidInput(format!(
             "{} does not contain run.json, verify.json, bench.json, model-check.json, or import.json",
@@ -41,7 +46,6 @@ pub fn write_report_directory_html(dir: &Path) -> OslResult<PathBuf> {
         ))
     })?;
     let content = read_text(&dir.join(source.file_name))?;
-    let output_path = dir.join(REPORT_HTML);
     write_text(
         &output_path,
         &json_preview_report_html(source.title, &content),
@@ -103,6 +107,21 @@ mod tests {
         assert!(html.contains("NekoSpice Batch Report"));
         assert!(html.contains("{&quot;project&quot;:&quot;verify&quot;}"));
         assert!(!html.contains("{&quot;project&quot;:&quot;bench&quot;}"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preserves_existing_directory_report_html() {
+        let dir = temp_report_dir("existing");
+        write_text(&dir.join("run.json"), "{\"status\":\"passed\"}").unwrap();
+        write_text(&dir.join("report.html"), "<html>rich report</html>").unwrap();
+
+        let output = write_report_directory_html(&dir).unwrap();
+        let html = read_text(&output).unwrap();
+
+        assert_eq!(output, dir.join("report.html"));
+        assert_eq!(html, "<html>rich report</html>");
 
         let _ = std::fs::remove_dir_all(dir);
     }
