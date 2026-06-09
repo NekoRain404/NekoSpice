@@ -1,9 +1,11 @@
 use super::NekoSpiceApp;
+use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{KicadAt, KicadCanvasHit, KicadCanvasScene, KicadPoint};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct SymbolPlacementState {
     pub(super) symbol_id: String,
+    pub(super) config: SymbolPlacementConfig,
     pub(super) keep_active: bool,
 }
 
@@ -15,6 +17,7 @@ impl NekoSpiceApp {
         };
         self.placement = Some(SymbolPlacementState {
             symbol_id: symbol_id.clone(),
+            config: self.selected_symbol_placement,
             keep_active: false,
         });
         self.status_message = Some(format!("Click canvas to place {symbol_id}"));
@@ -34,6 +37,11 @@ impl NekoSpiceApp {
         else {
             return;
         };
+        let config = self
+            .placement
+            .as_ref()
+            .map(|placement| placement.config)
+            .unwrap_or(self.selected_symbol_placement);
         let Some(library) = &self.library else {
             self.status_message = Some("No symbol library loaded".to_string());
             return;
@@ -50,7 +58,12 @@ impl NekoSpiceApp {
         };
 
         match library.symbol_definition(&symbol_id).and_then(|symbol| {
-            document.place_symbol_from_definition(symbol.definition, symbol.library_symbols, at)
+            document.place_symbol_from_definition(
+                symbol.definition,
+                symbol.library_symbols,
+                at,
+                config,
+            )
         }) {
             Ok(placement) => {
                 let keep_active = self
@@ -108,6 +121,7 @@ mod tests {
 
         let placement = app.placement.as_ref().unwrap();
         assert_eq!(placement.symbol_id, "NekoSpice:R");
+        assert_eq!(placement.config, app.selected_symbol_placement);
         assert!(!placement.keep_active);
 
         app.cancel_symbol_placement();

@@ -1,3 +1,4 @@
+use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadEditSummary, KicadPoint, KicadSchematic, KicadSchematicEdit,
     KicadSymbolDef, read_kicad_schematic_with_libraries, write_kicad_schematic,
@@ -74,6 +75,7 @@ impl KicadGuiDocument {
         definition: KicadSymbolDef,
         library_symbols: Vec<KicadSymbolDef>,
         at: KicadAt,
+        config: SymbolPlacementConfig,
     ) -> Result<KicadSymbolPlacementResult, String> {
         let reference = self.next_reference_for_definition(&definition);
         let lib_id = definition.name.clone();
@@ -85,8 +87,8 @@ impl KicadGuiDocument {
                 reference: reference.clone(),
                 value,
                 at,
-                unit: Some(1),
-                body_style: None,
+                unit: config.unit_option(),
+                body_style: config.body_style,
                 pin_alternates: BTreeMap::new(),
                 uuid: None,
             })
@@ -233,6 +235,7 @@ mod tests {
                     y: 50.8,
                     rotation: 0.0,
                 },
+                SymbolPlacementConfig::default(),
             )
             .unwrap();
 

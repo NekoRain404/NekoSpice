@@ -8,6 +8,7 @@ mod app;
 mod canvas;
 mod document;
 mod library;
+mod placement_config;
 #[cfg(test)]
 mod test_support;
 mod viewport;

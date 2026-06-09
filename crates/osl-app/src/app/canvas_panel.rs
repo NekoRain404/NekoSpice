@@ -1,7 +1,7 @@
 use super::{EditNudgeDirection, NekoSpiceApp};
 use crate::canvas;
 use eframe::egui::{self, Color32, Sense, Vec2};
-use osl_kicad::{KicadCanvasScene, read_kicad_schematic_with_libraries};
+use osl_kicad::{KicadAt, KicadCanvasScene, read_kicad_schematic_with_libraries};
 use std::path::Path;
 
 impl NekoSpiceApp {
@@ -61,6 +61,51 @@ impl NekoSpiceApp {
                     2.0,
                 );
             }
+        }
+
+        if let Some(pointer) = ui.input(|input| input.pointer.hover_pos())
+            && rect.contains(pointer)
+        {
+            let schematic_point = self.viewport.screen_to_world(rect, pointer);
+            self.draw_symbol_placement_preview(&painter, rect, schematic_point);
+        }
+    }
+
+    fn draw_symbol_placement_preview(
+        &self,
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        point: osl_kicad::KicadPoint,
+    ) {
+        let Some(placement) = &self.placement else {
+            return;
+        };
+        let Some(library) = &self.library else {
+            return;
+        };
+        let Ok(preview) = library.symbol_placement_preview(
+            &placement.symbol_id,
+            KicadAt {
+                x: point.x,
+                y: point.y,
+                rotation: 0.0,
+            },
+            placement.config,
+        ) else {
+            return;
+        };
+
+        let visible_bounds = self.viewport.visible_world_bounds(rect);
+        canvas::draw_scene(painter, rect, &preview.scene, self.viewport, visible_bounds);
+        if let Some(bounds) = preview.scene.bounds {
+            canvas::draw_bounds(
+                painter,
+                rect,
+                self.viewport,
+                bounds,
+                Color32::from_rgb(80, 120, 190),
+                1.5,
+            );
         }
     }
 

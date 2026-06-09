@@ -3702,13 +3702,30 @@ impl KicadCanvasScene {
         unit: Option<u32>,
         body_style: Option<u32>,
     ) -> Self {
+        Self::from_symbol_definition_at(
+            source,
+            symbol,
+            library_symbols,
+            KicadAt {
+                x: 0.0,
+                y: 0.0,
+                rotation: 0.0,
+            },
+            unit,
+            body_style,
+        )
+    }
+
+    pub fn from_symbol_definition_at(
+        source: impl Into<String>,
+        symbol: &KicadSymbolDef,
+        library_symbols: &[KicadSymbolDef],
+        at: KicadAt,
+        unit: Option<u32>,
+        body_style: Option<u32>,
+    ) -> Self {
         let definition = resolve_symbol_definition(symbol, library_symbols)
             .unwrap_or_else(|| KicadResolvedSymbolDef::from_symbol(symbol));
-        let at = KicadAt {
-            x: 0.0,
-            y: 0.0,
-            rotation: 0.0,
-        };
         let graphics = definition
             .scoped_graphics(unit, body_style)
             .map(|graphic| graphic.transformed(at, None))

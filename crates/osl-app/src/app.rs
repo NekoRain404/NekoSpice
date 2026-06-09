@@ -1,5 +1,6 @@
 use crate::document::KicadGuiDocument;
 use crate::library::KicadGuiLibrary;
+use crate::placement_config::SymbolPlacementConfig;
 use crate::viewport::CanvasViewport;
 use crate::{DEFAULT_SCHEMATIC, DEFAULT_SYMBOL_LIBRARY_TABLE};
 use osl_kicad::{KicadCanvasHit, KicadCanvasScene, KicadPoint};
@@ -26,6 +27,7 @@ pub struct NekoSpiceApp {
     pub(super) scene: Option<KicadCanvasScene>,
     pub(super) selected_hit: Option<KicadCanvasHit>,
     pub(super) selected_symbol_id: Option<String>,
+    pub(super) selected_symbol_placement: SymbolPlacementConfig,
     pub(crate) placement: Option<SymbolPlacementState>,
     pub(super) symbol_search: String,
     pub(super) load_error: Option<String>,
@@ -75,6 +77,7 @@ impl Default for NekoSpiceApp {
             scene: None,
             selected_hit: None,
             selected_symbol_id: None,
+            selected_symbol_placement: SymbolPlacementConfig::default(),
             placement: None,
             symbol_search: String::new(),
             load_error: None,
@@ -114,6 +117,7 @@ impl NekoSpiceApp {
                 self.library_table_path = path.display().to_string();
                 self.library = Some(library);
                 self.selected_symbol_id = None;
+                self.selected_symbol_placement = SymbolPlacementConfig::default();
                 self.placement = None;
                 self.library_error = None;
                 self.status_message = Some("Loaded symbol library".to_string());
@@ -121,6 +125,7 @@ impl NekoSpiceApp {
             Err(error) => {
                 self.library = None;
                 self.selected_symbol_id = None;
+                self.selected_symbol_placement = SymbolPlacementConfig::default();
                 self.placement = None;
                 self.library_error = Some(error.to_string());
             }

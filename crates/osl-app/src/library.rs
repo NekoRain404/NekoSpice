@@ -1,5 +1,6 @@
+use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
-    KicadCanvasScene, KicadIndexedSymbol, KicadSymbolDef, KicadSymbolLibraryIndex,
+    KicadAt, KicadCanvasScene, KicadIndexedSymbol, KicadSymbolDef, KicadSymbolLibraryIndex,
     KicadSymbolLibraryIndexQuery, read_kicad_symbol_library, read_kicad_symbol_library_index,
 };
 use std::path::{Path, PathBuf};
@@ -82,14 +83,39 @@ impl KicadGuiLibrary {
         })
     }
 
-    pub(crate) fn symbol_preview(&self, lib_id: &str) -> Result<KicadGuiSymbolPreview, String> {
+    pub(crate) fn symbol_preview(
+        &self,
+        lib_id: &str,
+        config: SymbolPlacementConfig,
+    ) -> Result<KicadGuiSymbolPreview, String> {
         let symbol = self.symbol_definition(lib_id)?;
         let scene = KicadCanvasScene::from_symbol_definition(
             symbol.id.clone(),
             &symbol.definition,
             &symbol.library_symbols,
-            Some(1),
-            None,
+            config.unit_option(),
+            config.body_style,
+        );
+        Ok(KicadGuiSymbolPreview {
+            id: symbol.id,
+            scene,
+        })
+    }
+
+    pub(crate) fn symbol_placement_preview(
+        &self,
+        lib_id: &str,
+        at: KicadAt,
+        config: SymbolPlacementConfig,
+    ) -> Result<KicadGuiSymbolPreview, String> {
+        let symbol = self.symbol_definition(lib_id)?;
+        let scene = KicadCanvasScene::from_symbol_definition_at(
+            symbol.id.clone(),
+            &symbol.definition,
+            &symbol.library_symbols,
+            at,
+            config.unit_option(),
+            config.body_style,
         );
         Ok(KicadGuiSymbolPreview {
             id: symbol.id,
@@ -141,12 +167,38 @@ mod tests {
         )
         .unwrap();
 
-        let preview = library.symbol_preview("NekoSpice:R").unwrap();
+        let preview = library
+            .symbol_preview("NekoSpice:R", SymbolPlacementConfig::default())
+            .unwrap();
 
         assert_eq!(preview.id, "NekoSpice:R");
         assert_eq!(preview.scene.symbols.len(), 1);
         assert_eq!(preview.scene.symbols[0].lib_id, "NekoSpice:R");
         assert_eq!(preview.scene.symbols[0].pins.len(), 2);
         assert!(preview.scene.bounds.is_some());
+    }
+
+    #[test]
+    fn builds_symbol_placement_preview_at_canvas_point() {
+        let library = KicadGuiLibrary::load(
+            crate::test_support::workspace_root().join(DEFAULT_SYMBOL_LIBRARY_TABLE),
+        )
+        .unwrap();
+
+        let preview = library
+            .symbol_placement_preview(
+                "NekoSpice:R",
+                KicadAt {
+                    x: 25.4,
+                    y: 12.7,
+                    rotation: 0.0,
+                },
+                SymbolPlacementConfig::default(),
+            )
+            .unwrap();
+
+        assert_eq!(preview.scene.symbols[0].at.x, 25.4);
+        assert_eq!(preview.scene.symbols[0].at.y, 12.7);
+        assert!(preview.scene.bounds.unwrap().min.x > 20.0);
     }
 }
