@@ -7,36 +7,60 @@ const REPORT_HTML: &str = "report.html";
 #[derive(Debug, Clone, Copy)]
 struct DirectoryReportSource {
     file_name: &'static str,
+    kind: &'static str,
     title: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReportDirectorySummary {
+    pub report_path: PathBuf,
+    pub source_path: Option<PathBuf>,
+    pub source_kind: Option<&'static str>,
+    pub reused_existing_html: bool,
 }
 
 const REPORT_SOURCES: &[DirectoryReportSource] = &[
     DirectoryReportSource {
         file_name: "run.json",
+        kind: "run",
         title: "NekoSpice Run Report",
     },
     DirectoryReportSource {
         file_name: "verify.json",
+        kind: "verify",
         title: "NekoSpice Batch Report",
     },
     DirectoryReportSource {
         file_name: "model-check.json",
+        kind: "model-check",
         title: "NekoSpice Batch Report",
     },
     DirectoryReportSource {
         file_name: "import.json",
+        kind: "import",
         title: "NekoSpice Batch Report",
     },
     DirectoryReportSource {
         file_name: "bench.json",
+        kind: "bench",
         title: "NekoSpice Batch Report",
     },
 ];
 
 pub fn write_report_directory_html(dir: &Path) -> OslResult<PathBuf> {
+    write_report_directory_summary(dir).map(|summary| summary.report_path)
+}
+
+pub fn write_report_directory_summary(dir: &Path) -> OslResult<ReportDirectorySummary> {
     let output_path = dir.join(REPORT_HTML);
     if output_path.is_file() {
-        return Ok(output_path);
+        let source = select_report_source(dir);
+        return Ok(ReportDirectorySummary {
+            report_path: output_path,
+            source_path: source.map(|source| dir.join(source.file_name)),
+            source_kind: source.map(|source| source.kind),
+            reused_existing_html: true,
+        });
     }
 
     let source = select_report_source(dir).ok_or_else(|| {
@@ -50,7 +74,12 @@ pub fn write_report_directory_html(dir: &Path) -> OslResult<PathBuf> {
         &output_path,
         &json_preview_report_html(source.title, &content),
     )?;
-    Ok(output_path)
+    Ok(ReportDirectorySummary {
+        report_path: output_path,
+        source_path: Some(dir.join(source.file_name)),
+        source_kind: Some(source.kind),
+        reused_existing_html: false,
+    })
 }
 
 fn select_report_source(dir: &Path) -> Option<DirectoryReportSource> {
@@ -76,7 +105,7 @@ fn json_preview_report_html(title: &str, content: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::write_report_directory_html;
+    use super::{write_report_directory_html, write_report_directory_summary};
     use osl_core::{OslError, read_text, write_text};
 
     #[test]
@@ -112,15 +141,33 @@ mod tests {
     }
 
     #[test]
+    fn reports_directory_summary_metadata() {
+        let dir = temp_report_dir("summary");
+        write_text(&dir.join("model-check.json"), "{\"kind\":\"model\"}").unwrap();
+
+        let summary = write_report_directory_summary(&dir).unwrap();
+
+        assert_eq!(summary.report_path, dir.join("report.html"));
+        assert_eq!(summary.source_path, Some(dir.join("model-check.json")));
+        assert_eq!(summary.source_kind, Some("model-check"));
+        assert!(!summary.reused_existing_html);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn preserves_existing_directory_report_html() {
         let dir = temp_report_dir("existing");
         write_text(&dir.join("run.json"), "{\"status\":\"passed\"}").unwrap();
         write_text(&dir.join("report.html"), "<html>rich report</html>").unwrap();
 
-        let output = write_report_directory_html(&dir).unwrap();
-        let html = read_text(&output).unwrap();
+        let summary = write_report_directory_summary(&dir).unwrap();
+        let html = read_text(&summary.report_path).unwrap();
 
-        assert_eq!(output, dir.join("report.html"));
+        assert_eq!(summary.report_path, dir.join("report.html"));
+        assert_eq!(summary.source_path, Some(dir.join("run.json")));
+        assert_eq!(summary.source_kind, Some("run"));
+        assert!(summary.reused_existing_html);
         assert_eq!(html, "<html>rich report</html>");
 
         let _ = std::fs::remove_dir_all(dir);

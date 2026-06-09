@@ -1,4 +1,5 @@
 use crate::document::KicadGuiDocument;
+use crate::report_summary::{GuiReportSummary, GuiReportSummaryState};
 use crate::waveform_summary::GuiWaveformSummaryState;
 #[cfg(test)]
 use osl_core::OslError;
@@ -12,6 +13,7 @@ use std::thread;
 pub(crate) struct GuiSimulationRun {
     pub(crate) output_dir: PathBuf,
     pub(crate) metadata: RunMetadata,
+    pub(crate) report: GuiReportSummaryState,
     pub(crate) waveform: GuiWaveformSummaryState,
 }
 
@@ -90,10 +92,12 @@ fn run_job_with_backend(
     write_text(&source_netlist, &job.netlist)?;
     let mut metadata = backend.run(&source_netlist, &output_dir)?;
     finalize_run_artifacts(&output_dir, &mut metadata)?;
+    let report = GuiReportSummary::from_report_dir(&output_dir);
     let waveform = GuiWaveformSummaryState::from_run_dir(&output_dir);
     Ok(GuiSimulationRun {
         output_dir,
         metadata,
+        report,
         waveform,
     })
 }
@@ -225,6 +229,12 @@ Values:
         assert!(run.output_dir.join("waveform-summary.json").is_file());
         assert!(run.output_dir.join("report.html").is_file());
         assert!(run.output_dir.join("run.json").is_file());
+        let GuiReportSummaryState::Ready(report) = run.report else {
+            panic!("expected report summary");
+        };
+        assert_eq!(report.report_file, "report.html");
+        assert_eq!(report.source_file.as_deref(), Some("run.json"));
+        assert!(report.reused_existing_html);
         assert!(
             run.metadata
                 .artifacts

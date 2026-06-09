@@ -9,6 +9,7 @@ mod canvas;
 mod document;
 mod library;
 mod placement_config;
+mod report_summary;
 mod simulation;
 #[cfg(test)]
 mod test_support;

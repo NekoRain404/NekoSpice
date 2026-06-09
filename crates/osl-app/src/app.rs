@@ -14,6 +14,7 @@ mod schematic_tools;
 mod selection_properties;
 mod simulation_artifacts_panel;
 mod simulation_panel;
+mod simulation_report_panel;
 mod simulation_waveform_panel;
 mod symbol_browser;
 mod symbol_placement_controls;

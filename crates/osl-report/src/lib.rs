@@ -10,7 +10,9 @@ pub use bundle::{
     ReportBundleFile, write_bench_report_bundle, write_json_html_report_bundle,
     write_verify_report_bundle,
 };
-pub use directory::write_report_directory_html;
+pub use directory::{
+    ReportDirectorySummary, write_report_directory_html, write_report_directory_summary,
+};
 pub use html::report_css;
 
 use osl_core::{ParameterOverride, RunMetadata, RunStatus};

@@ -15,6 +15,8 @@ search stay in `osl-kicad`.
 - `app/selection_properties.rs`: selected symbol property editor state sync and `KicadSchematicEdit::{SetSymbolProperty, ConfigureSymbol}` routing.
 - `app/simulation_artifacts_panel.rs`: run artifact drilldown for GUI
   simulation results, including artifact kind, file name, and size.
+- `app/simulation_report_panel.rs`: GUI report summary panel for the generated
+  `report.html` and its backing run/verify/bench/model/import JSON source.
 - `app/simulation_panel.rs`: simulation directive editor, schematic diagnostics,
   SPICE netlist preview, and ngspice run controls routed through the document
   and simulation adapters.
@@ -30,6 +32,9 @@ search stay in `osl-kicad`.
 - `simulation.rs`: GUI-facing simulation run adapter that writes the current
   schematic netlist to a run directory and invokes `osl-sim` backends on a
   background worker, then finalizes shared run artifacts through `osl-sim`.
+- `report_summary.rs`: GUI-facing report summary adapter around `osl-report`,
+  keeping report directory scanning and fallback `report.html` generation out of
+  panel drawing code.
 - `waveform_summary.rs`: GUI-facing waveform summary adapter around
   `osl-waveform`, keeping raw parsing and preview-envelope generation out of
   panel drawing code.
@@ -54,5 +59,7 @@ search stay in `osl-kicad`.
   metadata should stay in `osl-sim` so CLI and GUI runs remain consistent.
   Single-run `report.html` generation belongs to the same shared artifact
   finalizer.
+- Report panels should consume precomputed GUI DTOs from `report_summary.rs`;
+  directory scanning and fallback report generation should stay in `osl-report`.
 - Waveform panels should consume precomputed GUI DTOs from `waveform_summary.rs`
   so drawing code does not parse raw files or scan full waveform arrays.

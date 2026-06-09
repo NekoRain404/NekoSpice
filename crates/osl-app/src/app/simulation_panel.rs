@@ -1,5 +1,6 @@
 use super::NekoSpiceApp;
 use super::simulation_artifacts_panel::draw_simulation_artifacts_panel;
+use super::simulation_report_panel::draw_simulation_report_panel;
 use super::simulation_waveform_panel::draw_simulation_waveform_panel;
 use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
 use crate::waveform_summary::GuiWaveformSummaryState;
@@ -243,6 +244,7 @@ impl NekoSpiceApp {
                 ),
             );
             ui.monospace(run.output_dir.display().to_string());
+            draw_simulation_report_panel(ui, &run.report);
             draw_simulation_artifacts_panel(ui, run);
             draw_simulation_waveform_panel(
                 ui,
