@@ -3887,8 +3887,9 @@ impl KicadCanvasScene {
             .labels
             .iter()
             .map(|label| {
-                if let Some(at) = label.at {
-                    bounds.include(at.point());
+                let label_bounds = kicad_text_bounds(&label.text, label.at, label.effects.as_ref());
+                if let Some(label_bounds) = label_bounds {
+                    bounds.include_box(label_bounds);
                 }
                 KicadCanvasLabel {
                     uuid: label.uuid.clone(),
@@ -3896,7 +3897,7 @@ impl KicadCanvasScene {
                     kind: label.kind,
                     at: label.at,
                     effects: label.effects.clone(),
-                    bounds: kicad_at_bounds(label.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
+                    bounds: label_bounds,
                 }
             })
             .collect::<Vec<_>>();
@@ -3905,14 +3906,32 @@ impl KicadCanvasScene {
             .directive_labels
             .iter()
             .map(|label| {
-                let label_bounds = label.at.map(|at| {
-                    let pin_end = pin_body_end(at, label.length.unwrap_or(2.54));
-                    kicad_points_bounds(&[at.point(), pin_end], KICAD_CANVAS_LINE_BOUNDS_PADDING)
+                let mut label_bounds = label
+                    .at
+                    .map(|at| {
+                        let pin_end = pin_body_end(at, label.length.unwrap_or(2.54));
+                        kicad_points_bounds(
+                            &[at.point(), pin_end],
+                            KICAD_CANVAS_LINE_BOUNDS_PADDING,
+                        )
                         .expect("directive label bounds use two points")
-                });
-                if let Some(at) = label.at {
-                    bounds.include(at.point());
+                    })
+                    .or_else(|| {
+                        kicad_text_bounds(label.display_text(), label.at, label.effects.as_ref())
+                    });
+                if let Some(text_bounds) =
+                    kicad_text_bounds(label.display_text(), label.at, label.effects.as_ref())
+                {
+                    label_bounds = Some(match label_bounds {
+                        Some(bounds) => bounds.union(text_bounds),
+                        None => text_bounds,
+                    });
+                }
+                if let Some(label_bounds) = label_bounds {
+                    bounds.include_box(label_bounds);
+                } else if let Some(at) = label.at {
                     let pin_end = pin_body_end(at, label.length.unwrap_or(2.54));
+                    bounds.include(at.point());
                     bounds.include(pin_end);
                 }
                 KicadCanvasDirectiveLabel {
@@ -3932,8 +3951,9 @@ impl KicadCanvasScene {
             .text_items
             .iter()
             .map(|text| {
-                if let Some(at) = text.at {
-                    bounds.include(at.point());
+                let text_bounds = kicad_text_bounds(&text.text, text.at, text.effects.as_ref());
+                if let Some(text_bounds) = text_bounds {
+                    bounds.include_box(text_bounds);
                 }
                 KicadCanvasText {
                     uuid: text.uuid.clone(),
@@ -3941,7 +3961,7 @@ impl KicadCanvasScene {
                     at: text.at,
                     is_spice_directive: text.text.trim_start().starts_with('.'),
                     effects: text.effects.clone(),
-                    bounds: kicad_at_bounds(text.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
+                    bounds: text_bounds,
                 }
             })
             .collect::<Vec<_>>();
@@ -4808,7 +4828,9 @@ impl KicadCanvasGraphic {
                 stroke,
                 ..
             } => kicad_arc_hits_point(*start, *mid, *end, stroke.as_ref(), point),
-            Self::Text { at, .. } => kicad_at_bounds(*at, KICAD_CANVAS_POINT_BOUNDS_RADIUS)
+            Self::Text {
+                text, at, effects, ..
+            } => kicad_text_bounds(text, *at, effects.as_ref())
                 .is_some_and(|bounds| bounds.contains(point)),
         }
     }
@@ -4846,9 +4868,11 @@ impl KicadCanvasGraphic {
                     bounds.include(point);
                 }
             }
-            Self::Text { at, .. } => {
-                if let Some(at) = at {
-                    bounds.include(at.point());
+            Self::Text {
+                text, at, effects, ..
+            } => {
+                if let Some(text_bounds) = kicad_text_bounds(text, *at, effects.as_ref()) {
+                    bounds.include_box(text_bounds);
                 }
             }
         }
@@ -4878,7 +4902,9 @@ impl KicadCanvasGraphic {
                 &sample_kicad_arc_points(*start, *mid, *end),
                 KICAD_CANVAS_LINE_BOUNDS_PADDING,
             ),
-            Self::Text { at, .. } => kicad_at_bounds(*at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
+            Self::Text {
+                text, at, effects, ..
+            } => kicad_text_bounds(text, *at, effects.as_ref()),
         }
     }
 }
@@ -7842,6 +7868,19 @@ impl KicadBoundingBox {
     fn area(self) -> f64 {
         self.width().abs() * self.height().abs()
     }
+
+    fn union(self, other: KicadBoundingBox) -> Self {
+        Self {
+            min: KicadPoint {
+                x: self.min.x.min(other.min.x),
+                y: self.min.y.min(other.min.y),
+            },
+            max: KicadPoint {
+                x: self.max.x.max(other.max.x),
+                y: self.max.y.max(other.max.y),
+            },
+        }
+    }
 }
 
 const KICAD_CANVAS_POINT_BOUNDS_RADIUS: f64 = 1.27;
@@ -7898,6 +7937,84 @@ fn kicad_points_bounds(points: &[KicadPoint], padding: f64) -> Option<KicadBound
         bounds.include(*point);
     }
     bounds.finish().map(|bounds| bounds.padded(padding))
+}
+
+fn kicad_text_bounds(
+    text: &str,
+    at: Option<KicadAt>,
+    effects: Option<&KicadTextEffects>,
+) -> Option<KicadBoundingBox> {
+    let at = at?;
+    let font_size = effects
+        .and_then(|effects| effects.font_size)
+        .unwrap_or(KicadSize {
+            width: 1.27,
+            height: 1.27,
+        });
+    let char_width = if font_size.width.is_finite() && font_size.width > 0.0 {
+        font_size.width * 0.7
+    } else {
+        1.27 * 0.7
+    };
+    let line_height = if font_size.height.is_finite() && font_size.height > 0.0 {
+        font_size.height * 1.2
+    } else {
+        1.27 * 1.2
+    };
+    let lines = text.split('\n').collect::<Vec<_>>();
+    let line_count = lines.len().max(1);
+    let longest_line = lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    let width = (longest_line as f64 * char_width).max(KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0);
+    let height = (line_count as f64 * line_height).max(KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0);
+
+    let justify = effects
+        .map(|effects| effects.justify.as_slice())
+        .unwrap_or(&[]);
+    let left = if justify.iter().any(|token| token == "right") {
+        -width
+    } else if justify.iter().any(|token| token == "center") {
+        -width / 2.0
+    } else {
+        0.0
+    };
+    let top = if justify.iter().any(|token| token == "bottom") {
+        -height
+    } else if justify.iter().any(|token| token == "center") {
+        -height / 2.0
+    } else {
+        0.0
+    };
+    let corners = [
+        KicadPoint { x: left, y: top },
+        KicadPoint {
+            x: left + width,
+            y: top,
+        },
+        KicadPoint {
+            x: left + width,
+            y: top + height,
+        },
+        KicadPoint {
+            x: left,
+            y: top + height,
+        },
+    ];
+    let mut bounds = KicadBoundingBoxBuilder::default();
+    for corner in corners {
+        let rotated = rotate_point(corner, at.rotation);
+        bounds.include(KicadPoint {
+            x: at.x + rotated.x,
+            y: at.y + rotated.y,
+        });
+    }
+    bounds
+        .finish()
+        .map(|bounds| bounds.padded(KICAD_CANVAS_LINE_BOUNDS_PADDING))
 }
 
 fn kicad_polyline_hits_point(
@@ -15303,19 +15420,19 @@ mod tests {
             scene_json["labels"][1]["uuid"],
             "66666666-6666-6666-6666-666666666666"
         );
-        assert_close(
-            scene_json["labels"][1]["bounds"]["width"].as_f64().unwrap(),
-            super::KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0,
+        assert!(
+            scene_json["labels"][1]["bounds"]["width"].as_f64().unwrap()
+                >= super::KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0
         );
         assert_eq!(
             scene_json["text_items"][0]["uuid"],
             "77777777-7777-7777-7777-777777777777"
         );
-        assert_close(
+        assert!(
             scene_json["text_items"][0]["bounds"]["height"]
                 .as_f64()
-                .unwrap(),
-            super::KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0,
+                .unwrap()
+                >= super::KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0
         );
     }
 
@@ -15397,6 +15514,49 @@ mod tests {
         let entry_hit = scene.hit_test(KicadPoint { x: 31.27, y: 18.73 });
         assert!(entry_hit.hits.iter().any(|hit| hit.kind == "bus-entry"
             && hit.uuid.as_deref() == Some("44444444-4444-4444-4444-444444444444")));
+    }
+
+    #[test]
+    fn hit_tests_text_items_by_estimated_text_bounds() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-1111-1111-111111111111")
+  (paper "A4")
+  (label "LONG_LABEL" (at 10 10 0) (effects (font (size 1.27 1.27))) (uuid "22222222-2222-2222-2222-222222222222"))
+  (text "First line\nSecond line" (at 10 20 0) (effects (font (size 1.27 1.27))) (uuid "33333333-3333-3333-3333-333333333333"))
+  (text "RIGHT" (at 40 10 0) (effects (font (size 1.27 1.27)) (justify right)) (uuid "44444444-4444-4444-4444-444444444444"))
+)"#,
+            "text_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+
+        let label_hit = scene.hit_test(KicadPoint { x: 16.0, y: 10.7 });
+        assert!(label_hit.hits.iter().any(|hit| hit.kind == "label"
+            && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222")));
+
+        let label_miss = scene.hit_test(KicadPoint { x: 21.0, y: 10.7 });
+        assert!(!label_miss.hits.iter().any(|hit| hit.kind == "label"
+            && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222")));
+
+        let multiline_hit = scene.hit_test(KicadPoint { x: 13.0, y: 22.5 });
+        assert!(multiline_hit.hits.iter().any(|hit| hit.kind == "text"
+            && hit.uuid.as_deref() == Some("33333333-3333-3333-3333-333333333333")));
+
+        let right_justified_hit = scene.hit_test(KicadPoint { x: 37.0, y: 10.7 });
+        assert!(right_justified_hit.hits.iter().any(|hit| hit.kind == "text"
+            && hit.uuid.as_deref() == Some("44444444-4444-4444-4444-444444444444")));
+
+        let right_justified_miss = scene.hit_test(KicadPoint { x: 42.0, y: 10.7 });
+        assert!(
+            !right_justified_miss
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "text"
+                    && hit.uuid.as_deref() == Some("44444444-4444-4444-4444-444444444444"))
+        );
     }
 
     #[test]
