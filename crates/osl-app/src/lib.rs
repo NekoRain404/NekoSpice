@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 const DEFAULT_SCHEMATIC: &str = "examples/kicad_schematic/rc.kicad_sch";
 const MIN_ZOOM: f32 = 1.0;
 const MAX_ZOOM: f32 = 180.0;
+const EDIT_NUDGE_MM: f64 = 2.54;
 
 #[derive(Debug)]
 struct KicadGuiDocument {
@@ -36,6 +37,18 @@ impl KicadGuiDocument {
         self.schematic
             .apply_edit(KicadSchematicEdit::DeleteItem {
                 uuid: uuid.to_string(),
+            })
+            .inspect(|_| {
+                self.dirty = true;
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    fn move_item(&mut self, uuid: &str, delta: KicadPoint) -> Result<KicadEditSummary, String> {
+        self.schematic
+            .apply_edit(KicadSchematicEdit::MoveItem {
+                uuid: uuid.to_string(),
+                delta,
             })
             .inspect(|_| {
                 self.dirty = true;
@@ -79,6 +92,37 @@ pub struct NekoSpiceApp {
     load_error: Option<String>,
     status_message: Option<String>,
     viewport: CanvasViewport,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum EditNudgeDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+impl EditNudgeDirection {
+    fn delta(self) -> KicadPoint {
+        match self {
+            Self::Left => KicadPoint {
+                x: -EDIT_NUDGE_MM,
+                y: 0.0,
+            },
+            Self::Right => KicadPoint {
+                x: EDIT_NUDGE_MM,
+                y: 0.0,
+            },
+            Self::Up => KicadPoint {
+                x: 0.0,
+                y: -EDIT_NUDGE_MM,
+            },
+            Self::Down => KicadPoint {
+                x: 0.0,
+                y: EDIT_NUDGE_MM,
+            },
+        }
+    }
 }
 
 impl Default for NekoSpiceApp {
@@ -143,6 +187,35 @@ impl NekoSpiceApp {
         }
     }
 
+    fn move_selected(&mut self, delta: KicadPoint) {
+        let Some(uuid) = self.selected_hit.as_ref().and_then(|hit| hit.uuid.clone()) else {
+            self.status_message = Some("Selected item has no KiCad UUID".to_string());
+            return;
+        };
+        let Some(document) = &mut self.document else {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+
+        match document.move_item(&uuid, delta) {
+            Ok(summary) => {
+                let scene = document.scene();
+                self.selected_hit = scene.item_hit_by_uuid(&uuid);
+                self.scene = Some(scene);
+                self.load_error = None;
+                self.status_message =
+                    Some(format!("Moved {} {}", summary.operation, summary.target));
+            }
+            Err(error) => {
+                self.status_message = Some(error.to_string());
+            }
+        }
+    }
+
+    fn nudge_selected(&mut self, direction: EditNudgeDirection) {
+        self.move_selected(direction.delta());
+    }
+
     fn save_document(&mut self) {
         let Some(document) = &mut self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());
@@ -191,6 +264,21 @@ impl NekoSpiceApp {
                 .clicked()
             {
                 self.delete_selected();
+            }
+            if can_edit && can_delete {
+                ui.separator();
+                if ui.button("Left").clicked() {
+                    self.nudge_selected(EditNudgeDirection::Left);
+                }
+                if ui.button("Right").clicked() {
+                    self.nudge_selected(EditNudgeDirection::Right);
+                }
+                if ui.button("Up").clicked() {
+                    self.nudge_selected(EditNudgeDirection::Up);
+                }
+                if ui.button("Down").clicked() {
+                    self.nudge_selected(EditNudgeDirection::Down);
+                }
             }
         });
     }
@@ -275,8 +363,22 @@ impl NekoSpiceApp {
             self.selected_hit = scene.hit_test(schematic_point).hits.into_iter().next();
         }
 
-        if ui.input(|input| input.key_pressed(egui::Key::Delete)) {
-            self.delete_selected();
+        if !ui.ctx().text_edit_focused() {
+            if ui.input(|input| input.key_pressed(egui::Key::Delete)) {
+                self.delete_selected();
+            }
+            if ui.input(|input| input.key_pressed(egui::Key::ArrowLeft)) {
+                self.nudge_selected(EditNudgeDirection::Left);
+            }
+            if ui.input(|input| input.key_pressed(egui::Key::ArrowRight)) {
+                self.nudge_selected(EditNudgeDirection::Right);
+            }
+            if ui.input(|input| input.key_pressed(egui::Key::ArrowUp)) {
+                self.nudge_selected(EditNudgeDirection::Up);
+            }
+            if ui.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
+                self.nudge_selected(EditNudgeDirection::Down);
+            }
         }
 
         let painter = ui.painter_at(rect);
@@ -862,6 +964,59 @@ mod tests {
         assert!(!document.dirty);
         let saved = fs::read_to_string(&temp_path).unwrap();
         assert!(!saved.contains("22222222-2222-2222-2222-222222222222"));
+
+        fs::remove_file(temp_path).unwrap();
+    }
+
+    #[test]
+    fn document_moves_selected_uuid_and_keeps_canvas_hit_addressable() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let source = workspace_root.join(DEFAULT_SCHEMATIC);
+        let temp_path = std::env::temp_dir().join(format!(
+            "nekospice_gui_move_{}.kicad_sch",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::copy(&source, &temp_path).unwrap();
+
+        let mut document = KicadGuiDocument::load(temp_path.clone()).unwrap();
+        let original_hit = document
+            .scene()
+            .item_hit_by_uuid("22222222-2222-2222-2222-222222222222")
+            .unwrap();
+
+        let summary = document
+            .move_item(
+                "22222222-2222-2222-2222-222222222222",
+                KicadPoint { x: 2.54, y: 0.0 },
+            )
+            .unwrap();
+        assert_eq!(summary.operation, "move-wire");
+        assert!(document.dirty);
+
+        let moved_hit = document
+            .scene()
+            .item_hit_by_uuid("22222222-2222-2222-2222-222222222222")
+            .unwrap();
+        assert!((moved_hit.bounds.min.x - original_hit.bounds.min.x - 2.54).abs() < 1e-6);
+        assert_eq!(moved_hit.kind, "wire");
+
+        document.save().unwrap();
+        assert!(!document.dirty);
+        let reloaded_scene = read_kicad_schematic_with_libraries(&temp_path)
+            .unwrap()
+            .canvas_scene();
+        let saved_hit = reloaded_scene
+            .item_hit_by_uuid("22222222-2222-2222-2222-222222222222")
+            .unwrap();
+        assert_eq!(saved_hit.kind, "wire");
+        assert!((saved_hit.bounds.min.x - original_hit.bounds.min.x - 2.54).abs() < 1e-6);
+        assert!((saved_hit.bounds.min.y - original_hit.bounds.min.y).abs() < 1e-6);
 
         fs::remove_file(temp_path).unwrap();
     }

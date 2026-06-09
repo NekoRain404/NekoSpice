@@ -4359,6 +4359,196 @@ impl KicadCanvasScene {
         }
     }
 
+    /// Returns canvas hit metadata for an already selected KiCad UUID.
+    ///
+    /// This is used by editor frontends to refresh selection state after a
+    /// document edit while keeping all KiCad geometry knowledge inside
+    /// `osl-kicad`.
+    pub fn item_hit_by_uuid(&self, uuid: &str) -> Option<KicadCanvasHit> {
+        let uuid = uuid.trim();
+        if uuid.is_empty() {
+            return None;
+        }
+
+        for symbol in &self.symbols {
+            if let Some(hit) = uuid_hit(
+                "symbol",
+                symbol.uuid.as_deref(),
+                uuid,
+                &symbol.reference,
+                symbol.bounds,
+            ) {
+                return Some(hit);
+            }
+        }
+        for sheet in &self.sheets {
+            if let Some(hit) = uuid_hit(
+                "sheet",
+                sheet.uuid.as_deref(),
+                uuid,
+                &sheet.name,
+                sheet.bounds,
+            ) {
+                return Some(hit);
+            }
+            for pin in &sheet.pins {
+                if let Some(hit) = uuid_hit(
+                    "sheet-pin",
+                    pin.uuid.as_deref(),
+                    uuid,
+                    &pin.name,
+                    pin.bounds,
+                ) {
+                    return Some(hit);
+                }
+            }
+        }
+        for graphic in &self.graphics {
+            if let Some(hit) = uuid_hit(
+                "graphic",
+                graphic.uuid().as_deref(),
+                uuid,
+                graphic.kind(),
+                graphic.bounds(),
+            ) {
+                return Some(hit);
+            }
+        }
+        for image in &self.images {
+            if let Some(hit) = uuid_hit(
+                "image",
+                image.uuid.as_deref(),
+                uuid,
+                &image.mime_type,
+                image.bounds,
+            ) {
+                return Some(hit);
+            }
+        }
+        for table in &self.tables {
+            if let Some(hit) = uuid_hit("table", table.uuid.as_deref(), uuid, "table", table.bounds)
+            {
+                return Some(hit);
+            }
+            for cell in &table.cells {
+                if let Some(hit) = uuid_hit(
+                    "table-cell",
+                    cell.uuid.as_deref(),
+                    uuid,
+                    &cell.text,
+                    cell.bounds,
+                ) {
+                    return Some(hit);
+                }
+            }
+        }
+        for rule_area in &self.rule_areas {
+            if let Some(hit) = uuid_hit(
+                "rule-area",
+                rule_area.uuid.as_deref(),
+                uuid,
+                "rule-area",
+                rule_area.bounds,
+            ) {
+                return Some(hit);
+            }
+        }
+        for wire in &self.wires {
+            if let Some(hit) = uuid_hit("wire", wire.uuid.as_deref(), uuid, "wire", wire.bounds) {
+                return Some(hit);
+            }
+        }
+        for bus in &self.buses {
+            if let Some(hit) = uuid_hit("bus", bus.uuid.as_deref(), uuid, "bus", bus.bounds) {
+                return Some(hit);
+            }
+        }
+        for entry in &self.bus_entries {
+            if let Some(hit) = uuid_hit(
+                "bus-entry",
+                entry.uuid.as_deref(),
+                uuid,
+                "bus-entry",
+                entry.bounds,
+            ) {
+                return Some(hit);
+            }
+        }
+        for label in &self.directive_labels {
+            if let Some(hit) = uuid_hit(
+                "directive-label",
+                label.uuid.as_deref(),
+                uuid,
+                &label.text,
+                label.bounds,
+            ) {
+                return Some(hit);
+            }
+        }
+        for label in &self.labels {
+            if let Some(hit) = uuid_hit(
+                "label",
+                label.uuid.as_deref(),
+                uuid,
+                &label.text,
+                label.bounds,
+            ) {
+                return Some(hit);
+            }
+        }
+        for text in &self.text_items {
+            if let Some(hit) = uuid_hit("text", text.uuid.as_deref(), uuid, &text.text, text.bounds)
+            {
+                return Some(hit);
+            }
+        }
+        for text_box in &self.text_boxes {
+            if let Some(hit) = uuid_hit(
+                "text-box",
+                text_box.uuid.as_deref(),
+                uuid,
+                &text_box.text,
+                text_box.bounds,
+            ) {
+                return Some(hit);
+            }
+        }
+        for junction in &self.junctions {
+            if let Some(hit) = uuid_hit(
+                "junction",
+                junction.uuid.as_deref(),
+                uuid,
+                "junction",
+                Some(junction.bounds),
+            ) {
+                return Some(hit);
+            }
+        }
+        for marker in &self.no_connects {
+            if let Some(hit) = uuid_hit(
+                "no-connect",
+                marker.uuid.as_deref(),
+                uuid,
+                "no-connect",
+                Some(marker.bounds),
+            ) {
+                return Some(hit);
+            }
+        }
+        for group in &self.groups {
+            if let Some(hit) = uuid_hit(
+                "group",
+                group.uuid.as_deref(),
+                uuid,
+                &group.name,
+                group.bounds,
+            ) {
+                return Some(hit);
+            }
+        }
+        None
+    }
+
     fn to_json_value(&self) -> serde_json::Value {
         let symbol_graphic_count = self
             .symbols
@@ -5245,6 +5435,24 @@ fn push_canvas_hit(
             bounds,
         });
     }
+}
+
+fn uuid_hit(
+    kind: &str,
+    candidate_uuid: Option<&str>,
+    uuid: &str,
+    label: &str,
+    bounds: Option<KicadBoundingBox>,
+) -> Option<KicadCanvasHit> {
+    if candidate_uuid != Some(uuid) {
+        return None;
+    }
+    Some(KicadCanvasHit {
+        kind: kind.to_string(),
+        uuid: Some(uuid.to_string()),
+        label: label.to_string(),
+        bounds: bounds?,
+    })
 }
 
 fn push_canvas_graphic_hit(
@@ -15979,6 +16187,43 @@ mod tests {
                 .as_f64()
                 .unwrap()
                 >= super::KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0
+        );
+    }
+
+    #[test]
+    fn finds_kicad_canvas_items_by_uuid_for_editor_state() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+        let scene = schematic.canvas_scene();
+
+        let wire_hit = scene
+            .item_hit_by_uuid("22222222-2222-2222-2222-222222222222")
+            .unwrap();
+        assert_eq!(wire_hit.kind, "wire");
+        assert_eq!(wire_hit.label, "wire");
+        assert!(wire_hit.bounds.width() > 16.0);
+
+        let source_hit = scene
+            .item_hit_by_uuid("88888888-8888-8888-8888-888888888888")
+            .unwrap();
+        assert_eq!(source_hit.kind, "symbol");
+        assert_eq!(source_hit.label, "V1");
+
+        let resistor_hit = scene
+            .item_hit_by_uuid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+            .unwrap();
+        assert_eq!(resistor_hit.kind, "symbol");
+        assert_eq!(resistor_hit.label, "R1");
+
+        assert!(
+            scene
+                .item_hit_by_uuid("00000000-0000-4000-8000-000000000000")
+                .is_none()
         );
     }
 
