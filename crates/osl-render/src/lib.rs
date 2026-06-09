@@ -721,6 +721,7 @@ fn render_graphic(
             end,
             stroke: graphic_stroke,
             fill: graphic_fill,
+            ..
         } => {
             let left_top = viewport.project(KicadPoint {
                 x: start.x.min(end.x),
@@ -753,6 +754,7 @@ fn render_graphic(
             radius,
             stroke: graphic_stroke,
             fill: graphic_fill,
+            ..
         } => {
             let center = viewport.project(*center);
             let stroke = svg_stroke_color(graphic_stroke.as_ref(), stroke);
@@ -797,6 +799,7 @@ fn render_graphic(
             effects,
             stroke: graphic_stroke,
             fill: graphic_fill,
+            ..
         } => {
             if effects.as_ref().is_some_and(|effects| effects.hide) {
                 return;

@@ -3531,6 +3531,7 @@ pub struct KicadCanvasScene {
     pub text_boxes: Vec<KicadCanvasTextBox>,
     pub junctions: Vec<KicadCanvasJunction>,
     pub no_connects: Vec<KicadCanvasNoConnect>,
+    pub groups: Vec<KicadCanvasGroup>,
     pub bounds: Option<KicadBoundingBox>,
 }
 
@@ -3567,6 +3568,7 @@ impl KicadCanvasScene {
         Self {
             source: source.into(),
             symbols: vec![KicadCanvasSymbol {
+                uuid: None,
                 lib_id: symbol.name.clone(),
                 reference: symbol
                     .property("Reference")
@@ -3600,6 +3602,7 @@ impl KicadCanvasScene {
             text_boxes: Vec::new(),
             junctions: Vec::new(),
             no_connects: Vec::new(),
+            groups: Vec::new(),
             bounds: bounds.finish(),
         }
     }
@@ -3633,6 +3636,7 @@ impl KicadCanvasScene {
                 }
 
                 Some(KicadCanvasSymbol {
+                    uuid: symbol.uuid.clone(),
                     lib_id: symbol.lib_id.clone(),
                     reference: symbol.reference().unwrap_or_default().to_string(),
                     value: symbol.value().unwrap_or_default().to_string(),
@@ -3668,6 +3672,7 @@ impl KicadCanvasScene {
                             bounds.include(at.point());
                         }
                         KicadCanvasSheetPin {
+                            uuid: pin.uuid.clone(),
                             name: pin.name.clone(),
                             pin_type: pin.pin_type.clone(),
                             at: pin.at,
@@ -3676,6 +3681,7 @@ impl KicadCanvasScene {
                     })
                     .collect();
                 KicadCanvasSheet {
+                    uuid: sheet.uuid.clone(),
                     name: sheet.sheet_name().unwrap_or_default().to_string(),
                     file: sheet.sheet_file().unwrap_or_default().to_string(),
                     at: sheet.at,
@@ -3696,6 +3702,7 @@ impl KicadCanvasScene {
                     bounds.include(*point);
                 }
                 KicadCanvasWire {
+                    uuid: wire.uuid.clone(),
                     points: wire.points.clone(),
                     stroke: wire.stroke.clone(),
                 }
@@ -3723,6 +3730,7 @@ impl KicadCanvasScene {
                     bounds.include(at);
                 }
                 KicadCanvasImage {
+                    uuid: image.uuid.clone(),
                     at: image.at,
                     scale: image.scale,
                     data_base64: image.data_base64.clone(),
@@ -3746,6 +3754,7 @@ impl KicadCanvasScene {
                             bounds.include(at.point());
                         }
                         KicadCanvasTableCell {
+                            uuid: cell.uuid.clone(),
                             text: cell.text.clone(),
                             at: cell.at,
                             size: cell.size,
@@ -3758,6 +3767,7 @@ impl KicadCanvasScene {
                     })
                     .collect::<Vec<_>>();
                 KicadCanvasTable {
+                    uuid: table.uuid.clone(),
                     column_count: table.column_count,
                     column_widths: table.column_widths.clone(),
                     row_heights: table.row_heights.clone(),
@@ -3774,6 +3784,7 @@ impl KicadCanvasScene {
                     bounds.include(*point);
                 }
                 KicadCanvasRuleArea {
+                    uuid: rule_area.uuid.clone(),
                     points: rule_area.points.clone(),
                     stroke: rule_area.stroke.clone(),
                     fill: rule_area.fill.clone(),
@@ -3789,6 +3800,7 @@ impl KicadCanvasScene {
                     bounds.include(*point);
                 }
                 KicadCanvasBus {
+                    uuid: bus.uuid.clone(),
                     points: bus.points.clone(),
                     stroke: bus.stroke.clone(),
                 }
@@ -3802,6 +3814,7 @@ impl KicadCanvasScene {
                 bounds.include(entry.at);
                 bounds.include(entry.end());
                 KicadCanvasBusEntry {
+                    uuid: entry.uuid.clone(),
                     at: entry.at,
                     size: entry.size,
                     stroke: entry.stroke.clone(),
@@ -3817,6 +3830,7 @@ impl KicadCanvasScene {
                     bounds.include(at.point());
                 }
                 KicadCanvasLabel {
+                    uuid: label.uuid.clone(),
                     text: label.text.clone(),
                     kind: label.kind,
                     at: label.at,
@@ -3835,6 +3849,7 @@ impl KicadCanvasScene {
                     bounds.include(pin_end);
                 }
                 KicadCanvasDirectiveLabel {
+                    uuid: label.uuid.clone(),
                     text: label.display_text().to_string(),
                     at: label.at,
                     length: label.length,
@@ -3853,6 +3868,7 @@ impl KicadCanvasScene {
                     bounds.include(at.point());
                 }
                 KicadCanvasText {
+                    uuid: text.uuid.clone(),
                     text: text.text.clone(),
                     at: text.at,
                     is_spice_directive: text.text.trim_start().starts_with('.'),
@@ -3871,6 +3887,7 @@ impl KicadCanvasScene {
                     bounds.include(at.point());
                 }
                 KicadCanvasTextBox {
+                    uuid: text_box.uuid.clone(),
                     text: text_box.text.clone(),
                     at: text_box.at,
                     size: text_box.size,
@@ -3888,6 +3905,7 @@ impl KicadCanvasScene {
             .map(|junction| {
                 bounds.include(junction.at);
                 KicadCanvasJunction {
+                    uuid: junction.uuid.clone(),
                     at: junction.at,
                     diameter: junction.diameter,
                     color: junction.color,
@@ -3900,7 +3918,21 @@ impl KicadCanvasScene {
             .iter()
             .map(|marker| {
                 bounds.include(marker.at);
-                KicadCanvasNoConnect { at: marker.at }
+                KicadCanvasNoConnect {
+                    uuid: marker.uuid.clone(),
+                    at: marker.at,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let groups = schematic
+            .groups
+            .iter()
+            .map(|group| KicadCanvasGroup {
+                uuid: group.uuid.clone(),
+                name: group.name.clone(),
+                locked: group.locked,
+                members: group.members.clone(),
             })
             .collect::<Vec<_>>();
 
@@ -3921,6 +3953,7 @@ impl KicadCanvasScene {
             text_boxes,
             junctions,
             no_connects,
+            groups,
             bounds: bounds.finish(),
         }
     }
@@ -3966,6 +3999,8 @@ impl KicadCanvasScene {
                 "  \"spice_directive_count\": {},\n",
                 "  \"junction_count\": {},\n",
                 "  \"no_connect_count\": {},\n",
+                "  \"group_count\": {},\n",
+                "  \"group_member_count\": {},\n",
                 "  \"bounds\": {}\n",
                 "}}"
             ),
@@ -3999,6 +4034,11 @@ impl KicadCanvasScene {
                 .count(),
             self.junctions.len(),
             self.no_connects.len(),
+            self.groups.len(),
+            self.groups
+                .iter()
+                .map(|group| group.members.len())
+                .sum::<usize>(),
             bounds
         )
     }
@@ -4042,6 +4082,8 @@ impl KicadCanvasScene {
             "spice_directive_count": self.text_items.iter().filter(|item| item.is_spice_directive).count(),
             "junction_count": self.junctions.len(),
             "no_connect_count": self.no_connects.len(),
+            "group_count": self.groups.len(),
+            "group_member_count": self.groups.iter().map(|group| group.members.len()).sum::<usize>(),
             "bounds": self.bounds.map(kicad_bounding_box_value),
             "symbols": self.symbols.iter().map(KicadCanvasSymbol::to_json_value).collect::<Vec<_>>(),
             "sheets": self.sheets.iter().map(KicadCanvasSheet::to_json_value).collect::<Vec<_>>(),
@@ -4058,12 +4100,14 @@ impl KicadCanvasScene {
             "text_boxes": self.text_boxes.iter().map(KicadCanvasTextBox::to_json_value).collect::<Vec<_>>(),
             "junctions": self.junctions.iter().map(KicadCanvasJunction::to_json_value).collect::<Vec<_>>(),
             "no_connects": self.no_connects.iter().map(KicadCanvasNoConnect::to_json_value).collect::<Vec<_>>(),
+            "groups": self.groups.iter().map(KicadCanvasGroup::to_json_value).collect::<Vec<_>>(),
         })
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasSymbol {
+    pub uuid: Option<String>,
     pub lib_id: String,
     pub reference: String,
     pub value: String,
@@ -4079,6 +4123,7 @@ pub struct KicadCanvasSymbol {
 impl KicadCanvasSymbol {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "lib_id": self.lib_id,
             "reference": self.reference,
             "value": self.value,
@@ -4095,6 +4140,7 @@ impl KicadCanvasSymbol {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasSheet {
+    pub uuid: Option<String>,
     pub name: String,
     pub file: String,
     pub at: Option<KicadAt>,
@@ -4108,6 +4154,7 @@ pub struct KicadCanvasSheet {
 impl KicadCanvasSheet {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "name": self.name,
             "file": self.file,
             "at": self.at.map(kicad_at_value),
@@ -4123,6 +4170,7 @@ impl KicadCanvasSheet {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasSheetPin {
+    pub uuid: Option<String>,
     pub name: String,
     pub pin_type: String,
     pub at: Option<KicadAt>,
@@ -4132,6 +4180,7 @@ pub struct KicadCanvasSheetPin {
 impl KicadCanvasSheetPin {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "name": self.name,
             "pin_type": self.pin_type,
             "at": self.at.map(kicad_at_value),
@@ -4142,6 +4191,7 @@ impl KicadCanvasSheetPin {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasRuleArea {
+    pub uuid: Option<String>,
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
     pub fill: Option<KicadFill>,
@@ -4150,6 +4200,7 @@ pub struct KicadCanvasRuleArea {
 impl KicadCanvasRuleArea {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "points": kicad_points_value(&self.points),
             "stroke": self.stroke.as_ref().map(kicad_stroke_value),
             "fill": self.fill.as_ref().map(kicad_fill_value),
@@ -4159,6 +4210,7 @@ impl KicadCanvasRuleArea {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasDirectiveLabel {
+    pub uuid: Option<String>,
     pub text: String,
     pub at: Option<KicadAt>,
     pub length: Option<f64>,
@@ -4170,6 +4222,7 @@ pub struct KicadCanvasDirectiveLabel {
 impl KicadCanvasDirectiveLabel {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "text": self.text,
             "at": self.at.map(kicad_at_value),
             "length": self.length,
@@ -4183,28 +4236,33 @@ impl KicadCanvasDirectiveLabel {
 #[derive(Debug, Clone, PartialEq)]
 pub enum KicadCanvasGraphic {
     Polyline {
+        uuid: Option<String>,
         points: Vec<KicadPoint>,
         stroke: Option<KicadStroke>,
         fill: Option<KicadFill>,
     },
     Bezier {
+        uuid: Option<String>,
         points: Vec<KicadPoint>,
         stroke: Option<KicadStroke>,
         fill: Option<KicadFill>,
     },
     Rectangle {
+        uuid: Option<String>,
         start: KicadPoint,
         end: KicadPoint,
         stroke: Option<KicadStroke>,
         fill: Option<KicadFill>,
     },
     Circle {
+        uuid: Option<String>,
         center: KicadPoint,
         radius: f64,
         stroke: Option<KicadStroke>,
         fill: Option<KicadFill>,
     },
     Arc {
+        uuid: Option<String>,
         start: KicadPoint,
         mid: Option<KicadPoint>,
         end: KicadPoint,
@@ -4212,6 +4270,7 @@ pub enum KicadCanvasGraphic {
         fill: Option<KicadFill>,
     },
     Text {
+        uuid: Option<String>,
         text: String,
         at: Option<KicadAt>,
         effects: Option<KicadTextEffects>,
@@ -4224,50 +4283,59 @@ impl KicadCanvasGraphic {
     fn to_json_value(&self) -> serde_json::Value {
         match self {
             Self::Polyline {
+                uuid,
                 points,
                 stroke,
                 fill,
             } => serde_json::json!({
                 "kind": "polyline",
+                "uuid": uuid,
                 "points": kicad_points_value(points),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
             }),
             Self::Bezier {
+                uuid,
                 points,
                 stroke,
                 fill,
             } => serde_json::json!({
                 "kind": "bezier",
+                "uuid": uuid,
                 "points": kicad_points_value(points),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
             }),
             Self::Rectangle {
+                uuid,
                 start,
                 end,
                 stroke,
                 fill,
             } => serde_json::json!({
                 "kind": "rectangle",
+                "uuid": uuid,
                 "start": kicad_point_value(*start),
                 "end": kicad_point_value(*end),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
             }),
             Self::Circle {
+                uuid,
                 center,
                 radius,
                 stroke,
                 fill,
             } => serde_json::json!({
                 "kind": "circle",
+                "uuid": uuid,
                 "center": kicad_point_value(*center),
                 "radius": radius,
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
             }),
             Self::Arc {
+                uuid,
                 start,
                 mid,
                 end,
@@ -4275,6 +4343,7 @@ impl KicadCanvasGraphic {
                 fill,
             } => serde_json::json!({
                 "kind": "arc",
+                "uuid": uuid,
                 "start": kicad_point_value(*start),
                 "mid": mid.map(kicad_point_value),
                 "end": kicad_point_value(*end),
@@ -4282,6 +4351,7 @@ impl KicadCanvasGraphic {
                 "fill": fill.as_ref().map(kicad_fill_value),
             }),
             Self::Text {
+                uuid,
                 text,
                 at,
                 effects,
@@ -4289,6 +4359,7 @@ impl KicadCanvasGraphic {
                 fill,
             } => serde_json::json!({
                 "kind": "text",
+                "uuid": uuid,
                 "text": text,
                 "at": at.map(kicad_at_value),
                 "effects": effects.as_ref().map(kicad_text_effects_value),
@@ -4332,6 +4403,32 @@ impl KicadCanvasGraphic {
             } => {
                 *graphic_stroke = stroke;
                 *graphic_fill = fill;
+            }
+        }
+        self
+    }
+
+    fn with_uuid(mut self, uuid: Option<String>) -> Self {
+        match &mut self {
+            Self::Polyline {
+                uuid: graphic_uuid, ..
+            }
+            | Self::Bezier {
+                uuid: graphic_uuid, ..
+            }
+            | Self::Rectangle {
+                uuid: graphic_uuid, ..
+            }
+            | Self::Circle {
+                uuid: graphic_uuid, ..
+            }
+            | Self::Arc {
+                uuid: graphic_uuid, ..
+            }
+            | Self::Text {
+                uuid: graphic_uuid, ..
+            } => {
+                *graphic_uuid = uuid;
             }
         }
         self
@@ -4383,6 +4480,7 @@ impl KicadCanvasGraphic {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasImage {
+    pub uuid: Option<String>,
     pub at: Option<KicadPoint>,
     pub scale: f64,
     pub data_base64: String,
@@ -4393,6 +4491,7 @@ pub struct KicadCanvasImage {
 impl KicadCanvasImage {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "at": self.at.map(kicad_point_value),
             "scale": self.scale,
             "mime_type": self.mime_type,
@@ -4404,6 +4503,7 @@ impl KicadCanvasImage {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasTable {
+    pub uuid: Option<String>,
     pub column_count: usize,
     pub column_widths: Vec<f64>,
     pub row_heights: Vec<f64>,
@@ -4413,6 +4513,7 @@ pub struct KicadCanvasTable {
 impl KicadCanvasTable {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "column_count": self.column_count,
             "column_widths": self.column_widths,
             "row_heights": self.row_heights,
@@ -4424,6 +4525,7 @@ impl KicadCanvasTable {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasTableCell {
+    pub uuid: Option<String>,
     pub text: String,
     pub at: Option<KicadAt>,
     pub size: Option<KicadSize>,
@@ -4437,6 +4539,7 @@ pub struct KicadCanvasTableCell {
 impl KicadCanvasTableCell {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "text": self.text,
             "at": self.at.map(kicad_at_value),
             "size": self.size.map(kicad_size_value),
@@ -4496,6 +4599,7 @@ impl KicadCanvasPin {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasWire {
+    pub uuid: Option<String>,
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
 }
@@ -4503,6 +4607,7 @@ pub struct KicadCanvasWire {
 impl KicadCanvasWire {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "points": kicad_points_value(&self.points),
             "stroke": self.stroke.as_ref().map(kicad_stroke_value),
         })
@@ -4511,6 +4616,7 @@ impl KicadCanvasWire {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasBus {
+    pub uuid: Option<String>,
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
 }
@@ -4518,6 +4624,7 @@ pub struct KicadCanvasBus {
 impl KicadCanvasBus {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "points": kicad_points_value(&self.points),
             "stroke": self.stroke.as_ref().map(kicad_stroke_value),
         })
@@ -4526,6 +4633,7 @@ impl KicadCanvasBus {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasBusEntry {
+    pub uuid: Option<String>,
     pub at: KicadPoint,
     pub size: KicadSize,
     pub stroke: Option<KicadStroke>,
@@ -4541,6 +4649,7 @@ impl KicadCanvasBusEntry {
 
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "at": kicad_point_value(self.at),
             "size": kicad_size_value(self.size),
             "end": kicad_point_value(self.end()),
@@ -4551,6 +4660,7 @@ impl KicadCanvasBusEntry {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasLabel {
+    pub uuid: Option<String>,
     pub text: String,
     pub kind: KicadLabelKind,
     pub at: Option<KicadAt>,
@@ -4560,6 +4670,7 @@ pub struct KicadCanvasLabel {
 impl KicadCanvasLabel {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "text": self.text,
             "kind": self.kind.as_str(),
             "at": self.at.map(kicad_at_value),
@@ -4570,6 +4681,7 @@ impl KicadCanvasLabel {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasText {
+    pub uuid: Option<String>,
     pub text: String,
     pub at: Option<KicadAt>,
     pub is_spice_directive: bool,
@@ -4579,6 +4691,7 @@ pub struct KicadCanvasText {
 impl KicadCanvasText {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "text": self.text,
             "at": self.at.map(kicad_at_value),
             "is_spice_directive": self.is_spice_directive,
@@ -4589,6 +4702,7 @@ impl KicadCanvasText {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasTextBox {
+    pub uuid: Option<String>,
     pub text: String,
     pub at: Option<KicadAt>,
     pub size: Option<KicadSize>,
@@ -4601,6 +4715,7 @@ pub struct KicadCanvasTextBox {
 impl KicadCanvasTextBox {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "text": self.text,
             "at": self.at.map(kicad_at_value),
             "size": self.size.map(kicad_size_value),
@@ -4614,6 +4729,7 @@ impl KicadCanvasTextBox {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasJunction {
+    pub uuid: Option<String>,
     pub at: KicadPoint,
     pub diameter: Option<f64>,
     pub color: Option<KicadColor>,
@@ -4622,6 +4738,7 @@ pub struct KicadCanvasJunction {
 impl KicadCanvasJunction {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "at": kicad_point_value(self.at),
             "diameter": self.diameter,
             "color": self.color.map(kicad_color_value),
@@ -4631,13 +4748,35 @@ impl KicadCanvasJunction {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadCanvasNoConnect {
+    pub uuid: Option<String>,
     pub at: KicadPoint,
 }
 
 impl KicadCanvasNoConnect {
     fn to_json_value(&self) -> serde_json::Value {
         serde_json::json!({
+            "uuid": self.uuid,
             "at": kicad_point_value(self.at),
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasGroup {
+    pub uuid: Option<String>,
+    pub name: String,
+    pub locked: Option<bool>,
+    pub members: Vec<String>,
+}
+
+impl KicadCanvasGroup {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "uuid": self.uuid,
+            "name": self.name,
+            "locked": self.locked,
+            "member_count": self.members.len(),
+            "members": self.members,
         })
     }
 }
@@ -6320,6 +6459,7 @@ impl KicadSymbolGraphic {
     fn transformed(&self, symbol_at: KicadAt, mirror: Option<&str>) -> KicadCanvasGraphic {
         self.graphic
             .transformed(symbol_at, mirror)
+            .with_uuid(self.uuid.clone())
             .with_style(self.stroke.clone(), self.fill.clone())
     }
 
@@ -6420,6 +6560,7 @@ impl KicadGraphic {
     fn transformed(&self, symbol_at: KicadAt, mirror: Option<&str>) -> KicadCanvasGraphic {
         match self {
             Self::Polyline { points } => KicadCanvasGraphic::Polyline {
+                uuid: None,
                 points: points
                     .iter()
                     .map(|point| transform_local_point(*point, symbol_at, mirror))
@@ -6428,6 +6569,7 @@ impl KicadGraphic {
                 fill: None,
             },
             Self::Bezier { points } => KicadCanvasGraphic::Bezier {
+                uuid: None,
                 points: points
                     .iter()
                     .map(|point| transform_local_point(*point, symbol_at, mirror))
@@ -6436,18 +6578,21 @@ impl KicadGraphic {
                 fill: None,
             },
             Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
+                uuid: None,
                 start: transform_local_point(*start, symbol_at, mirror),
                 end: transform_local_point(*end, symbol_at, mirror),
                 stroke: None,
                 fill: None,
             },
             Self::Circle { center, radius } => KicadCanvasGraphic::Circle {
+                uuid: None,
                 center: transform_local_point(*center, symbol_at, mirror),
                 radius: *radius,
                 stroke: None,
                 fill: None,
             },
             Self::Arc { start, mid, end } => KicadCanvasGraphic::Arc {
+                uuid: None,
                 start: transform_local_point(*start, symbol_at, mirror),
                 mid: mid.map(|point| transform_local_point(point, symbol_at, mirror)),
                 end: transform_local_point(*end, symbol_at, mirror),
@@ -6455,6 +6600,7 @@ impl KicadGraphic {
                 fill: None,
             },
             Self::Text { text, at, effects } => KicadCanvasGraphic::Text {
+                uuid: None,
                 text: text.clone(),
                 at: at.map(|at| transform_local_at(at, symbol_at, mirror)),
                 effects: effects.clone(),
@@ -6467,28 +6613,33 @@ impl KicadGraphic {
     fn to_canvas_graphic(&self) -> KicadCanvasGraphic {
         match self {
             Self::Polyline { points } => KicadCanvasGraphic::Polyline {
+                uuid: None,
                 points: points.clone(),
                 stroke: None,
                 fill: None,
             },
             Self::Bezier { points } => KicadCanvasGraphic::Bezier {
+                uuid: None,
                 points: points.clone(),
                 stroke: None,
                 fill: None,
             },
             Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
+                uuid: None,
                 start: *start,
                 end: *end,
                 stroke: None,
                 fill: None,
             },
             Self::Circle { center, radius } => KicadCanvasGraphic::Circle {
+                uuid: None,
                 center: *center,
                 radius: *radius,
                 stroke: None,
                 fill: None,
             },
             Self::Arc { start, mid, end } => KicadCanvasGraphic::Arc {
+                uuid: None,
                 start: *start,
                 mid: *mid,
                 end: *end,
@@ -6496,6 +6647,7 @@ impl KicadGraphic {
                 fill: None,
             },
             Self::Text { text, at, effects } => KicadCanvasGraphic::Text {
+                uuid: None,
                 text: text.clone(),
                 at: *at,
                 effects: effects.clone(),
@@ -6620,6 +6772,7 @@ impl KicadSchematicGraphic {
     fn to_canvas_graphic(&self) -> KicadCanvasGraphic {
         self.graphic
             .to_canvas_graphic()
+            .with_uuid(self.uuid.clone())
             .with_style(self.stroke.clone(), self.fill.clone())
     }
 
@@ -11712,6 +11865,10 @@ mod tests {
         assert!(scene.to_summary_json().contains("\"image_count\": 1"));
         let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
         assert_eq!(scene_json["image_count"], 1);
+        assert_eq!(
+            scene_json["images"][0]["uuid"],
+            "56565656-5656-4656-8656-565656565656"
+        );
         assert_eq!(scene_json["images"][0]["mime_type"], "image/png");
         assert_eq!(scene_json["images"][0]["scale"], 1.5);
         assert_eq!(
@@ -11862,8 +12019,16 @@ mod tests {
         let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
         assert_eq!(scene_json["table_count"], 1);
         assert_eq!(scene_json["table_cell_count"], 2);
+        assert_eq!(
+            scene_json["tables"][0]["uuid"],
+            "67676767-6767-4767-8767-676767676767"
+        );
         assert_eq!(scene_json["tables"][0]["column_count"], 2);
         assert_eq!(scene_json["tables"][0]["cell_count"], 2);
+        assert_eq!(
+            scene_json["tables"][0]["cells"][0]["uuid"],
+            "68686868-6868-4868-8868-686868686868"
+        );
         assert_eq!(scene_json["tables"][0]["cells"][0]["text"], "LED pin");
         assert_eq!(
             scene_json["tables"][0]["cells"][0]["effects"]["justify"][1],
@@ -11950,7 +12115,22 @@ mod tests {
 
         let scene = schematic.canvas_scene();
         assert_eq!(scene.wires.len(), 1);
+        assert_eq!(scene.groups.len(), 1);
+        assert_eq!(
+            scene.groups[0].uuid.as_deref(),
+            Some("7267eac2-0eb2-494a-bc81-61295bcdf08c")
+        );
+        assert_eq!(scene.groups[0].members.len(), 2);
         assert!(scene.to_summary_json().contains("\"wire_count\": 1"));
+        assert!(scene.to_summary_json().contains("\"group_count\": 1"));
+        let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(scene_json["group_count"], 1);
+        assert_eq!(scene_json["group_member_count"], 2);
+        assert_eq!(
+            scene_json["groups"][0]["uuid"],
+            "7267eac2-0eb2-494a-bc81-61295bcdf08c"
+        );
+        assert_eq!(scene_json["groups"][0]["member_count"], 2);
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(group \"GroupName\""));
@@ -14135,6 +14315,53 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.to_string().contains("has no alternate 'MISSING'"));
+    }
+
+    #[test]
+    fn exposes_kicad_canvas_item_uuids_for_editor_selection() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(
+            scene.symbols[0].uuid.as_deref(),
+            Some("88888888-8888-8888-8888-888888888888")
+        );
+        assert_eq!(
+            scene.wires[0].uuid.as_deref(),
+            Some("22222222-2222-2222-2222-222222222222")
+        );
+        assert_eq!(
+            scene.labels[1].uuid.as_deref(),
+            Some("66666666-6666-6666-6666-666666666666")
+        );
+        assert_eq!(
+            scene.text_items[0].uuid.as_deref(),
+            Some("77777777-7777-7777-7777-777777777777")
+        );
+
+        let scene_json: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(
+            scene_json["symbols"][0]["uuid"],
+            "88888888-8888-8888-8888-888888888888"
+        );
+        assert_eq!(
+            scene_json["wires"][0]["uuid"],
+            "22222222-2222-2222-2222-222222222222"
+        );
+        assert_eq!(
+            scene_json["labels"][1]["uuid"],
+            "66666666-6666-6666-6666-666666666666"
+        );
+        assert_eq!(
+            scene_json["text_items"][0]["uuid"],
+            "77777777-7777-7777-7777-777777777777"
+        );
     }
 
     #[test]
