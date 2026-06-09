@@ -10,6 +10,9 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
   schematic-to-SPICE export.
 - `project.rs` owns `.kicad_pro` project JSON parsing, project summary DTOs, and
   schematic stem candidate discovery used by KiCad project import paths.
+- `symbol_library.rs` owns `.kicad_sym` library containers, `sym-lib-table`
+  containers, library/table summary JSON, library-level writer entry points, and
+  library/table root parsers.
 - `edit.rs` owns the public schematic edit command DTOs, edit summaries, symbol
   placement payloads, move/delete helpers, edit validation, and stable edit UUID
   generation used by GUI and CLI mutation paths.

@@ -7,6 +7,7 @@ mod json;
 mod library_index;
 mod project;
 mod sexpr;
+mod symbol_library;
 mod transform;
 
 pub use canvas::{
@@ -27,6 +28,10 @@ pub use library_index::{
 };
 pub use project::{KicadProject, KicadProjectSheet, parse_kicad_project};
 pub use sexpr::{Sexp, parse_sexpr};
+pub use symbol_library::{
+    KicadSymbolLibrary, KicadSymbolLibraryTable, KicadSymbolLibraryTableRow,
+    parse_kicad_symbol_library, parse_kicad_symbol_library_table,
+};
 pub use transform::normalize_symbol_mirror;
 
 use connectivity::{coordinate_key, normalize_net_name, same_point, same_size};
@@ -190,37 +195,6 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
             .map(parse_symbol_path_instances)
             .unwrap_or_default(),
         embedded_fonts: child_value(root_list, "embedded_fonts").and_then(parse_kicad_bool_value),
-    })
-}
-
-pub fn parse_kicad_symbol_library(input: &str, source: &str) -> OslResult<KicadSymbolLibrary> {
-    let root = parse_sexpr(input)?;
-    let root_list = expect_root_list(&root, "kicad_symbol_lib")?;
-
-    Ok(KicadSymbolLibrary {
-        source: source.to_string(),
-        version: child_value(root_list, "version"),
-        generator: child_value(root_list, "generator"),
-        generator_version: child_value(root_list, "generator_version"),
-        symbols: direct_children(root_list, "symbol")
-            .filter_map(parse_symbol_def)
-            .collect(),
-    })
-}
-
-pub fn parse_kicad_symbol_library_table(
-    input: &str,
-    source: &str,
-) -> OslResult<KicadSymbolLibraryTable> {
-    let root = parse_sexpr(input)?;
-    let root_list = expect_root_list(&root, "sym_lib_table")?;
-
-    Ok(KicadSymbolLibraryTable {
-        source: source.to_string(),
-        version: child_value(root_list, "version"),
-        libraries: direct_children(root_list, "lib")
-            .filter_map(parse_symbol_library_table_row)
-            .collect(),
     })
 }
 
@@ -3341,291 +3315,6 @@ fn sanitize_spice_identifier(value: &str) -> String {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadSymbolLibrary {
-    pub source: String,
-    pub version: Option<String>,
-    pub generator: Option<String>,
-    pub generator_version: Option<String>,
-    pub symbols: Vec<KicadSymbolDef>,
-}
-
-impl KicadSymbolLibrary {
-    pub fn symbol(&self, name: &str) -> Option<&KicadSymbolDef> {
-        self.symbols.iter().find(|symbol| symbol.name == name)
-    }
-
-    pub fn symbol_by_name_or_local_name(&self, name: &str) -> Option<&KicadSymbolDef> {
-        self.symbols
-            .iter()
-            .find(|symbol| symbol.name == name || symbol.local_name() == name)
-    }
-
-    pub fn to_kicad_symbol_library_sexpr(&self) -> String {
-        let mut output = String::new();
-        output.push_str("(kicad_symbol_lib\n");
-        if let Some(version) = &self.version {
-            output.push_str(&format!("  (version {})\n", sexpr_atom_or_string(version)));
-        }
-        if let Some(generator) = &self.generator {
-            output.push_str(&format!("  (generator {})\n", sexpr_string(generator)));
-        }
-        if let Some(generator_version) = &self.generator_version {
-            output.push_str(&format!(
-                "  (generator_version {})\n",
-                sexpr_string(generator_version)
-            ));
-        }
-        for symbol in &self.symbols {
-            symbol.write_symbol_sexpr(&mut output, 2);
-        }
-        output.push_str(")\n");
-        output
-    }
-
-    pub fn to_summary_json(&self) -> String {
-        let pin_count = self
-            .symbols
-            .iter()
-            .map(|symbol| symbol.pins.len())
-            .sum::<usize>();
-        let pin_display_setting_count = self
-            .symbols
-            .iter()
-            .map(|symbol| {
-                usize::from(symbol.pin_names.is_some()) + usize::from(symbol.pin_numbers.is_some())
-            })
-            .sum::<usize>();
-        let unit_name_count = self
-            .symbols
-            .iter()
-            .map(|symbol| symbol.unit_names.len())
-            .sum::<usize>();
-        let pin_text_effect_count = self
-            .symbols
-            .iter()
-            .flat_map(|symbol| &symbol.pins)
-            .map(|pin| {
-                usize::from(pin.name_effects().is_some())
-                    + usize::from(pin.number_effects().is_some())
-            })
-            .sum::<usize>();
-        let pin_alternate_count = self
-            .symbols
-            .iter()
-            .flat_map(|symbol| &symbol.pins)
-            .map(|pin| pin.alternates.len())
-            .sum::<usize>();
-        let power_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.power.is_some())
-            .count();
-        let symbol_in_bom_setting_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.in_bom.is_some())
-            .count();
-        let symbol_on_board_setting_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.on_board.is_some())
-            .count();
-        let symbol_in_pos_files_setting_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.in_pos_files.is_some())
-            .count();
-        let duplicate_pin_numbers_are_jumpers_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.duplicate_pin_numbers_are_jumpers == Some(true))
-            .count();
-        let extended_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.extends.is_some())
-            .count();
-        let described_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.description().is_some())
-            .count();
-        let keyword_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.keywords().is_some())
-            .count();
-        let footprint_filter_count = self
-            .symbols
-            .iter()
-            .map(|symbol| symbol.footprint_filters().len())
-            .sum::<usize>();
-        let body_style_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.body_styles.is_some())
-            .count();
-        let jumper_pin_group_count = self
-            .symbols
-            .iter()
-            .map(|symbol| symbol.jumper_pin_groups.len())
-            .sum::<usize>();
-        let embedded_font_symbol_count = self
-            .symbols
-            .iter()
-            .filter(|symbol| symbol.embedded_fonts.is_some())
-            .count();
-        let symbol_graphic_text_effect_count = self
-            .symbols
-            .iter()
-            .flat_map(|symbol| &symbol.graphics)
-            .filter(|graphic| {
-                matches!(
-                    &graphic.graphic,
-                    KicadGraphic::Text {
-                        effects: Some(_),
-                        ..
-                    }
-                )
-            })
-            .count();
-        let unit_scoped_item_count = self
-            .symbols
-            .iter()
-            .map(|symbol| {
-                symbol
-                    .graphics
-                    .iter()
-                    .filter(|graphic| graphic.unit != 0)
-                    .count()
-                    + symbol.pins.iter().filter(|pin| pin.unit != 0).count()
-            })
-            .sum::<usize>();
-        let body_style_scoped_item_count = self
-            .symbols
-            .iter()
-            .map(|symbol| {
-                symbol
-                    .graphics
-                    .iter()
-                    .filter(|graphic| graphic.body_style != 0)
-                    .count()
-                    + symbol.pins.iter().filter(|pin| pin.body_style != 0).count()
-            })
-            .sum::<usize>();
-
-        format!(
-            concat!(
-                "{{\n",
-                "  \"source\": \"{}\",\n",
-                "  \"version\": {},\n",
-                "  \"generator\": {},\n",
-                "  \"generator_version\": {},\n",
-                "  \"symbol_count\": {},\n",
-                "  \"graphic_count\": {},\n",
-                "  \"symbol_graphic_text_effect_count\": {},\n",
-                "  \"unit_scoped_item_count\": {},\n",
-                "  \"body_style_scoped_item_count\": {},\n",
-                "  \"pin_count\": {},\n",
-                "  \"pin_display_setting_count\": {},\n",
-                "  \"unit_name_count\": {},\n",
-                "  \"pin_text_effect_count\": {},\n",
-                "  \"pin_alternate_count\": {},\n",
-                "  \"power_symbol_count\": {},\n",
-                "  \"symbol_in_bom_setting_count\": {},\n",
-                "  \"symbol_on_board_setting_count\": {},\n",
-                "  \"symbol_in_pos_files_setting_count\": {},\n",
-                "  \"duplicate_pin_numbers_are_jumpers_count\": {},\n",
-                "  \"extended_symbol_count\": {},\n",
-                "  \"described_symbol_count\": {},\n",
-                "  \"keyword_symbol_count\": {},\n",
-                "  \"footprint_filter_count\": {},\n",
-                "  \"body_style_symbol_count\": {},\n",
-                "  \"jumper_pin_group_count\": {},\n",
-                "  \"embedded_font_symbol_count\": {}\n",
-                "}}"
-            ),
-            json_escape(&self.source),
-            json_option(self.version.as_deref()),
-            json_option(self.generator.as_deref()),
-            json_option(self.generator_version.as_deref()),
-            self.symbols.len(),
-            self.symbols
-                .iter()
-                .map(|symbol| symbol.graphics.len())
-                .sum::<usize>(),
-            symbol_graphic_text_effect_count,
-            unit_scoped_item_count,
-            body_style_scoped_item_count,
-            pin_count,
-            pin_display_setting_count,
-            unit_name_count,
-            pin_text_effect_count,
-            pin_alternate_count,
-            power_symbol_count,
-            symbol_in_bom_setting_count,
-            symbol_on_board_setting_count,
-            symbol_in_pos_files_setting_count,
-            duplicate_pin_numbers_are_jumpers_count,
-            extended_symbol_count,
-            described_symbol_count,
-            keyword_symbol_count,
-            footprint_filter_count,
-            body_style_symbol_count,
-            jumper_pin_group_count,
-            embedded_font_symbol_count
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadSymbolLibraryTable {
-    pub source: String,
-    pub version: Option<String>,
-    pub libraries: Vec<KicadSymbolLibraryTableRow>,
-}
-
-impl KicadSymbolLibraryTable {
-    pub fn enabled_kicad_libraries(&self) -> impl Iterator<Item = &KicadSymbolLibraryTableRow> {
-        self.libraries
-            .iter()
-            .filter(|row| !row.disabled && row.library_type.eq_ignore_ascii_case("KiCad"))
-    }
-
-    pub fn to_summary_json(&self) -> String {
-        format!(
-            concat!(
-                "{{\n",
-                "  \"source\": \"{}\",\n",
-                "  \"version\": {},\n",
-                "  \"library_count\": {},\n",
-                "  \"enabled_kicad_library_count\": {},\n",
-                "  \"disabled_library_count\": {},\n",
-                "  \"hidden_library_count\": {}\n",
-                "}}"
-            ),
-            json_escape(&self.source),
-            json_option(self.version.as_deref()),
-            self.libraries.len(),
-            self.enabled_kicad_libraries().count(),
-            self.libraries.iter().filter(|row| row.disabled).count(),
-            self.libraries.iter().filter(|row| row.hidden).count(),
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadSymbolLibraryTableRow {
-    pub name: String,
-    pub library_type: String,
-    pub uri: String,
-    pub options: Option<String>,
-    pub description: Option<String>,
-    pub hidden: bool,
-    pub disabled: bool,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KicadDiagnosticSeverity {
     Info,
@@ -6615,19 +6304,6 @@ fn parse_jumper_pin_groups(node: &Sexp) -> Vec<Vec<String>> {
             (!pins.is_empty()).then_some(pins)
         })
         .collect()
-}
-
-fn parse_symbol_library_table_row(node: &Sexp) -> Option<KicadSymbolLibraryTableRow> {
-    let items = list_items(node);
-    Some(KicadSymbolLibraryTableRow {
-        name: child_value(items, "name")?,
-        library_type: child_value(items, "type")?,
-        uri: child_value(items, "uri")?,
-        options: child_value(items, "options"),
-        description: child_value(items, "descr"),
-        hidden: child(items, "hidden").is_some(),
-        disabled: child(items, "disabled").is_some(),
-    })
 }
 
 fn parse_pin_def(node: &Sexp) -> Option<KicadPinDef> {
