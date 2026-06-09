@@ -121,6 +121,9 @@ impl NekoSpiceApp {
 
         ui.separator();
         self.draw_schematic_tool_controls(ui);
+
+        ui.separator();
+        self.draw_simulation_panel(ui);
     }
 }
 

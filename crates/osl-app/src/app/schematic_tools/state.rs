@@ -1,4 +1,4 @@
-use osl_kicad::{KicadPoint, KicadSimulationDirectiveKind, KicadSize};
+use osl_kicad::{KicadPoint, KicadSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SchematicTool {
@@ -59,8 +59,6 @@ pub(crate) struct SchematicToolState {
     pub(super) pending_wire_start: Option<KicadPoint>,
     pub(super) pending_bus_start: Option<KicadPoint>,
     pub(super) bus_entry_size: KicadSize,
-    pub(super) simulation_kind: KicadSimulationDirectiveKind,
-    pub(super) simulation_body: String,
 }
 
 impl Default for SchematicToolState {
@@ -82,8 +80,6 @@ impl Default for SchematicToolState {
                 width: 2.54,
                 height: -2.54,
             },
-            simulation_kind: KicadSimulationDirectiveKind::Tran,
-            simulation_body: "1u 1m".to_string(),
         }
     }
 }

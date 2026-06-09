@@ -1,10 +1,7 @@
 use super::NekoSpiceApp;
 use crate::document::KicadGuiDocument;
 use eframe::egui::{self, Rect};
-use osl_kicad::{
-    KicadAt, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSheetPin,
-    KicadSimulationDirectiveKind, KicadSize,
-};
+use osl_kicad::{KicadAt, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSheetPin, KicadSize};
 
 mod preview;
 mod state;
@@ -87,41 +84,6 @@ impl NekoSpiceApp {
                 });
             }
             SchematicTool::Select | SchematicTool::Junction | SchematicTool::NoConnect => {}
-        }
-
-        ui.separator();
-        ui.heading("Simulation");
-        ui.horizontal_wrapped(|ui| {
-            ui.selectable_value(
-                &mut self.schematic_tools.simulation_kind,
-                KicadSimulationDirectiveKind::Tran,
-                ".tran",
-            );
-            ui.selectable_value(
-                &mut self.schematic_tools.simulation_kind,
-                KicadSimulationDirectiveKind::Ac,
-                ".ac",
-            );
-            ui.selectable_value(
-                &mut self.schematic_tools.simulation_kind,
-                KicadSimulationDirectiveKind::Dc,
-                ".dc",
-            );
-            ui.selectable_value(
-                &mut self.schematic_tools.simulation_kind,
-                KicadSimulationDirectiveKind::Op,
-                ".op",
-            );
-        });
-        ui.horizontal(|ui| {
-            ui.label("Body");
-            ui.text_edit_singleline(&mut self.schematic_tools.simulation_body);
-        });
-        if ui
-            .add_enabled(self.document.is_some(), egui::Button::new("Set Directive"))
-            .clicked()
-        {
-            self.apply_simulation_directive_edit();
         }
     }
 
@@ -290,14 +252,6 @@ impl NekoSpiceApp {
                 false
             }
         }
-    }
-
-    fn apply_simulation_directive_edit(&mut self) {
-        let kind = self.schematic_tools.simulation_kind;
-        let body = self.schematic_tools.simulation_body.clone();
-        self.apply_schematic_tool_edit(None, |document| {
-            document.set_simulation_directive(kind, body, None)
-        });
     }
 }
 

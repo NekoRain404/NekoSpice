@@ -1,8 +1,9 @@
 use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSchematic,
-    KicadSchematicEdit, KicadSheetPin, KicadSimulationDirectiveKind, KicadSize, KicadSymbolDef,
-    read_kicad_schematic_with_libraries, write_kicad_schematic,
+    KicadSchematicCheckReport, KicadSchematicEdit, KicadSheetPin, KicadSimulationDirective,
+    KicadSimulationDirectiveKind, KicadSize, KicadSymbolDef, read_kicad_schematic_with_libraries,
+    write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
 
@@ -41,6 +42,20 @@ impl KicadGuiDocument {
 
     pub(crate) fn scene(&self) -> KicadCanvasScene {
         self.schematic.canvas_scene()
+    }
+
+    pub(crate) fn simulation_directives(&self) -> Vec<KicadSimulationDirective> {
+        self.schematic.simulation_directives()
+    }
+
+    pub(crate) fn check_report(&self) -> KicadSchematicCheckReport {
+        self.schematic.check_report()
+    }
+
+    pub(crate) fn spice_netlist_preview(&self) -> Result<String, String> {
+        self.schematic
+            .to_spice_netlist()
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn delete_item(&mut self, uuid: &str) -> Result<KicadEditSummary, String> {
@@ -579,6 +594,33 @@ mod tests {
         assert!(scene.no_connects.iter().any(|marker| {
             (marker.at.x - 111.76).abs() < 1e-6 && (marker.at.y - 50.8).abs() < 1e-6
         }));
+    }
+
+    #[test]
+    fn document_exposes_simulation_preview_for_gui_panel() {
+        let temp = crate::test_support::temp_schematic_copy("gui_simulation_preview");
+        let temp_path = temp.path();
+
+        let mut document = KicadGuiDocument::load(temp_path.to_path_buf()).unwrap();
+        document
+            .set_simulation_directive(
+                osl_kicad::KicadSimulationDirectiveKind::Tran,
+                "2u 2m".to_string(),
+                None,
+            )
+            .unwrap();
+
+        let directives = document.simulation_directives();
+        assert!(
+            directives
+                .iter()
+                .any(|directive| directive.text == ".tran 2u 2m")
+        );
+        let report = document.check_report();
+        assert_eq!(report.spice_directive_count, directives.len());
+        let netlist = document.spice_netlist_preview().unwrap();
+        assert!(netlist.contains(".tran 2u 2m"));
+        assert!(netlist.ends_with(".end\n"));
     }
 
     #[test]

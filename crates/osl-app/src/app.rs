@@ -12,6 +12,7 @@ mod placement;
 mod runtime;
 mod schematic_tools;
 mod selection_properties;
+mod simulation_panel;
 mod symbol_browser;
 mod symbol_placement_controls;
 
@@ -20,6 +21,7 @@ use placement::SymbolPlacementState;
 pub use runtime::run_native;
 use schematic_tools::SchematicToolState;
 use selection_properties::SelectionPropertyEditorState;
+use simulation_panel::SimulationPanelState;
 
 const EDIT_NUDGE_MM: f64 = 2.54;
 
@@ -36,6 +38,7 @@ pub struct NekoSpiceApp {
     pub(crate) placement: Option<SymbolPlacementState>,
     selection_properties: SelectionPropertyEditorState,
     pub(super) schematic_tools: SchematicToolState,
+    pub(super) simulation_panel: SimulationPanelState,
     pub(super) symbol_search: String,
     pub(super) load_error: Option<String>,
     pub(super) library_error: Option<String>,
@@ -88,6 +91,7 @@ impl Default for NekoSpiceApp {
             placement: None,
             selection_properties: SelectionPropertyEditorState::default(),
             schematic_tools: SchematicToolState::default(),
+            simulation_panel: SimulationPanelState::default(),
             symbol_search: String::new(),
             load_error: None,
             library_error: None,
