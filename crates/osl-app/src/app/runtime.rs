@@ -1,5 +1,6 @@
 use super::NekoSpiceApp;
-use eframe::egui::{self, Vec2};
+use super::theme::StudioTheme;
+use eframe::egui::{self};
 
 pub fn run_native() -> eframe::Result {
     let native_options = eframe::NativeOptions {
@@ -16,11 +17,7 @@ pub fn run_native() -> eframe::Result {
         "NekoSpice",
         native_options,
         Box::new(|cc| {
-            cc.egui_ctx.set_visuals(egui::Visuals::light());
-            let mut style = (*cc.egui_ctx.global_style()).clone();
-            style.spacing.item_spacing = Vec2::new(8.0, 6.0);
-            style.spacing.button_padding = Vec2::new(10.0, 4.0);
-            cc.egui_ctx.set_global_style(style);
+            StudioTheme::apply(&cc.egui_ctx);
             Ok(Box::new(NekoSpiceApp::default()))
         }),
     )

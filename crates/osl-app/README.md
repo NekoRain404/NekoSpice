@@ -9,7 +9,20 @@ search stay in `osl-kicad`.
 - `lib.rs`: public crate entry points and shared fixture defaults.
 - `app.rs`: application state, document/library loading, and edit commands.
 - `app/canvas_panel.rs`: canvas widget input, shortcuts, painter routing, and scene loading helper.
-- `app/panels.rs`: toolbar, project/selection side panel, and `eframe::App` layout.
+- `app/navigation.rs`: Studio workspace tabs and labels for schematic, library,
+  simulation, and report contexts.
+- `app/panels.rs`: Studio shell layout compositor only. It mounts the chrome
+  regions and delegates all panel content to focused modules.
+- `app/navigation_panel.rs`: left Studio workspace navigation and renderer /
+  solver system summary.
+- `app/project_panel.rs`: active schematic path, project health, selection, and
+  edit command sidebar.
+- `app/workspace_panel.rs`: right workspace router for schematic tools,
+  library, simulation, and reports contexts.
+- `app/diagnostics_panel.rs`: reusable document diagnostic summary and scroll
+  list for schematic-focused surfaces.
+- `app/studio_toolbar.rs`: top action buttons and the framed canvas mounting
+  helper used by the shell.
 - `app/placement.rs`: symbol placement mode state, repeat placement, and post-edit selection refresh.
 - `app/runtime.rs`: native window options, wgpu renderer selection, and initial egui style.
 - `app/selection_properties.rs`: selected symbol property editor state sync and `KicadSchematicEdit::{SetSymbolProperty, ConfigureSymbol}` routing.
@@ -22,11 +35,22 @@ search stay in `osl-kicad`.
   and simulation adapters.
 - `app/simulation_waveform_panel.rs`: GUI-only waveform result panel for signal
   selection, compact measurement display, and preview-envelope drawing.
-- `app/schematic_tools/mod.rs`: schematic tool UI, canvas click routing, and GUI calls into the document adapter.
+- `app/status_strip.rs`: Studio project, solver, diagnostics, selection, and
+  waveform status summaries used by the shell chrome.
+- `app/schematic_tools/mod.rs`: schematic tool module entry point and canvas
+  preview delegation.
+- `app/schematic_tools/controls.rs`: schematic tool selection and tool-local
+  input widgets.
+- `app/schematic_tools/editing.rs`: canvas click routing and GUI calls into the
+  document adapter.
 - `app/schematic_tools/state.rs`: active tool state, pending wire/bus starts, sheet options, and other tool-local inputs.
 - `app/schematic_tools/preview.rs`: transient canvas previews for active schematic drawing tools.
 - `app/symbol_browser.rs`: symbol library browser, metadata details, and preview canvas.
 - `app/symbol_placement_controls.rs`: unit, body-style, and pin-alternate controls for KiCad-compatible symbol placement.
+- `app/theme.rs`: Studio visual tokens and frame helpers. Shared UI color and
+  spacing decisions live here instead of being duplicated across panels.
+- `app/widgets.rs`: small shared egui widgets that are visual only and carry no
+  document or library behavior.
 - `document.rs`: editable KiCad schematic adapter around `KicadSchematicEdit`,
   structured simulation directive updates, check reports, and netlist previews.
 - `simulation.rs`: GUI-facing simulation run adapter that writes the current
@@ -47,6 +71,9 @@ search stay in `osl-kicad`.
 ## Rules
 
 - UI code may call document/library adapters, but should not parse KiCad files directly.
+- `app/panels.rs` should stay a layout compositor; new business behavior belongs
+  in focused panels/adapters, shared visual tokens belong in `app/theme.rs`, and
+  small reusable display widgets belong in `app/widgets.rs`.
 - KiCad geometry, hit testing, and edit semantics belong in `osl-kicad`; GUI code consumes those APIs.
 - Canvas input handling belongs in `app/canvas_panel.rs`; drawing primitives belong in `canvas/primitives.rs`.
 - Selection property editing reads selected canvas metadata from `KicadCanvasScene` and writes only through `document.rs`.

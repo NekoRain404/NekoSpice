@@ -2,9 +2,11 @@ use super::NekoSpiceApp;
 use super::simulation_artifacts_panel::draw_simulation_artifacts_panel;
 use super::simulation_report_panel::draw_simulation_report_panel;
 use super::simulation_waveform_panel::draw_simulation_waveform_panel;
+use super::status_strip::severity_color;
+use super::theme::StudioTheme;
 use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
 use crate::waveform_summary::GuiWaveformSummaryState;
-use eframe::egui::{self, Color32};
+use eframe::egui;
 use osl_core::RunStatus;
 use osl_kicad::{KicadDiagnosticSeverity, KicadSimulationDirective, KicadSimulationDirectiveKind};
 use std::path::Path;
@@ -72,36 +74,7 @@ impl NekoSpiceApp {
         draw_simulation_directives(ui, &document.simulation_directives());
 
         ui.separator();
-        let report = document.check_report();
-        ui.horizontal(|ui| {
-            ui.label(format!(
-                "{} diagnostics",
-                report.error_count() + report.warning_count() + report.info_count()
-            ));
-            ui.colored_label(
-                severity_color(KicadDiagnosticSeverity::Error),
-                format!("{} errors", report.error_count()),
-            );
-            ui.colored_label(
-                severity_color(KicadDiagnosticSeverity::Warning),
-                format!("{} warnings", report.warning_count()),
-            );
-        });
-        egui::ScrollArea::vertical()
-            .id_salt("simulation_diagnostics")
-            .max_height(150.0)
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                if report.diagnostics.is_empty() {
-                    ui.label("No diagnostics");
-                }
-                for diagnostic in &report.diagnostics {
-                    ui.colored_label(
-                        severity_color(diagnostic.severity),
-                        format!("{}: {}", diagnostic.code, diagnostic.message),
-                    );
-                }
-            });
+        self.draw_document_diagnostics_panel(ui, 150.0);
 
         ui.separator();
         ui.checkbox(&mut self.simulation_panel.show_netlist, "Netlist preview");
@@ -175,7 +148,7 @@ impl NekoSpiceApp {
         }
     }
 
-    fn run_simulation_from_panel(&mut self) {
+    pub(super) fn run_simulation_from_panel(&mut self) {
         let Some(document) = &self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());
             return;
@@ -231,7 +204,7 @@ impl NekoSpiceApp {
         }
         if let Some(run) = &self.simulation_panel.last_run {
             let color = match run.metadata.status {
-                RunStatus::Passed => Color32::from_rgb(40, 140, 80),
+                RunStatus::Passed => StudioTheme::SUCCESS,
                 RunStatus::Failed => severity_color(KicadDiagnosticSeverity::Error),
             };
             ui.colored_label(
@@ -278,13 +251,5 @@ fn draw_simulation_directives(ui: &mut egui::Ui, directives: &[KicadSimulationDi
             ui.monospace(directive.kind.to_string());
             ui.label(&directive.text);
         });
-    }
-}
-
-fn severity_color(severity: KicadDiagnosticSeverity) -> Color32 {
-    match severity {
-        KicadDiagnosticSeverity::Info => Color32::from_rgb(80, 120, 170),
-        KicadDiagnosticSeverity::Warning => Color32::from_rgb(180, 120, 20),
-        KicadDiagnosticSeverity::Error => Color32::from_rgb(190, 40, 40),
     }
 }

@@ -101,3 +101,20 @@ impl SchematicToolState {
         self.pending_wire_start.is_some() || self.pending_bus_start.is_some()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn switching_schematic_tool_clears_pending_wire_start() {
+        let mut state = SchematicToolState::default();
+        state.set_active(SchematicTool::Wire);
+        state.pending_wire_start = Some(KicadPoint { x: 1.0, y: 2.0 });
+
+        state.set_active(SchematicTool::Label);
+
+        assert_eq!(state.active, SchematicTool::Label);
+        assert!(state.pending_wire_start.is_none());
+    }
+}
