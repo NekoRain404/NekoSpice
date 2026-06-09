@@ -3,7 +3,7 @@ use crate::waveform_summary::GuiWaveformSummaryState;
 #[cfg(test)]
 use osl_core::OslError;
 use osl_core::{OslResult, RunMetadata, make_run_id, write_text};
-use osl_sim::{NgspiceCliBackend, SimulatorBackend};
+use osl_sim::{NgspiceCliBackend, SimulatorBackend, finalize_run_artifacts};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
@@ -88,7 +88,8 @@ fn run_job_with_backend(
     let output_dir = job.runs_root.join(run_directory_name(&job.schematic_path));
     let source_netlist = output_dir.join("schematic.cir");
     write_text(&source_netlist, &job.netlist)?;
-    let metadata = backend.run(&source_netlist, &output_dir)?;
+    let mut metadata = backend.run(&source_netlist, &output_dir)?;
+    finalize_run_artifacts(&output_dir, &mut metadata)?;
     let waveform = GuiWaveformSummaryState::from_run_dir(&output_dir);
     Ok(GuiSimulationRun {
         output_dir,
@@ -220,6 +221,15 @@ Values:
         };
         assert_eq!(summary.point_count, 2);
         assert_eq!(summary.variables[1].name, "v(out)");
+        assert!(run.output_dir.join("waveform.csv").is_file());
+        assert!(run.output_dir.join("waveform-summary.json").is_file());
+        assert!(run.output_dir.join("run.json").is_file());
+        assert!(
+            run.metadata
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.path == "waveform-summary.json")
+        );
         let _ = fs::remove_dir_all(runs_root);
     }
 
@@ -244,6 +254,7 @@ Values:
         assert_eq!(run.metadata.backend, "recording");
         assert!(run.output_dir.join("schematic.cir").is_file());
         assert!(matches!(run.waveform, GuiWaveformSummaryState::Ready(_)));
+        assert!(run.output_dir.join("waveform.csv").is_file());
         let _ = fs::remove_dir_all(runs_root);
     }
 }

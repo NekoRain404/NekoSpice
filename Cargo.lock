@@ -1836,6 +1836,7 @@ name = "osl-sim"
 version = "0.1.0"
 dependencies = [
  "osl-core",
+ "osl-waveform",
 ]
 
 [[package]]

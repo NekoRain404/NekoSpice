@@ -27,7 +27,7 @@ search stay in `osl-kicad`.
   structured simulation directive updates, check reports, and netlist previews.
 - `simulation.rs`: GUI-facing simulation run adapter that writes the current
   schematic netlist to a run directory and invokes `osl-sim` backends on a
-  background worker.
+  background worker, then finalizes shared run artifacts through `osl-sim`.
 - `waveform_summary.rs`: GUI-facing waveform summary adapter around
   `osl-waveform`, keeping raw parsing and preview-envelope generation out of
   panel drawing code.
@@ -48,5 +48,7 @@ search stay in `osl-kicad`.
 - Simulation setup UI should stay in GUI state and route KiCad-compatible directive changes through `document.rs`, not by editing text items directly.
 - Simulation execution should route through `simulation.rs` and `osl-sim`; UI
   widgets should not invoke simulator processes directly.
+- Run artifact export, artifact classification, and refreshed `run.json`
+  metadata should stay in `osl-sim` so CLI and GUI runs remain consistent.
 - Waveform panels should consume precomputed GUI DTOs from `waveform_summary.rs`
   so drawing code does not parse raw files or scan full waveform arrays.

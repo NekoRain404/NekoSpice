@@ -9,4 +9,4 @@ path = "src/lib.rs"
 
 [dependencies]
 osl-core = { path = "../osl-core" }
-
+osl-waveform = { path = "../osl-waveform" }

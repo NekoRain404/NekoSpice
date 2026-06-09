@@ -2,6 +2,7 @@ use osl_core::{
     Artifact, OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, make_run_id,
     now_unix_ms, read_text, write_text,
 };
+use osl_waveform::read_ngspice_raw;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -140,7 +141,7 @@ impl SimulatorBackend for NgspiceCliBackend {
             duration_ms,
             started_unix_ms,
             parameters: parameters.to_vec(),
-            artifacts: collect_artifacts(&output_abs)?,
+            artifacts: collect_run_artifacts(&output_abs)?,
         };
 
         metadata
@@ -152,7 +153,37 @@ impl SimulatorBackend for NgspiceCliBackend {
     }
 }
 
-fn collect_artifacts(output_dir: &Path) -> OslResult<Vec<Artifact>> {
+pub fn finalize_run_artifacts(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
+    if metadata.status == RunStatus::Passed {
+        export_waveform_artifacts(output_dir)?;
+    }
+    refresh_run_artifacts(output_dir, metadata)?;
+    write_text(&output_dir.join("run.json"), &metadata.to_json())
+}
+
+pub fn export_waveform_artifacts(output_dir: &Path) -> OslResult<()> {
+    let raw_path = output_dir.join("waveform.raw");
+    if !raw_path.is_file() {
+        return Ok(());
+    }
+
+    let waveform = read_ngspice_raw(&raw_path)?;
+    write_text(&output_dir.join("waveform.csv"), &waveform.to_csv()?)?;
+    write_text(
+        &output_dir.join("waveform-summary.json"),
+        &waveform.to_summary_json()?,
+    )
+}
+
+pub fn refresh_run_artifacts(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
+    metadata.artifacts = collect_run_artifacts(output_dir)?;
+    metadata
+        .artifacts
+        .sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(())
+}
+
+pub fn collect_run_artifacts(output_dir: &Path) -> OslResult<Vec<Artifact>> {
     let mut artifacts = Vec::new();
     for entry in fs::read_dir(output_dir)
         .map_err(|err| OslError::io(format!("read {}", output_dir.display()), err))?
@@ -171,19 +202,24 @@ fn collect_artifacts(output_dir: &Path) -> OslResult<Vec<Artifact>> {
 
         artifacts.push(Artifact {
             path: file_name.to_string(),
-            kind: artifact_kind(file_name).to_string(),
+            kind: run_artifact_kind(file_name).to_string(),
         });
     }
     Ok(artifacts)
 }
 
-fn artifact_kind(file_name: &str) -> &'static str {
-    if file_name.ends_with(".raw") || file_name.ends_with(".csv") {
+pub fn run_artifact_kind(file_name: &str) -> &'static str {
+    if file_name == "waveform-summary.json"
+        || file_name.ends_with(".raw")
+        || file_name.ends_with(".csv")
+    {
         "waveform"
     } else if file_name.ends_with(".log") || file_name.ends_with(".txt") {
         "log"
     } else if file_name.ends_with(".cir") || file_name.ends_with(".net") {
         "netlist"
+    } else if file_name.ends_with(".html") {
+        "report"
     } else {
         "file"
     }
@@ -361,8 +397,29 @@ fn defines_overridden_parameter(line: &str, parameter_names: &[String]) -> bool 
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_parameter_overrides, ensure_ngspice_control_exports, relative_dependencies};
-    use osl_core::ParameterOverride;
+    use super::{
+        apply_parameter_overrides, ensure_ngspice_control_exports, finalize_run_artifacts,
+        relative_dependencies, run_artifact_kind,
+    };
+    use osl_core::{ParameterOverride, RunMetadata, RunStatus, write_text};
+    use std::fs;
+
+    const SAMPLE_RAW: &str = r#"
+Title: sim artifact demo
+Plotname: Transient Analysis
+Flags: real
+No. Variables: 2
+No. Points: 2
+Variables:
+	0	time	time
+	1	v(out)	voltage
+Values:
+ 0	0.000000000000000e+00
+	2.000000000000000e+00
+
+ 1	1.000000000000000e-06
+	4.000000000000000e+00
+"#;
 
     #[test]
     fn injects_raw_export_before_endc() {
@@ -427,5 +484,51 @@ mod tests {
                 "vendor/opamp.lib".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn classifies_run_artifacts() {
+        assert_eq!(run_artifact_kind("waveform-summary.json"), "waveform");
+        assert_eq!(run_artifact_kind("waveform.raw"), "waveform");
+        assert_eq!(run_artifact_kind("waveform.csv"), "waveform");
+        assert_eq!(run_artifact_kind("ngspice.log"), "log");
+        assert_eq!(run_artifact_kind("input.cir"), "netlist");
+        assert_eq!(run_artifact_kind("report.html"), "report");
+    }
+
+    #[test]
+    fn finalizes_waveform_run_artifacts() {
+        let output_dir = std::env::temp_dir().join(format!(
+            "nekospice_sim_artifacts_{}_{}",
+            std::process::id(),
+            osl_core::now_unix_ms()
+        ));
+        write_text(&output_dir.join("waveform.raw"), SAMPLE_RAW).unwrap();
+        write_text(&output_dir.join("input.cir"), ".tran 1u 1m\n.end\n").unwrap();
+        let mut metadata = RunMetadata {
+            schema_version: 1,
+            run_id: "test".to_string(),
+            backend: "test".to_string(),
+            backend_executable: "test".to_string(),
+            source_netlist: "source.cir".to_string(),
+            working_netlist: output_dir.join("input.cir").display().to_string(),
+            output_dir: output_dir.display().to_string(),
+            status: RunStatus::Passed,
+            exit_code: Some(0),
+            duration_ms: 0,
+            started_unix_ms: 0,
+            parameters: Vec::new(),
+            artifacts: Vec::new(),
+        };
+
+        finalize_run_artifacts(&output_dir, &mut metadata).unwrap();
+
+        assert!(output_dir.join("waveform.csv").is_file());
+        assert!(output_dir.join("waveform-summary.json").is_file());
+        assert!(output_dir.join("run.json").is_file());
+        assert!(metadata.artifacts.iter().any(
+            |artifact| artifact.path == "waveform-summary.json" && artifact.kind == "waveform"
+        ));
+        let _ = fs::remove_dir_all(output_dir);
     }
 }

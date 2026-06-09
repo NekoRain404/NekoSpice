@@ -242,6 +242,7 @@ impl NekoSpiceApp {
                 ),
             );
             ui.monospace(run.output_dir.display().to_string());
+            draw_run_artifacts(ui, run);
             draw_simulation_waveform_panel(
                 ui,
                 &run.waveform,
@@ -265,6 +266,24 @@ impl NekoSpiceApp {
                 summary.default_signal_name().map(ToOwned::to_owned);
         }
     }
+}
+
+fn draw_run_artifacts(ui: &mut egui::Ui, run: &GuiSimulationRun) {
+    if run.metadata.artifacts.is_empty() {
+        return;
+    }
+    ui.label(format!("{} artifacts", run.metadata.artifacts.len()));
+    egui::Grid::new("simulation_run_artifacts")
+        .num_columns(2)
+        .spacing(egui::Vec2::new(8.0, 2.0))
+        .striped(true)
+        .show(ui, |ui| {
+            for artifact in &run.metadata.artifacts {
+                ui.monospace(&artifact.path);
+                ui.label(&artifact.kind);
+                ui.end_row();
+            }
+        });
 }
 
 fn draw_simulation_directives(ui: &mut egui::Ui, directives: &[KicadSimulationDirective]) {

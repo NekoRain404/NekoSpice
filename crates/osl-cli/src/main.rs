@@ -1,6 +1,6 @@
 use osl_core::{
-    Artifact, OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape,
-    json_escape, make_run_id, parameters_json, read_text, write_text,
+    OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape, json_escape,
+    make_run_id, parameters_json, read_text, write_text,
 };
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
@@ -12,7 +12,7 @@ use osl_kicad::{
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
 use osl_render::render_kicad_scene_svg;
-use osl_sim::{NgspiceCliBackend, SimulatorBackend};
+use osl_sim::{NgspiceCliBackend, SimulatorBackend, finalize_run_artifacts, refresh_run_artifacts};
 use osl_waveform::{
     MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
 };
@@ -1586,77 +1586,10 @@ fn write_single_run_report(output_dir: &Path, metadata: &RunMetadata) -> OslResu
 }
 
 fn finalize_run_output(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
-    if metadata.status == RunStatus::Passed {
-        export_waveform_artifacts(output_dir)?;
-    }
-    refresh_artifacts(output_dir, metadata)?;
+    finalize_run_artifacts(output_dir, metadata)?;
     write_single_run_report(output_dir, metadata)?;
-    refresh_artifacts(output_dir, metadata)?;
+    refresh_run_artifacts(output_dir, metadata)?;
     write_text(&output_dir.join("run.json"), &metadata.to_json())
-}
-
-fn export_waveform_artifacts(output_dir: &Path) -> OslResult<()> {
-    let raw_path = output_dir.join("waveform.raw");
-    if !raw_path.is_file() {
-        return Ok(());
-    }
-
-    let waveform = read_ngspice_raw(&raw_path)?;
-    write_text(&output_dir.join("waveform.csv"), &waveform.to_csv()?)?;
-    write_text(
-        &output_dir.join("waveform-summary.json"),
-        &waveform.to_summary_json()?,
-    )
-}
-
-fn refresh_artifacts(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
-    metadata.artifacts = collect_run_artifacts(output_dir)?;
-    metadata
-        .artifacts
-        .sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(())
-}
-
-fn collect_run_artifacts(output_dir: &Path) -> OslResult<Vec<Artifact>> {
-    let mut artifacts = Vec::new();
-    for entry in fs::read_dir(output_dir)
-        .map_err(|err| OslError::io(format!("read {}", output_dir.display()), err))?
-    {
-        let entry = entry.map_err(|err| OslError::io("read output directory entry", err))?;
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if file_name == "run.json" {
-            continue;
-        }
-
-        artifacts.push(Artifact {
-            path: file_name.to_string(),
-            kind: run_artifact_kind(file_name).to_string(),
-        });
-    }
-    Ok(artifacts)
-}
-
-fn run_artifact_kind(file_name: &str) -> &'static str {
-    if file_name == "waveform-summary.json"
-        || file_name.ends_with(".raw")
-        || file_name.ends_with(".csv")
-    {
-        "waveform"
-    } else if file_name.ends_with(".log") || file_name.ends_with(".txt") {
-        "log"
-    } else if file_name.ends_with(".cir") || file_name.ends_with(".net") {
-        "netlist"
-    } else if file_name.ends_with(".html") {
-        "report"
-    } else {
-        "file"
-    }
 }
 
 fn report_css() -> &'static str {
