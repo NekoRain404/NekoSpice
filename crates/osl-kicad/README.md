@@ -22,6 +22,9 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 - `coordinates.rs` owns reusable KiCad point/size/at IR, coordinate parse
   helpers, point-list S-expression writer helpers, and coordinate JSON
   projection helpers used across parser, canvas, edit, and geometry paths.
+- `graphics.rs` owns shared symbol/schematic drawing primitive IR, symbol
+  graphic metadata, schematic graphic and rule-area IR, drawing bounds, canvas
+  projection helpers, and graphic/rule-area parse/write helpers.
 - `image.rs` owns schematic image IR, embedded base64 data parse/write, MIME
   sniffing, and PNG size metadata used by bounds and canvas projection.
 - `wiring.rs` owns schematic wire, bus, bus-entry, bus-alias, and net-chain IR
