@@ -6,8 +6,11 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 ## Boundaries
 
 - `lib.rs` currently exposes the public KiCad API and still owns the main
-  schematic/project/symbol parsers, writer, schematic IR, edit commands,
-  diagnostics, and schematic-to-SPICE export.
+  schematic/project/symbol parsers, writer, schematic IR, diagnostics, and
+  schematic-to-SPICE export.
+- `edit.rs` owns the public schematic edit command DTOs, edit summaries, symbol
+  placement payloads, move/delete helpers, edit validation, and stable edit UUID
+  generation used by GUI and CLI mutation paths.
 - `library_index.rs` owns the GUI-facing symbol library index, library browser
   query filters, indexed unit/body-style/pin metadata, and library load
   diagnostics built from `sym-lib-table`.
@@ -27,6 +30,6 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 
 Keep file-format parsing, IR mutation, symbol-library resolution, canvas scene
 projection, hit-testing, and geometry math in separate modules. Future cleanup
-should peel off schematic edit commands and parser families while preserving
-the public API consumed by `osl-app`, `osl-render`, `osl-netlist`, and
-`osl-cli`.
+should peel off the remaining mutation method bodies and parser families while
+preserving the public API consumed by `osl-app`, `osl-render`, `osl-netlist`,
+and `osl-cli`.
