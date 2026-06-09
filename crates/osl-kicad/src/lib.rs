@@ -1,11 +1,15 @@
 mod canvas;
 mod canvas_hit;
 mod connectivity;
+mod diagnostics;
 mod edit;
 mod geometry;
+mod instances;
 mod json;
 mod library_index;
+mod metadata;
 mod project;
+mod schematic_summary;
 mod sexpr;
 mod symbol_library;
 mod transform;
@@ -19,13 +23,22 @@ pub use canvas::{
 };
 pub use canvas_hit::{KicadCanvasHit, KicadCanvasHitReport};
 pub use connectivity::{KicadNet, KicadNetGraph};
+pub use diagnostics::{
+    KicadDiagnosticSeverity, KicadHierarchyNetlist, KicadSchematicCheckReport,
+    KicadSchematicDiagnostic,
+};
 pub use edit::{KicadEditSummary, KicadSchematicEdit, KicadSymbolPlacement};
 pub use geometry::{KicadBoundingBox, sample_kicad_arc_points};
+pub use instances::{
+    KicadInstancePath, KicadProjectInstance, KicadSheetInstance, KicadSymbolPathInstance,
+    KicadVariantInstance,
+};
 pub use library_index::{
     KicadIndexedLibrary, KicadIndexedSymbol, KicadIndexedSymbolBodyStyle, KicadIndexedSymbolPin,
     KicadIndexedSymbolUnit, KicadLibraryDiagnostic, KicadSymbolLibraryIndex,
     KicadSymbolLibraryIndexQuery,
 };
+pub use metadata::{KicadTitleBlock, KicadTitleComment};
 pub use project::{KicadProject, KicadProjectSheet, parse_kicad_project};
 pub use sexpr::{Sexp, parse_sexpr};
 pub use symbol_library::{
@@ -35,6 +48,7 @@ pub use symbol_library::{
 pub use transform::normalize_symbol_mirror;
 
 use connectivity::{coordinate_key, normalize_net_name, same_point, same_size};
+use diagnostics::kicad_schematic_diagnostic;
 use edit::{
     delete_summary, fnv1a64, is_valid_bus_entry_size, move_sheet_pin_by_uuid, move_summary,
     move_table_cell_by_uuid, points_payload, remove_by_uuid, remove_sheet_pin_by_uuid,
@@ -48,8 +62,12 @@ use geometry::{
     KICAD_CANVAS_LINE_BOUNDS_PADDING, KicadBoundingBoxBuilder, kicad_points_bounds,
     kicad_rotated_rect_bounds, pin_body_end,
 };
-use json::{json_bool_option, json_option};
-use osl_core::{OslError, OslResult, json_escape, read_text, write_text};
+use instances::{
+    parse_project_instances, parse_sheet_instances, parse_symbol_path_instances,
+    write_project_instances_sexpr, write_sheet_instances_sexpr, write_symbol_path_instances_sexpr,
+};
+use metadata::parse_title_block;
+use osl_core::{OslError, OslResult, read_text, write_text};
 use sexpr::{
     atom_text, child, child_value, direct_children, expect_root_list, format_number, head,
     list_items, list_value, sexpr_atom_or_string, sexpr_string, write_sexpr_inline,
@@ -229,106 +247,6 @@ pub struct KicadSchematic {
     pub sheet_instances: Vec<KicadSheetInstance>,
     pub symbol_instances: Vec<KicadSymbolPathInstance>,
     pub embedded_fonts: Option<bool>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadSchematicCheckReport {
-    pub source: String,
-    pub symbol_count: usize,
-    pub sheet_count: usize,
-    pub net_count: usize,
-    pub spice_directive_count: usize,
-    pub diagnostics: Vec<KicadSchematicDiagnostic>,
-}
-
-impl KicadSchematicCheckReport {
-    pub fn error_count(&self) -> usize {
-        self.diagnostics
-            .iter()
-            .filter(|diagnostic| diagnostic.severity == KicadDiagnosticSeverity::Error)
-            .count()
-    }
-
-    pub fn warning_count(&self) -> usize {
-        self.diagnostics
-            .iter()
-            .filter(|diagnostic| diagnostic.severity == KicadDiagnosticSeverity::Warning)
-            .count()
-    }
-
-    pub fn info_count(&self) -> usize {
-        self.diagnostics
-            .iter()
-            .filter(|diagnostic| diagnostic.severity == KicadDiagnosticSeverity::Info)
-            .count()
-    }
-
-    pub fn to_json(&self) -> String {
-        let diagnostics = self
-            .diagnostics
-            .iter()
-            .map(|diagnostic| {
-                format!(
-                    concat!(
-                        "    {{ \"severity\": \"{}\", \"code\": \"{}\", ",
-                        "\"message\": \"{}\", \"item\": {}, \"net\": {}, \"pin\": {} }}"
-                    ),
-                    diagnostic.severity.as_str(),
-                    json_escape(&diagnostic.code),
-                    json_escape(&diagnostic.message),
-                    json_option(diagnostic.item.as_deref()),
-                    json_option(diagnostic.net.as_deref()),
-                    json_option(diagnostic.pin.as_deref())
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(",\n");
-
-        format!(
-            concat!(
-                "{{\n",
-                "  \"source\": \"{}\",\n",
-                "  \"symbol_count\": {},\n",
-                "  \"sheet_count\": {},\n",
-                "  \"net_count\": {},\n",
-                "  \"spice_directive_count\": {},\n",
-                "  \"diagnostic_count\": {},\n",
-                "  \"error_count\": {},\n",
-                "  \"warning_count\": {},\n",
-                "  \"info_count\": {},\n",
-                "  \"diagnostics\": [\n",
-                "{}\n",
-                "  ]\n",
-                "}}"
-            ),
-            json_escape(&self.source),
-            self.symbol_count,
-            self.sheet_count,
-            self.net_count,
-            self.spice_directive_count,
-            self.diagnostics.len(),
-            self.error_count(),
-            self.warning_count(),
-            self.info_count(),
-            diagnostics
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadHierarchyNetlist {
-    pub netlist: String,
-    pub diagnostics: Vec<KicadSchematicDiagnostic>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadSchematicDiagnostic {
-    pub severity: KicadDiagnosticSeverity,
-    pub code: String,
-    pub message: String,
-    pub item: Option<String>,
-    pub net: Option<String>,
-    pub pin: Option<String>,
 }
 
 impl KicadSchematic {
@@ -2469,483 +2387,6 @@ impl KicadSchematic {
             .iter()
             .any(|marker| same_point(marker.at, point))
     }
-
-    pub fn to_summary_json(&self) -> String {
-        format!(
-            concat!(
-                "{{\n",
-                "  \"source\": \"{}\",\n",
-                "  \"version\": {},\n",
-                "  \"generator\": {},\n",
-                "  \"generator_version\": {},\n",
-                "  \"has_title_block\": {},\n",
-                "  \"title_comment_count\": {},\n",
-                "  \"symbol_count\": {},\n",
-                "  \"library_symbol_count\": {},\n",
-                "  \"bus_alias_count\": {},\n",
-                "  \"wire_count\": {},\n",
-                "  \"styled_wire_count\": {},\n",
-                "  \"bus_count\": {},\n",
-                "  \"styled_bus_count\": {},\n",
-                "  \"bus_entry_count\": {},\n",
-                "  \"styled_bus_entry_count\": {},\n",
-                "  \"net_chain_count\": {},\n",
-                "  \"net_chain_member_net_count\": {},\n",
-                "  \"schematic_graphic_count\": {},\n",
-                "  \"styled_schematic_graphic_count\": {},\n",
-                "  \"locked_schematic_graphic_count\": {},\n",
-                "  \"image_count\": {},\n",
-                "  \"table_count\": {},\n",
-                "  \"styled_table_count\": {},\n",
-                "  \"table_cell_count\": {},\n",
-                "  \"styled_table_cell_count\": {},\n",
-                "  \"locked_table_cell_count\": {},\n",
-                "  \"rule_area_count\": {},\n",
-                "  \"styled_rule_area_count\": {},\n",
-                "  \"locked_rule_area_count\": {},\n",
-                "  \"group_count\": {},\n",
-                "  \"group_member_count\": {},\n",
-                "  \"label_count\": {},\n",
-                "  \"directive_label_count\": {},\n",
-                "  \"directive_label_property_count\": {},\n",
-                "  \"junction_count\": {},\n",
-                "  \"styled_junction_count\": {},\n",
-                "  \"no_connect_count\": {},\n",
-                "  \"sheet_count\": {},\n",
-                "  \"styled_sheet_count\": {},\n",
-                "  \"sheet_pin_count\": {},\n",
-                "  \"text_count\": {},\n",
-                "  \"text_box_count\": {},\n",
-                "  \"styled_text_box_count\": {},\n",
-                "  \"locked_text_box_count\": {},\n",
-                "  \"spice_directive_count\": {},\n",
-                "  \"sheet_instance_count\": {},\n",
-                "  \"symbol_instance_count\": {},\n",
-                "  \"symbol_pin_alternate_count\": {},\n",
-                "  \"embedded_project_instance_count\": {},\n",
-                "  \"embedded_instance_path_count\": {},\n",
-                "  \"variant_instance_count\": {},\n",
-                "  \"dnp_item_count\": {},\n",
-                "  \"bom_excluded_count\": {},\n",
-                "  \"board_excluded_count\": {},\n",
-                "  \"mirrored_symbol_count\": {},\n",
-                "  \"symbol_body_style_count\": {},\n",
-                "  \"fields_autoplaced_count\": {},\n",
-                "  \"shaped_label_count\": {},\n",
-                "  \"label_property_count\": {},\n",
-                "  \"hidden_property_count\": {},\n",
-                "  \"property_effect_count\": {},\n",
-                "  \"embedded_fonts\": {},\n",
-                "  \"library_unit_name_count\": {},\n",
-                "  \"library_graphic_count\": {}\n",
-                "}}"
-            ),
-            json_escape(&self.source),
-            json_option(self.version.as_deref()),
-            json_option(self.generator.as_deref()),
-            json_option(self.generator_version.as_deref()),
-            self.title_block.is_some(),
-            self.title_block
-                .as_ref()
-                .map(|title_block| title_block.comments.len())
-                .unwrap_or(0),
-            self.symbols.len(),
-            self.library_symbols.len(),
-            self.bus_aliases.len(),
-            self.wires.len(),
-            self.styled_wire_count(),
-            self.buses.len(),
-            self.styled_bus_count(),
-            self.bus_entries.len(),
-            self.styled_bus_entry_count(),
-            self.net_chains.len(),
-            self.net_chain_member_net_count(),
-            self.graphics.len(),
-            self.styled_schematic_graphic_count(),
-            self.locked_schematic_graphic_count(),
-            self.images.len(),
-            self.tables.len(),
-            self.styled_table_count(),
-            self.tables
-                .iter()
-                .map(|table| table.cells.len())
-                .sum::<usize>(),
-            self.styled_table_cell_count(),
-            self.locked_table_cell_count(),
-            self.rule_areas.len(),
-            self.styled_rule_area_count(),
-            self.locked_rule_area_count(),
-            self.groups.len(),
-            self.groups
-                .iter()
-                .map(|group| group.members.len())
-                .sum::<usize>(),
-            self.labels.len(),
-            self.directive_labels.len(),
-            self.directive_label_property_count(),
-            self.junctions.len(),
-            self.styled_junction_count(),
-            self.no_connects.len(),
-            self.sheets.len(),
-            self.styled_sheet_count(),
-            self.sheets
-                .iter()
-                .map(|sheet| sheet.pins.len())
-                .sum::<usize>(),
-            self.text_items.len(),
-            self.text_boxes.len(),
-            self.styled_text_box_count(),
-            self.locked_text_box_count(),
-            self.spice_directives().len(),
-            self.sheet_instances.len(),
-            self.symbol_instances.len(),
-            self.symbol_pin_alternate_count(),
-            self.embedded_project_instance_count(),
-            self.embedded_instance_path_count(),
-            self.variant_instance_count(),
-            self.dnp_item_count(),
-            self.bom_excluded_count(),
-            self.board_excluded_count(),
-            self.mirrored_symbol_count(),
-            self.symbol_body_style_count(),
-            self.fields_autoplaced_count(),
-            self.shaped_label_count(),
-            self.label_property_count(),
-            self.hidden_property_count(),
-            self.property_effect_count(),
-            json_bool_option(self.embedded_fonts),
-            self.library_unit_name_count(),
-            self.library_symbols
-                .iter()
-                .map(|symbol| symbol.graphics.len())
-                .sum::<usize>()
-        )
-    }
-
-    fn library_unit_name_count(&self) -> usize {
-        self.library_symbols
-            .iter()
-            .map(|symbol| symbol.unit_names.len())
-            .sum()
-    }
-
-    fn embedded_project_instance_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .map(|symbol| symbol.instances.len())
-            .sum::<usize>()
-            + self
-                .sheets
-                .iter()
-                .map(|sheet| sheet.instances.len())
-                .sum::<usize>()
-    }
-
-    fn symbol_pin_alternate_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .flat_map(|symbol| &symbol.pins)
-            .filter(|pin| pin.alternate.is_some())
-            .count()
-    }
-
-    fn embedded_instance_path_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .flat_map(|symbol| &symbol.instances)
-            .map(|instance| instance.paths.len())
-            .sum::<usize>()
-            + self
-                .sheets
-                .iter()
-                .flat_map(|sheet| &sheet.instances)
-                .map(|instance| instance.paths.len())
-                .sum::<usize>()
-    }
-
-    fn variant_instance_count(&self) -> usize {
-        let embedded_variants = self
-            .symbols
-            .iter()
-            .flat_map(|symbol| &symbol.instances)
-            .flat_map(|instance| &instance.paths)
-            .map(|path| path.variants.len())
-            .sum::<usize>()
-            + self
-                .sheets
-                .iter()
-                .flat_map(|sheet| &sheet.instances)
-                .flat_map(|instance| &instance.paths)
-                .map(|path| path.variants.len())
-                .sum::<usize>();
-        let top_level_variants = self
-            .symbol_instances
-            .iter()
-            .map(|instance| instance.variants.len())
-            .sum::<usize>();
-        embedded_variants + top_level_variants
-    }
-
-    fn styled_schematic_graphic_count(&self) -> usize {
-        self.graphics
-            .iter()
-            .filter(|graphic| graphic.stroke.is_some() || graphic.fill.is_some())
-            .count()
-    }
-
-    fn styled_wire_count(&self) -> usize {
-        self.wires
-            .iter()
-            .filter(|wire| wire.stroke.is_some())
-            .count()
-    }
-
-    fn styled_bus_count(&self) -> usize {
-        self.buses.iter().filter(|bus| bus.stroke.is_some()).count()
-    }
-
-    fn styled_bus_entry_count(&self) -> usize {
-        self.bus_entries
-            .iter()
-            .filter(|entry| entry.stroke.is_some())
-            .count()
-    }
-
-    fn net_chain_member_net_count(&self) -> usize {
-        self.net_chains
-            .iter()
-            .map(|net_chain| net_chain.member_nets.len())
-            .sum()
-    }
-
-    fn locked_schematic_graphic_count(&self) -> usize {
-        self.graphics
-            .iter()
-            .filter(|graphic| graphic.locked == Some(true))
-            .count()
-    }
-
-    fn styled_text_box_count(&self) -> usize {
-        self.text_boxes
-            .iter()
-            .filter(|text_box| text_box.stroke.is_some() || text_box.fill.is_some())
-            .count()
-    }
-
-    fn locked_text_box_count(&self) -> usize {
-        self.text_boxes
-            .iter()
-            .filter(|text_box| text_box.locked == Some(true))
-            .count()
-    }
-
-    fn styled_table_count(&self) -> usize {
-        self.tables
-            .iter()
-            .filter(|table| table.border.is_some() || table.separators.is_some())
-            .count()
-    }
-
-    fn styled_table_cell_count(&self) -> usize {
-        self.tables
-            .iter()
-            .flat_map(|table| &table.cells)
-            .filter(|cell| cell.fill.is_some() || cell.effects.is_some())
-            .count()
-    }
-
-    fn locked_table_cell_count(&self) -> usize {
-        self.tables
-            .iter()
-            .flat_map(|table| &table.cells)
-            .filter(|cell| cell.locked == Some(true))
-            .count()
-    }
-
-    fn styled_rule_area_count(&self) -> usize {
-        self.rule_areas
-            .iter()
-            .filter(|rule_area| rule_area.stroke.is_some() || rule_area.fill.is_some())
-            .count()
-    }
-
-    fn locked_rule_area_count(&self) -> usize {
-        self.rule_areas
-            .iter()
-            .filter(|rule_area| rule_area.locked == Some(true))
-            .count()
-    }
-
-    fn styled_junction_count(&self) -> usize {
-        self.junctions
-            .iter()
-            .filter(|junction| junction.diameter.is_some() || junction.color.is_some())
-            .count()
-    }
-
-    fn styled_sheet_count(&self) -> usize {
-        self.sheets
-            .iter()
-            .filter(|sheet| sheet.stroke.is_some() || sheet.fill.is_some())
-            .count()
-    }
-
-    fn dnp_item_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .filter(|symbol| symbol.dnp == Some(true))
-            .count()
-            + self
-                .sheets
-                .iter()
-                .filter(|sheet| sheet.dnp == Some(true))
-                .count()
-            + self
-                .rule_areas
-                .iter()
-                .filter(|rule_area| rule_area.dnp == Some(true))
-                .count()
-    }
-
-    fn bom_excluded_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .filter(|symbol| symbol.in_bom == Some(false))
-            .count()
-            + self
-                .sheets
-                .iter()
-                .filter(|sheet| sheet.in_bom == Some(false))
-                .count()
-            + self
-                .rule_areas
-                .iter()
-                .filter(|rule_area| rule_area.in_bom == Some(false))
-                .count()
-    }
-
-    fn board_excluded_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .filter(|symbol| symbol.on_board == Some(false))
-            .count()
-            + self
-                .sheets
-                .iter()
-                .filter(|sheet| sheet.on_board == Some(false))
-                .count()
-            + self
-                .rule_areas
-                .iter()
-                .filter(|rule_area| rule_area.on_board == Some(false))
-                .count()
-    }
-
-    fn mirrored_symbol_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .filter(|symbol| symbol.mirror.is_some())
-            .count()
-    }
-
-    fn symbol_body_style_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .filter(|symbol| symbol.body_style.is_some())
-            .count()
-    }
-
-    fn fields_autoplaced_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .filter(|symbol| symbol.fields_autoplaced == Some(true))
-            .count()
-            + self
-                .sheets
-                .iter()
-                .filter(|sheet| sheet.fields_autoplaced == Some(true))
-                .count()
-            + self
-                .labels
-                .iter()
-                .filter(|label| label.fields_autoplaced == Some(true))
-                .count()
-            + self
-                .directive_labels
-                .iter()
-                .filter(|label| label.fields_autoplaced == Some(true))
-                .count()
-    }
-
-    fn shaped_label_count(&self) -> usize {
-        self.labels
-            .iter()
-            .filter(|label| label.shape.is_some())
-            .count()
-    }
-
-    fn label_property_count(&self) -> usize {
-        self.labels.iter().map(|label| label.properties.len()).sum()
-    }
-
-    fn directive_label_property_count(&self) -> usize {
-        self.directive_labels
-            .iter()
-            .map(|label| label.properties.len())
-            .sum()
-    }
-
-    fn hidden_property_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .flat_map(|symbol| &symbol.properties)
-            .filter(|property| property_is_hidden(property))
-            .count()
-            + self
-                .sheets
-                .iter()
-                .flat_map(|sheet| &sheet.properties)
-                .filter(|property| property_is_hidden(property))
-                .count()
-            + self
-                .labels
-                .iter()
-                .flat_map(|label| &label.properties)
-                .filter(|property| property_is_hidden(property))
-                .count()
-            + self
-                .directive_labels
-                .iter()
-                .flat_map(|label| &label.properties)
-                .filter(|property| property_is_hidden(property))
-                .count()
-    }
-
-    fn property_effect_count(&self) -> usize {
-        self.symbols
-            .iter()
-            .flat_map(|symbol| &symbol.properties)
-            .filter(|property| property.effects.is_some())
-            .count()
-            + self
-                .sheets
-                .iter()
-                .flat_map(|sheet| &sheet.properties)
-                .filter(|property| property.effects.is_some())
-                .count()
-            + self
-                .labels
-                .iter()
-                .flat_map(|label| &label.properties)
-                .filter(|property| property.effects.is_some())
-                .count()
-            + self
-                .directive_labels
-                .iter()
-                .flat_map(|label| &label.properties)
-                .filter(|property| property.effects.is_some())
-                .count()
-    }
 }
 
 struct KicadHierarchyExport {
@@ -3221,14 +2662,6 @@ fn count_spice_directive_lines(netlist: &str) -> usize {
         .count()
 }
 
-fn property_is_hidden(property: &KicadProperty) -> bool {
-    property.hide == Some(true)
-        || property
-            .effects
-            .as_ref()
-            .is_some_and(|effects| effects.hide)
-}
-
 fn scoped_net_name(scope: &str, net: &str, aliases: &BTreeMap<String, String>) -> String {
     if net == "0" || net.eq_ignore_ascii_case("gnd") {
         return "0".to_string();
@@ -3312,23 +2745,6 @@ fn sanitize_spice_identifier(value: &str) -> String {
         "item".to_string()
     } else {
         sanitized
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KicadDiagnosticSeverity {
-    Info,
-    Warning,
-    Error,
-}
-
-impl KicadDiagnosticSeverity {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Info => "info",
-            Self::Warning => "warning",
-            Self::Error => "error",
-        }
     }
 }
 
@@ -5101,88 +4517,6 @@ impl KicadColor {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct KicadTitleBlock {
-    pub title: Option<String>,
-    pub date: Option<String>,
-    pub revision: Option<String>,
-    pub company: Option<String>,
-    pub comments: Vec<KicadTitleComment>,
-}
-
-impl KicadTitleBlock {
-    fn write_title_block_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!("{}(title_block\n", pad));
-        if let Some(title) = &self.title {
-            output.push_str(&format!("{}  (title {})\n", pad, sexpr_string(title)));
-        }
-        if let Some(date) = &self.date {
-            output.push_str(&format!("{}  (date {})\n", pad, sexpr_string(date)));
-        }
-        if let Some(revision) = &self.revision {
-            output.push_str(&format!("{}  (rev {})\n", pad, sexpr_string(revision)));
-        }
-        if let Some(company) = &self.company {
-            output.push_str(&format!("{}  (company {})\n", pad, sexpr_string(company)));
-        }
-        for comment in &self.comments {
-            output.push_str(&format!(
-                "{}  (comment {} {})\n",
-                pad,
-                comment.index,
-                sexpr_string(&comment.text)
-            ));
-        }
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadTitleComment {
-    pub index: u32,
-    pub text: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadSheetInstance {
-    pub path: String,
-    pub page: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadSymbolPathInstance {
-    pub path: String,
-    pub reference: Option<String>,
-    pub unit: Option<u32>,
-    pub value: Option<String>,
-    pub footprint: Option<String>,
-    pub variants: Vec<KicadVariantInstance>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadProjectInstance {
-    pub name: String,
-    pub paths: Vec<KicadInstancePath>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadInstancePath {
-    pub path: String,
-    pub page: Option<String>,
-    pub reference: Option<String>,
-    pub unit: Option<u32>,
-    pub value: Option<String>,
-    pub footprint: Option<String>,
-    pub variants: Vec<KicadVariantInstance>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadVariantInstance {
-    pub name: Option<String>,
-    pub dnp: Option<bool>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct KicadWire {
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
@@ -5869,231 +5203,6 @@ fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
         uuid: child_value(items, "uuid"),
         alternate: child_value(items, "alternate"),
     })
-}
-
-fn parse_title_block(node: &Sexp) -> KicadTitleBlock {
-    let items = list_items(node);
-    KicadTitleBlock {
-        title: child_value(items, "title"),
-        date: child_value(items, "date"),
-        revision: child_value(items, "rev"),
-        company: child_value(items, "company"),
-        comments: direct_children(items, "comment")
-            .filter_map(parse_title_comment)
-            .collect(),
-    }
-}
-
-fn parse_title_comment(node: &Sexp) -> Option<KicadTitleComment> {
-    Some(KicadTitleComment {
-        index: list_value(node, 1)?.parse().ok()?,
-        text: list_value(node, 2)?,
-    })
-}
-
-fn parse_sheet_instances(node: &Sexp) -> Vec<KicadSheetInstance> {
-    direct_children(list_items(node), "path")
-        .filter_map(parse_sheet_instance)
-        .collect()
-}
-
-fn parse_sheet_instance(node: &Sexp) -> Option<KicadSheetInstance> {
-    let items = list_items(node);
-    Some(KicadSheetInstance {
-        path: list_value(node, 1)?,
-        page: child_value(items, "page"),
-    })
-}
-
-fn parse_symbol_path_instances(node: &Sexp) -> Vec<KicadSymbolPathInstance> {
-    direct_children(list_items(node), "path")
-        .filter_map(parse_symbol_path_instance)
-        .collect()
-}
-
-fn parse_symbol_path_instance(node: &Sexp) -> Option<KicadSymbolPathInstance> {
-    let path = parse_instance_path(node)?;
-    Some(KicadSymbolPathInstance {
-        path: path.path,
-        reference: path.reference,
-        unit: path.unit,
-        value: path.value,
-        footprint: path.footprint,
-        variants: path.variants,
-    })
-}
-
-fn parse_project_instances(node: &Sexp) -> Vec<KicadProjectInstance> {
-    direct_children(list_items(node), "project")
-        .filter_map(parse_project_instance)
-        .collect()
-}
-
-fn parse_project_instance(node: &Sexp) -> Option<KicadProjectInstance> {
-    let items = list_items(node);
-    Some(KicadProjectInstance {
-        name: list_value(node, 1)?,
-        paths: direct_children(items, "path")
-            .filter_map(parse_instance_path)
-            .collect(),
-    })
-}
-
-fn parse_instance_path(node: &Sexp) -> Option<KicadInstancePath> {
-    let items = list_items(node);
-    Some(KicadInstancePath {
-        path: list_value(node, 1)?,
-        page: child_value(items, "page"),
-        reference: child_value(items, "reference"),
-        unit: child_value(items, "unit").and_then(|value| value.parse().ok()),
-        value: child_value(items, "value"),
-        footprint: child_value(items, "footprint"),
-        variants: direct_children(items, "variant")
-            .filter_map(parse_variant_instance)
-            .collect(),
-    })
-}
-
-fn parse_variant_instance(node: &Sexp) -> Option<KicadVariantInstance> {
-    let items = list_items(node);
-    Some(KicadVariantInstance {
-        name: child_value(items, "name"),
-        dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
-    })
-}
-
-fn write_sheet_instances_sexpr(
-    output: &mut String,
-    instances: &[KicadSheetInstance],
-    indent: usize,
-) {
-    let pad = " ".repeat(indent);
-    output.push_str(&format!("{}(sheet_instances\n", pad));
-    for instance in instances {
-        output.push_str(&format!("{}  (path {}", pad, sexpr_string(&instance.path)));
-        if let Some(page) = &instance.page {
-            output.push_str(&format!(" (page {})", sexpr_string(page)));
-        }
-        output.push_str(")\n");
-    }
-    output.push_str(&format!("{})\n", pad));
-}
-
-fn write_symbol_path_instances_sexpr(
-    output: &mut String,
-    instances: &[KicadSymbolPathInstance],
-    indent: usize,
-) {
-    let pad = " ".repeat(indent);
-    output.push_str(&format!("{}(symbol_instances\n", pad));
-    for instance in instances {
-        output.push_str(&format!(
-            "{}  (path {}\n",
-            pad,
-            sexpr_string(&instance.path)
-        ));
-        if let Some(reference) = &instance.reference {
-            output.push_str(&format!(
-                "{}    (reference {})\n",
-                pad,
-                sexpr_string(reference)
-            ));
-        }
-        if let Some(unit) = instance.unit {
-            output.push_str(&format!("{}    (unit {})\n", pad, unit));
-        }
-        if let Some(value) = &instance.value {
-            output.push_str(&format!("{}    (value {})\n", pad, sexpr_string(value)));
-        }
-        if let Some(footprint) = &instance.footprint {
-            output.push_str(&format!(
-                "{}    (footprint {})\n",
-                pad,
-                sexpr_string(footprint)
-            ));
-        }
-        for variant in &instance.variants {
-            write_variant_instance_sexpr(output, variant, indent + 4);
-        }
-        output.push_str(&format!("{}  )\n", pad));
-    }
-    output.push_str(&format!("{})\n", pad));
-}
-
-fn write_project_instances_sexpr(
-    output: &mut String,
-    instances: &[KicadProjectInstance],
-    indent: usize,
-) {
-    if instances.is_empty() {
-        return;
-    }
-    let pad = " ".repeat(indent);
-    output.push_str(&format!("{}(instances\n", pad));
-    for instance in instances {
-        output.push_str(&format!(
-            "{}  (project {}\n",
-            pad,
-            sexpr_string(&instance.name)
-        ));
-        for path in &instance.paths {
-            write_instance_path_sexpr(output, path, indent + 4);
-        }
-        output.push_str(&format!("{}  )\n", pad));
-    }
-    output.push_str(&format!("{})\n", pad));
-}
-
-fn write_instance_path_sexpr(output: &mut String, path: &KicadInstancePath, indent: usize) {
-    let pad = " ".repeat(indent);
-    output.push_str(&format!("{}(path {}\n", pad, sexpr_string(&path.path)));
-    if let Some(page) = &path.page {
-        output.push_str(&format!("{}  (page {})\n", pad, sexpr_string(page)));
-    }
-    if let Some(reference) = &path.reference {
-        output.push_str(&format!(
-            "{}  (reference {})\n",
-            pad,
-            sexpr_string(reference)
-        ));
-    }
-    if let Some(unit) = path.unit {
-        output.push_str(&format!("{}  (unit {})\n", pad, unit));
-    }
-    if let Some(value) = &path.value {
-        output.push_str(&format!("{}  (value {})\n", pad, sexpr_string(value)));
-    }
-    if let Some(footprint) = &path.footprint {
-        output.push_str(&format!(
-            "{}  (footprint {})\n",
-            pad,
-            sexpr_string(footprint)
-        ));
-    }
-    for variant in &path.variants {
-        write_variant_instance_sexpr(output, variant, indent + 2);
-    }
-    output.push_str(&format!("{})\n", pad));
-}
-
-fn write_variant_instance_sexpr(
-    output: &mut String,
-    variant: &KicadVariantInstance,
-    indent: usize,
-) {
-    let pad = " ".repeat(indent);
-    output.push_str(&format!("{}(variant\n", pad));
-    if let Some(name) = &variant.name {
-        output.push_str(&format!("{}  (name {})\n", pad, sexpr_string(name)));
-    }
-    if let Some(dnp) = variant.dnp {
-        output.push_str(&format!(
-            "{}  (dnp {})\n",
-            pad,
-            if dnp { "yes" } else { "no" }
-        ));
-    }
-    output.push_str(&format!("{})\n", pad));
 }
 
 fn write_optional_bool_sexpr(output: &mut String, indent: usize, name: &str, value: Option<bool>) {
@@ -7381,24 +6490,6 @@ fn compare_pin_numbers(left: &&KicadPinDef, right: &&KicadPinDef) -> Ordering {
     }
 }
 
-fn kicad_schematic_diagnostic(
-    severity: KicadDiagnosticSeverity,
-    code: &str,
-    message: &str,
-    item: Option<String>,
-    net: Option<String>,
-    pin: Option<String>,
-) -> KicadSchematicDiagnostic {
-    KicadSchematicDiagnostic {
-        severity,
-        code: code.to_string(),
-        message: message.to_string(),
-        item,
-        net,
-        pin,
-    }
-}
-
 fn library_symbol_definition_for_lib_id(
     library: &KicadSymbolLibrary,
     library_name: &str,
@@ -7566,7 +6657,7 @@ fn parse_sim_pin_order(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn parse_kicad_bool_value(value: String) -> Option<bool> {
+pub(crate) fn parse_kicad_bool_value(value: String) -> Option<bool> {
     match value.trim().to_ascii_lowercase().as_str() {
         "yes" | "true" | "1" => Some(true),
         "no" | "false" | "0" => Some(false),

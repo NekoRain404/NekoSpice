@@ -6,8 +6,16 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 ## Boundaries
 
 - `lib.rs` currently exposes the public KiCad API and still owns the main
-  schematic/symbol parsers, writer, schematic IR, diagnostics, and
-  schematic-to-SPICE export.
+  schematic/symbol parsers, writer, schematic IR, and schematic-to-SPICE
+  export.
+- `diagnostics.rs` owns schematic check report DTOs, hierarchy netlist report
+  DTOs, diagnostic severity formatting, and shared diagnostic constructors.
+- `metadata.rs` owns schematic title block/comment IR plus title block
+  parse/write helpers.
+- `instances.rs` owns sheet/symbol/project instance path IR, variant DNP
+  metadata, and embedded/top-level instance parse/write helpers.
+- `schematic_summary.rs` owns schematic summary JSON generation and related
+  metadata/style/count aggregation helpers.
 - `project.rs` owns `.kicad_pro` project JSON parsing, project summary DTOs, and
   schematic stem candidate discovery used by KiCad project import paths.
 - `symbol_library.rs` owns `.kicad_sym` library containers, `sym-lib-table`
