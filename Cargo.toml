@@ -8,6 +8,7 @@ members = [
     "crates/osl-waveform",
     "crates/osl-sim",
     "crates/osl-cli",
+    "crates/osl-app",
 ]
 resolver = "3"
 
