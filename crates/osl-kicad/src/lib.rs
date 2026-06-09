@@ -1027,7 +1027,7 @@ impl KicadSchematic {
             .iter()
             .find(|symbol| symbol.name == lib_id)
         {
-            Some(existing) if existing != &definition => {
+            Some(existing) if !library_symbol_definitions_are_compatible(existing, &definition) => {
                 return Err(OslError::InvalidInput(format!(
                     "KiCad embedded library symbol '{lib_id}' already exists with different content"
                 )));
@@ -3419,6 +3419,45 @@ fn translate_graphic(graphic: &mut KicadGraphic, delta: KicadPoint) {
             translate_point(end, delta);
         }
         KicadGraphic::Text { at, .. } => translate_optional_at(at, delta),
+    }
+}
+
+fn library_symbol_definitions_are_compatible(
+    existing: &KicadSymbolDef,
+    incoming: &KicadSymbolDef,
+) -> bool {
+    if existing == incoming {
+        return true;
+    }
+
+    let mut existing = existing.clone();
+    let mut incoming = incoming.clone();
+    normalize_default_property_effects(&mut existing);
+    normalize_default_property_effects(&mut incoming);
+    existing == incoming
+}
+
+fn normalize_default_property_effects(symbol: &mut KicadSymbolDef) {
+    for property in &mut symbol.properties {
+        if property.effects.is_none() {
+            property.effects = Some(default_kicad_text_effects());
+        }
+    }
+}
+
+fn default_kicad_text_effects() -> KicadTextEffects {
+    KicadTextEffects {
+        font_size: Some(KicadSize {
+            width: 1.27,
+            height: 1.27,
+        }),
+        font_thickness: None,
+        font_bold: None,
+        font_italic: None,
+        font_color: None,
+        justify: Vec::new(),
+        hide: false,
+        href: None,
     }
 }
 
@@ -16001,6 +16040,71 @@ mod tests {
                 .iter()
                 .any(|symbol| symbol.reference == "C2" && symbol.pins.len() == 2)
         );
+    }
+
+    #[test]
+    fn places_symbol_when_embedded_library_has_explicit_default_property_effects() {
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:R"
+      (property "Reference" "R" (at 0 0 0)
+        (effects (font (size 1.27 1.27)))
+      )
+      (property "Value" "1k" (at 0 -2.54 0)
+        (effects (font (size 1.27 1.27)))
+      )
+      (symbol "R_0_1"
+        (rectangle (start -1.27 -1.27) (end 1.27 1.27) (stroke (width 0.254) (type default)) (fill (type none)))
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+      )
+    )
+  )
+)"#,
+            "explicit_default_effects.kicad_sch",
+        )
+        .unwrap();
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (symbol "NekoSpice:R"
+    (property "Reference" "R" (at 0 0 0))
+    (property "Value" "1k" (at 0 -2.54 0))
+    (symbol "R_0_1"
+      (rectangle (start -1.27 -1.27) (end 1.27 1.27) (stroke (width 0.254) (type default)) (fill (type none)))
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 2.54 0 180) (length 2.54) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+    )
+  )
+)"#,
+            "implicit_default_effects.kicad_sym",
+        )
+        .unwrap();
+
+        let summary = schematic
+            .apply_edit(KicadSchematicEdit::PlaceSymbol {
+                definition: Box::new(library.symbol("NekoSpice:R").unwrap().clone()),
+                reference: "R1".to_string(),
+                value: "1k".to_string(),
+                at: KicadAt {
+                    x: 10.0,
+                    y: 10.0,
+                    rotation: 0.0,
+                },
+                unit: Some(1),
+                body_style: None,
+                pin_alternates: BTreeMap::new(),
+                uuid: Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".to_string()),
+            })
+            .unwrap();
+
+        assert_eq!(summary.operation, "place-symbol");
+        assert_eq!(schematic.library_symbols.len(), 1);
+        assert_eq!(schematic.symbols[0].reference(), Some("R1"));
     }
 
     #[test]

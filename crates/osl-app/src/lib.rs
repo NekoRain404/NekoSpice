@@ -1,15 +1,18 @@
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use osl_kicad::{
     KicadBoundingBox, KicadCanvasBusEntry, KicadCanvasGraphic, KicadCanvasHit, KicadCanvasScene,
-    KicadCanvasSheet, KicadEditSummary, KicadPoint, KicadSchematic, KicadSchematicEdit,
-    read_kicad_schematic_with_libraries, write_kicad_schematic,
+    KicadCanvasSheet, KicadEditSummary, KicadIndexedSymbol, KicadPoint, KicadSchematic,
+    KicadSchematicEdit, KicadSymbolLibraryIndex, KicadSymbolLibraryIndexQuery,
+    read_kicad_schematic_with_libraries, read_kicad_symbol_library_index, write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
 
 const DEFAULT_SCHEMATIC: &str = "examples/kicad_schematic/rc.kicad_sch";
+const DEFAULT_SYMBOL_LIBRARY_TABLE: &str = "examples/kicad_schematic/sym-lib-table";
 const MIN_ZOOM: f32 = 1.0;
 const MAX_ZOOM: f32 = 180.0;
 const EDIT_NUDGE_MM: f64 = 2.54;
+const SYMBOL_BROWSER_LIMIT: usize = 80;
 
 #[derive(Debug)]
 struct KicadGuiDocument {
@@ -65,6 +68,39 @@ impl KicadGuiDocument {
     }
 }
 
+#[derive(Debug)]
+struct KicadGuiLibrary {
+    path: PathBuf,
+    index: KicadSymbolLibraryIndex,
+}
+
+impl KicadGuiLibrary {
+    // Keep KiCad library parsing and search in osl-kicad; the GUI owns only paths, selection, and display state.
+    fn load(path: PathBuf) -> Result<Self, String> {
+        read_kicad_symbol_library_index(&path)
+            .map(|index| Self { path, index })
+            .map_err(|error| error.to_string())
+    }
+
+    fn filtered_index(&self, text: &str) -> KicadSymbolLibraryIndex {
+        let text = text.trim();
+        let query = KicadSymbolLibraryIndexQuery {
+            text: (!text.is_empty()).then(|| text.to_string()),
+            library: None,
+            footprint: None,
+        };
+        if query.is_empty() {
+            self.index.clone()
+        } else {
+            self.index.query(&query)
+        }
+    }
+
+    fn symbol(&self, lib_id: &str) -> Option<&KicadIndexedSymbol> {
+        self.index.symbol(lib_id)
+    }
+}
+
 pub fn run_native() -> eframe::Result {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -79,17 +115,29 @@ pub fn run_native() -> eframe::Result {
     eframe::run_native(
         "NekoSpice",
         native_options,
-        Box::new(|_cc| Ok(Box::new(NekoSpiceApp::default()))),
+        Box::new(|cc| {
+            cc.egui_ctx.set_visuals(egui::Visuals::light());
+            let mut style = (*cc.egui_ctx.global_style()).clone();
+            style.spacing.item_spacing = Vec2::new(8.0, 6.0);
+            style.spacing.button_padding = Vec2::new(10.0, 4.0);
+            cc.egui_ctx.set_global_style(style);
+            Ok(Box::new(NekoSpiceApp::default()))
+        }),
     )
 }
 
 #[derive(Debug)]
 pub struct NekoSpiceApp {
     schematic_path: String,
+    library_table_path: String,
     document: Option<KicadGuiDocument>,
+    library: Option<KicadGuiLibrary>,
     scene: Option<KicadCanvasScene>,
     selected_hit: Option<KicadCanvasHit>,
+    selected_symbol_id: Option<String>,
+    symbol_search: String,
     load_error: Option<String>,
+    library_error: Option<String>,
     status_message: Option<String>,
     viewport: CanvasViewport,
 }
@@ -129,14 +177,20 @@ impl Default for NekoSpiceApp {
     fn default() -> Self {
         let mut app = Self {
             schematic_path: DEFAULT_SCHEMATIC.to_string(),
+            library_table_path: DEFAULT_SYMBOL_LIBRARY_TABLE.to_string(),
             document: None,
+            library: None,
             scene: None,
             selected_hit: None,
+            selected_symbol_id: None,
+            symbol_search: String::new(),
             load_error: None,
+            library_error: None,
             status_message: None,
             viewport: CanvasViewport::default(),
         };
         app.load_schematic(PathBuf::from(DEFAULT_SCHEMATIC));
+        app.load_symbol_library(PathBuf::from(DEFAULT_SYMBOL_LIBRARY_TABLE));
         app
     }
 }
@@ -157,6 +211,23 @@ impl NekoSpiceApp {
             Err(error) => {
                 self.load_error = Some(error.to_string());
                 self.status_message = None;
+            }
+        }
+    }
+
+    fn load_symbol_library(&mut self, path: PathBuf) {
+        match KicadGuiLibrary::load(path.clone()) {
+            Ok(library) => {
+                self.library_table_path = path.display().to_string();
+                self.library = Some(library);
+                self.selected_symbol_id = None;
+                self.library_error = None;
+                self.status_message = Some("Loaded symbol library".to_string());
+            }
+            Err(error) => {
+                self.library = None;
+                self.selected_symbol_id = None;
+                self.library_error = Some(error.to_string());
             }
         }
     }
@@ -235,6 +306,8 @@ impl NekoSpiceApp {
 
     fn draw_toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
+            ui.heading("NekoSpice");
+            ui.separator();
             ui.label("Schematic");
             let path_response = ui.text_edit_singleline(&mut self.schematic_path);
             let load_requested = ui.button("Open").clicked()
@@ -260,7 +333,7 @@ impl NekoSpiceApp {
                 .and_then(|hit| hit.uuid.as_ref())
                 .is_some();
             if ui
-                .add_enabled(can_edit && can_delete, egui::Button::new("Delete Selected"))
+                .add_enabled(can_edit && can_delete, egui::Button::new("Delete"))
                 .clicked()
             {
                 self.delete_selected();
@@ -280,12 +353,16 @@ impl NekoSpiceApp {
                     self.nudge_selected(EditNudgeDirection::Down);
                 }
             }
+            if let Some(message) = &self.status_message {
+                ui.separator();
+                ui.label(message);
+            }
         });
     }
 
     fn draw_sidebar(&self, ui: &mut egui::Ui) {
-        ui.heading("NekoSpice");
-        ui.label("GPU renderer: wgpu");
+        ui.heading("Project");
+        ui.label("Renderer: wgpu");
         ui.separator();
 
         if let Some(error) = &self.load_error {
@@ -299,22 +376,35 @@ impl NekoSpiceApp {
         };
 
         ui.label(format!("Source: {}", scene.source));
-        ui.label(format!("Symbols: {}", scene.symbols.len()));
-        ui.label(format!("Wires: {}", scene.wires.len()));
-        ui.label(format!("Buses: {}", scene.buses.len()));
-        ui.label(format!("Labels: {}", scene.labels.len()));
-        ui.label(format!("Sheets: {}", scene.sheets.len()));
-        ui.label(format!("Graphics: {}", scene.graphics.len()));
+        egui::Grid::new("project_stats")
+            .num_columns(2)
+            .spacing(Vec2::new(16.0, 4.0))
+            .show(ui, |ui| {
+                ui.label("Symbols");
+                ui.label(scene.symbols.len().to_string());
+                ui.end_row();
+                ui.label("Wires");
+                ui.label(scene.wires.len().to_string());
+                ui.end_row();
+                ui.label("Buses");
+                ui.label(scene.buses.len().to_string());
+                ui.end_row();
+                ui.label("Labels");
+                ui.label(scene.labels.len().to_string());
+                ui.end_row();
+                ui.label("Sheets");
+                ui.label(scene.sheets.len().to_string());
+                ui.end_row();
+                ui.label("Graphics");
+                ui.label(scene.graphics.len().to_string());
+                ui.end_row();
+            });
         ui.label(format!("Zoom: {:.1} px/mm", self.viewport.zoom));
         if let Some(document) = &self.document {
             ui.label(format!(
                 "Dirty: {}",
                 if document.dirty { "yes" } else { "no" }
             ));
-        }
-        if let Some(message) = &self.status_message {
-            ui.separator();
-            ui.label(message);
         }
 
         ui.separator();
@@ -327,6 +417,94 @@ impl NekoSpiceApp {
             }
         } else {
             ui.label("None");
+        }
+    }
+
+    fn draw_library_browser(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Symbol Library");
+        let library_response = ui.text_edit_singleline(&mut self.library_table_path);
+        let load_requested = ui.button("Load Symbols").clicked()
+            || (library_response.lost_focus()
+                && ui.input(|input| input.key_pressed(egui::Key::Enter)));
+        if load_requested {
+            self.load_symbol_library(PathBuf::from(self.library_table_path.trim()));
+        }
+        if let Some(error) = &self.library_error {
+            ui.colored_label(Color32::from_rgb(190, 40, 40), error);
+            return;
+        }
+
+        let Some(library) = &self.library else {
+            ui.label("No symbol library loaded");
+            return;
+        };
+
+        ui.label(format!("Table: {}", library.path.display()));
+        ui.label(format!(
+            "{} libraries, {} symbols, {} diagnostics",
+            library.index.libraries.len(),
+            library.index.symbols.len(),
+            library.index.diagnostics.len()
+        ));
+        ui.separator();
+        ui.label("Search");
+        ui.text_edit_singleline(&mut self.symbol_search);
+
+        let filtered = library.filtered_index(&self.symbol_search);
+        ui.label(format!("{} matches", filtered.symbols.len()));
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .max_height(420.0)
+            .show(ui, |ui| {
+                for symbol in filtered.symbols.iter().take(SYMBOL_BROWSER_LIMIT) {
+                    let selected = self.selected_symbol_id.as_deref() == Some(symbol.id.as_str());
+                    if ui
+                        .selectable_label(selected, format!("{}  {}", symbol.id, symbol.name))
+                        .clicked()
+                    {
+                        self.selected_symbol_id = Some(symbol.id.clone());
+                    }
+                    ui.label(format!(
+                        "{} pins, {} units, {} graphics",
+                        symbol.pin_count, symbol.unit_count, symbol.graphic_count
+                    ));
+                    if let Some(description) = &symbol.description {
+                        ui.label(description);
+                    }
+                    ui.separator();
+                }
+                if filtered.symbols.len() > SYMBOL_BROWSER_LIMIT {
+                    ui.label(format!(
+                        "{} more symbols hidden by the browser limit",
+                        filtered.symbols.len() - SYMBOL_BROWSER_LIMIT
+                    ));
+                }
+            });
+
+        ui.separator();
+        ui.heading("Symbol Details");
+        if let Some(symbol_id) = &self.selected_symbol_id {
+            if let Some(symbol) = library.symbol(symbol_id) {
+                ui.label(format!("ID: {}", symbol.id));
+                ui.label(format!("Library: {}", symbol.library));
+                ui.label(format!("Source: {}", symbol.source));
+                if let Some(bounds) = symbol.bounding_box {
+                    ui.label(format!(
+                        "Bounds: {:.2} x {:.2} mm",
+                        bounds.width(),
+                        bounds.height()
+                    ));
+                }
+                if !symbol.footprint_filters.is_empty() {
+                    ui.label(format!(
+                        "Footprints: {}",
+                        symbol.footprint_filters.join(", ")
+                    ));
+                }
+                ui.label(format!("Pins: {}", symbol.pin_count));
+            }
+        } else {
+            ui.label("Select a symbol");
         }
     }
 
@@ -382,7 +560,7 @@ impl NekoSpiceApp {
         }
 
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(250, 251, 252));
+        painter.rect_filled(rect, 0.0, Color32::from_rgb(248, 249, 250));
         self.draw_grid(&painter, rect);
 
         if let Some(scene) = &self.scene {
@@ -403,7 +581,7 @@ impl NekoSpiceApp {
     fn draw_grid(&self, painter: &egui::Painter, rect: Rect) {
         let major = (10.0 * self.viewport.zoom).max(16.0);
         let origin = rect.center() + self.viewport.pan;
-        let stroke = Stroke::new(1.0, Color32::from_gray(226));
+        let stroke = Stroke::new(1.0, Color32::from_rgb(224, 229, 234));
 
         let mut x = origin.x % major;
         while x < rect.width() {
@@ -777,20 +955,30 @@ impl NekoSpiceApp {
 
 impl eframe::App for NekoSpiceApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        ui.vertical(|ui| {
-            self.draw_toolbar(ui);
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.set_height(ui.available_height());
-                ui.vertical(|ui| {
-                    ui.set_width(260.0);
-                    self.draw_sidebar(ui);
-                });
-                ui.separator();
-                ui.vertical(|ui| {
-                    self.draw_canvas(ui);
-                });
+        egui::Panel::top("nekospice_toolbar")
+            .exact_size(46.0)
+            .show_inside(ui, |ui| {
+                ui.add_space(4.0);
+                self.draw_toolbar(ui);
             });
+        egui::Panel::left("nekospice_project_panel")
+            .default_size(280.0)
+            .min_size(220.0)
+            .max_size(380.0)
+            .show_inside(ui, |ui| {
+                ui.add_space(8.0);
+                self.draw_sidebar(ui);
+            });
+        egui::Panel::right("nekospice_library_panel")
+            .default_size(340.0)
+            .min_size(260.0)
+            .max_size(480.0)
+            .show_inside(ui, |ui| {
+                ui.add_space(8.0);
+                self.draw_library_browser(ui);
+            });
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            self.draw_canvas(ui);
         });
     }
 }
@@ -888,6 +1076,24 @@ mod tests {
         let scene = load_canvas_scene(&workspace_root.join(DEFAULT_SCHEMATIC)).unwrap();
         assert!(!scene.symbols.is_empty());
         assert!(scene.bounds.is_some());
+    }
+
+    #[test]
+    fn loads_symbol_library_index_for_gui_browser() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let library =
+            KicadGuiLibrary::load(workspace_root.join(DEFAULT_SYMBOL_LIBRARY_TABLE)).unwrap();
+
+        assert_eq!(library.index.libraries.len(), 1);
+        assert_eq!(library.index.symbols.len(), 3);
+        assert!(library.symbol("NekoSpice:R").is_some());
+
+        let filtered = library.filtered_index("NekoSpice:C");
+        assert_eq!(filtered.symbols.len(), 1);
+        assert_eq!(filtered.symbols[0].id, "NekoSpice:C");
     }
 
     #[test]
