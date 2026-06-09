@@ -6,8 +6,10 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 ## Boundaries
 
 - `lib.rs` currently exposes the public KiCad API and still owns the main
-  schematic/project/symbol parsers, writer, schematic IR, diagnostics, and
+  schematic/symbol parsers, writer, schematic IR, diagnostics, and
   schematic-to-SPICE export.
+- `project.rs` owns `.kicad_pro` project JSON parsing, project summary DTOs, and
+  schematic stem candidate discovery used by KiCad project import paths.
 - `edit.rs` owns the public schematic edit command DTOs, edit summaries, symbol
   placement payloads, move/delete helpers, edit validation, and stable edit UUID
   generation used by GUI and CLI mutation paths.
@@ -21,6 +23,8 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 - `sexpr.rs` owns the reusable KiCad S-expression tree, parser, tree-navigation
   helpers, atom/string escaping, inline writer, and numeric formatting used by
   the parser/writer layers.
+- `json.rs` owns small shared JSON summary formatting helpers used by project,
+  schematic, and library reports.
 - `geometry.rs` owns reusable schematic/canvas geometry: bounding boxes,
   point/segment distances, rotated rectangles, sheet pin and no-connect marker
   geometry, text bounds estimation, polygon/polyline/Bezier/arc hit-testing, and

@@ -2,7 +2,9 @@ mod canvas;
 mod canvas_hit;
 mod edit;
 mod geometry;
+mod json;
 mod library_index;
+mod project;
 mod sexpr;
 
 pub use canvas::{
@@ -20,6 +22,7 @@ pub use library_index::{
     KicadIndexedSymbolUnit, KicadLibraryDiagnostic, KicadSymbolLibraryIndex,
     KicadSymbolLibraryIndexQuery,
 };
+pub use project::{KicadProject, KicadProjectSheet, parse_kicad_project};
 pub use sexpr::{Sexp, parse_sexpr};
 
 use edit::{
@@ -35,6 +38,7 @@ use geometry::{
     KICAD_CANVAS_LINE_BOUNDS_PADDING, KicadBoundingBoxBuilder, kicad_points_bounds,
     kicad_rotated_rect_bounds, pin_body_end, rotate_point,
 };
+use json::{json_bool_option, json_option};
 use osl_core::{OslError, OslResult, json_escape, read_text, write_text};
 use sexpr::{
     atom_text, child, child_value, direct_children, expect_root_list, format_number, head,
@@ -214,36 +218,6 @@ pub fn parse_kicad_symbol_library_table(
     })
 }
 
-pub fn parse_kicad_project(input: &str, source: &str) -> OslResult<KicadProject> {
-    let root: serde_json::Value = serde_json::from_str(input).map_err(|error| {
-        OslError::InvalidInput(format!(
-            "failed to parse KiCad project JSON {source}: {error}"
-        ))
-    })?;
-    if !root.is_object() {
-        return Err(OslError::InvalidInput(format!(
-            "expected KiCad project JSON object in {source}"
-        )));
-    }
-
-    Ok(KicadProject {
-        source: source.to_string(),
-        meta_filename: json_path_string(&root, &["meta", "filename"]),
-        meta_version: json_path_u64(&root, &["meta", "version"]),
-        project_name: json_path_string(&root, &["project", "name"]),
-        schematic_page_layout_descr_file: json_path_string(
-            &root,
-            &["schematic", "page_layout_descr_file"],
-        ),
-        sheets: parse_kicad_project_sheets(&root),
-        text_variable_count: root
-            .get("text_variables")
-            .and_then(|value| value.as_object())
-            .map(|variables| variables.len())
-            .unwrap_or(0),
-    })
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadSchematic {
     pub source: String,
@@ -275,73 +249,6 @@ pub struct KicadSchematic {
     pub sheet_instances: Vec<KicadSheetInstance>,
     pub symbol_instances: Vec<KicadSymbolPathInstance>,
     pub embedded_fonts: Option<bool>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadProject {
-    pub source: String,
-    pub meta_filename: Option<String>,
-    pub meta_version: Option<u64>,
-    pub project_name: Option<String>,
-    pub schematic_page_layout_descr_file: Option<String>,
-    pub sheets: Vec<KicadProjectSheet>,
-    pub text_variable_count: usize,
-}
-
-impl KicadProject {
-    pub fn schematic_stem_candidates(&self) -> Vec<String> {
-        let mut candidates = Vec::new();
-        push_unique_nonempty(&mut candidates, self.project_name.as_deref());
-        push_unique_nonempty(
-            &mut candidates,
-            self.meta_filename
-                .as_deref()
-                .and_then(path_stem_from_string)
-                .as_deref(),
-        );
-        push_unique_nonempty(
-            &mut candidates,
-            path_stem_from_string(&self.source).as_deref(),
-        );
-        candidates
-    }
-
-    pub fn to_summary_json(&self) -> String {
-        let sheet_names = self
-            .sheets
-            .iter()
-            .map(|sheet| format!("\"{}\"", json_escape(&sheet.name)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!(
-            concat!(
-                "{{\n",
-                "  \"source\": \"{}\",\n",
-                "  \"meta_filename\": {},\n",
-                "  \"meta_version\": {},\n",
-                "  \"project_name\": {},\n",
-                "  \"schematic_page_layout_descr_file\": {},\n",
-                "  \"sheet_count\": {},\n",
-                "  \"sheet_names\": [{}],\n",
-                "  \"text_variable_count\": {}\n",
-                "}}"
-            ),
-            json_escape(&self.source),
-            json_option(self.meta_filename.as_deref()),
-            json_u64_option(self.meta_version),
-            json_option(self.project_name.as_deref()),
-            json_option(self.schematic_page_layout_descr_file.as_deref()),
-            self.sheets.len(),
-            sheet_names,
-            self.text_variable_count,
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadProjectSheet {
-    pub uuid: String,
-    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -7679,82 +7586,6 @@ fn parse_number_list(node: &Sexp) -> Vec<f64> {
         .filter_map(atom_text)
         .filter_map(|value| value.parse().ok())
         .collect()
-}
-fn json_option(value: Option<&str>) -> String {
-    match value {
-        Some(value) => format!("\"{}\"", json_escape(value)),
-        None => "null".to_string(),
-    }
-}
-
-fn json_u64_option(value: Option<u64>) -> String {
-    value
-        .map(|value| value.to_string())
-        .unwrap_or_else(|| "null".to_string())
-}
-
-fn json_bool_option(value: Option<bool>) -> &'static str {
-    match value {
-        Some(true) => "true",
-        Some(false) => "false",
-        None => "null",
-    }
-}
-
-fn json_path_string(root: &serde_json::Value, path: &[&str]) -> Option<String> {
-    let mut current = root;
-    for key in path {
-        current = current.get(*key)?;
-    }
-    current
-        .as_str()
-        .map(str::to_string)
-        .filter(|value| !value.is_empty())
-}
-
-fn json_path_u64(root: &serde_json::Value, path: &[&str]) -> Option<u64> {
-    let mut current = root;
-    for key in path {
-        current = current.get(*key)?;
-    }
-    current.as_u64()
-}
-
-fn parse_kicad_project_sheets(root: &serde_json::Value) -> Vec<KicadProjectSheet> {
-    root.get("sheets")
-        .and_then(|value| value.as_array())
-        .map(|sheets| {
-            sheets
-                .iter()
-                .filter_map(|sheet| {
-                    let values = sheet.as_array()?;
-                    let uuid = values.first()?.as_str()?;
-                    let name = values.get(1)?.as_str()?;
-                    Some(KicadProjectSheet {
-                        uuid: uuid.to_string(),
-                        name: name.to_string(),
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn path_stem_from_string(path: &str) -> Option<String> {
-    Path::new(path)
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .map(str::to_string)
-        .filter(|stem| !stem.is_empty())
-}
-
-fn push_unique_nonempty(values: &mut Vec<String>, value: Option<&str>) {
-    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
-        return;
-    };
-    if !values.iter().any(|existing| existing == value) {
-        values.push(value.to_string());
-    }
 }
 fn write_points_sexpr(output: &mut String, points: &[KicadPoint]) {
     let points = points
