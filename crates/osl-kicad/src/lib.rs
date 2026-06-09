@@ -5,16 +5,20 @@ mod coordinates;
 mod diagnostics;
 mod edit;
 mod geometry;
+mod image;
 mod instances;
 mod json;
 mod library_index;
+mod markers;
 mod metadata;
 mod project;
 mod schematic_summary;
 mod sexpr;
 mod style;
 mod symbol_library;
+mod table;
 mod transform;
+mod wiring;
 
 pub use canvas::{
     KicadCanvasBus, KicadCanvasBusEntry, KicadCanvasDirectiveLabel, KicadCanvasGraphic,
@@ -32,6 +36,7 @@ pub use diagnostics::{
 };
 pub use edit::{KicadEditSummary, KicadSchematicEdit, KicadSymbolPlacement};
 pub use geometry::{KicadBoundingBox, sample_kicad_arc_points};
+pub use image::KicadImage;
 pub use instances::{
     KicadInstancePath, KicadProjectInstance, KicadSheetInstance, KicadSymbolPathInstance,
     KicadVariantInstance,
@@ -41,6 +46,7 @@ pub use library_index::{
     KicadIndexedSymbolUnit, KicadLibraryDiagnostic, KicadSymbolLibraryIndex,
     KicadSymbolLibraryIndexQuery,
 };
+pub use markers::{KicadJunction, KicadNoConnect};
 pub use metadata::{KicadTitleBlock, KicadTitleComment};
 pub use project::{KicadProject, KicadProjectSheet, parse_kicad_project};
 pub use sexpr::{Sexp, parse_sexpr};
@@ -49,12 +55,16 @@ pub use symbol_library::{
     KicadSymbolLibrary, KicadSymbolLibraryTable, KicadSymbolLibraryTableRow,
     parse_kicad_symbol_library, parse_kicad_symbol_library_table,
 };
+pub use table::{KicadTable, KicadTableBorder, KicadTableCell, KicadTableSeparators};
 pub use transform::normalize_symbol_mirror;
+pub use wiring::{
+    KicadBus, KicadBusAlias, KicadBusEntry, KicadNetChain, KicadNetChainEndpoint, KicadWire,
+};
 
 use connectivity::{coordinate_key, normalize_net_name, same_point, same_size};
 pub(crate) use coordinates::{
     kicad_at_value, kicad_point_value, kicad_points_value, kicad_size_value, parse_at,
-    parse_image_at, parse_points, parse_size, parse_xy, write_points_sexpr,
+    parse_points, parse_size, parse_xy, write_points_sexpr,
 };
 use diagnostics::kicad_schematic_diagnostic;
 use edit::{
@@ -70,15 +80,17 @@ use geometry::{
     KICAD_CANVAS_LINE_BOUNDS_PADDING, KicadBoundingBoxBuilder, kicad_points_bounds,
     kicad_rotated_rect_bounds, pin_body_end,
 };
+use image::parse_image;
 use instances::{
     parse_project_instances, parse_sheet_instances, parse_symbol_path_instances,
     write_project_instances_sexpr, write_sheet_instances_sexpr, write_symbol_path_instances_sexpr,
 };
+use markers::{parse_junction, parse_no_connect};
 use metadata::parse_title_block;
 use osl_core::{OslError, OslResult, read_text, write_text};
 use sexpr::{
     atom_text, child, child_value, direct_children, expect_root_list, format_number, head,
-    list_items, list_value, sexpr_atom_or_string, sexpr_string, write_sexpr_inline,
+    list_items, list_value, sexpr_atom_or_string, sexpr_string,
 };
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -87,12 +99,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 pub(crate) use style::{
     default_kicad_text_effects, kicad_color_value, kicad_fill_value, kicad_margins_value,
-    kicad_stroke_value, kicad_text_effects_value, parse_color, parse_fill, parse_margins,
-    parse_stroke, parse_text_effects, write_inline_fill, write_inline_optional_bool_sexpr,
-    write_inline_optional_fill, write_inline_stroke, write_inline_text_effects,
-    write_optional_bool_sexpr, write_text_effects_line,
+    kicad_stroke_value, kicad_text_effects_value, parse_fill, parse_margins, parse_stroke,
+    parse_text_effects, write_inline_fill, write_inline_optional_fill, write_inline_stroke,
+    write_inline_text_effects, write_optional_bool_sexpr, write_text_effects_line,
 };
+use table::parse_table;
 use transform::{transform_local_at, transform_local_point, transform_symbol_point};
+use wiring::{parse_bus, parse_bus_alias, parse_bus_entry, parse_net_chain, parse_wire};
 pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
     let content = read_text(path)?;
     parse_kicad_schematic(&content, &path.display().to_string())
@@ -4021,229 +4034,6 @@ impl KicadRuleArea {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct KicadImage {
-    pub at: Option<KicadPoint>,
-    pub scale: f64,
-    pub data_base64: String,
-    pub uuid: Option<String>,
-    pub locked: Option<bool>,
-}
-
-impl KicadImage {
-    pub fn image_size_mm(&self) -> Option<KicadSize> {
-        png_size_from_base64(&self.data_base64).map(|(width_px, height_px)| {
-            let scale = if self.scale.is_finite() && self.scale > 0.0 {
-                self.scale
-            } else {
-                1.0
-            };
-            KicadSize {
-                width: f64::from(width_px) / 300.0 * 25.4 * scale,
-                height: f64::from(height_px) / 300.0 * 25.4 * scale,
-            }
-        })
-    }
-
-    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
-        let at = self.at?;
-        let size = self.image_size_mm()?;
-        Some(KicadBoundingBox {
-            min: KicadPoint {
-                x: at.x - size.width / 2.0,
-                y: at.y - size.height / 2.0,
-            },
-            max: KicadPoint {
-                x: at.x + size.width / 2.0,
-                y: at.y + size.height / 2.0,
-            },
-        })
-    }
-
-    pub fn mime_type(&self) -> &'static str {
-        if base64_starts_with(&self.data_base64, b"\x89PNG\r\n\x1a\n") {
-            "image/png"
-        } else if base64_starts_with(&self.data_base64, b"\xff\xd8\xff") {
-            "image/jpeg"
-        } else {
-            "application/octet-stream"
-        }
-    }
-
-    fn write_image_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!("{}(image", pad));
-        if let Some(at) = self.at {
-            output.push_str(&format!(
-                " (at {} {})",
-                format_number(at.x),
-                format_number(at.y)
-            ));
-        }
-        if self.scale != 1.0 {
-            output.push_str(&format!(" (scale {})", format_number(self.scale)));
-        }
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
-        }
-        if self.locked == Some(true) {
-            output.push_str(" (locked yes)");
-        }
-        output.push('\n');
-        write_base64_data_sexpr(output, &self.data_base64, indent + 2);
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadTable {
-    pub column_count: usize,
-    pub border: Option<KicadTableBorder>,
-    pub separators: Option<KicadTableSeparators>,
-    pub column_widths: Vec<f64>,
-    pub row_heights: Vec<f64>,
-    pub cells: Vec<KicadTableCell>,
-    pub uuid: Option<String>,
-    pub locked: Option<bool>,
-}
-
-impl KicadTable {
-    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
-        let mut bounds = KicadBoundingBoxBuilder::default();
-        for cell in &self.cells {
-            if let Some(cell_bounds) = cell.bounding_box() {
-                bounds.include_box(cell_bounds);
-            }
-        }
-        bounds.finish()
-    }
-
-    fn write_table_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!(
-            "{}(table\n{}  (column_count {})\n",
-            pad, pad, self.column_count
-        ));
-        write_table_border_sexpr(output, indent + 2, self.border.as_ref());
-        write_table_separators_sexpr(output, indent + 2, self.separators.as_ref());
-        output.push_str(&format!("{}  (column_widths", pad));
-        for width in &self.column_widths {
-            output.push_str(&format!(" {}", format_number(*width)));
-        }
-        output.push_str(")\n");
-        output.push_str(&format!("{}  (row_heights", pad));
-        for height in &self.row_heights {
-            output.push_str(&format!(" {}", format_number(*height)));
-        }
-        output.push_str(")\n");
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
-        }
-        if self.locked == Some(true) {
-            output.push_str(&format!("{}  (locked yes)\n", pad));
-        }
-        output.push_str(&format!("{}  (cells\n", pad));
-        for cell in &self.cells {
-            cell.write_table_cell_sexpr(output, indent + 4);
-        }
-        output.push_str(&format!("{}  )\n", pad));
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadTableBorder {
-    pub external: Option<bool>,
-    pub header: Option<bool>,
-    pub stroke: Option<KicadStroke>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadTableSeparators {
-    pub rows: Option<bool>,
-    pub cols: Option<bool>,
-    pub stroke: Option<KicadStroke>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadTableCell {
-    pub text: String,
-    pub at: Option<KicadAt>,
-    pub size: Option<KicadSize>,
-    pub margins: Option<KicadMargins>,
-    pub column_span: usize,
-    pub row_span: usize,
-    pub fill: Option<KicadFill>,
-    pub effects: Option<KicadTextEffects>,
-    pub exclude_from_sim: Option<bool>,
-    pub uuid: Option<String>,
-    pub locked: Option<bool>,
-}
-
-impl KicadTableCell {
-    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
-        kicad_rotated_rect_bounds(self.at?, self.size?)
-    }
-
-    fn write_table_cell_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!(
-            "{}(table_cell {}\n",
-            pad,
-            sexpr_string(&self.text)
-        ));
-        if let Some(exclude_from_sim) = self.exclude_from_sim {
-            output.push_str(&format!(
-                "{}  (exclude_from_sim {})\n",
-                pad,
-                if exclude_from_sim { "yes" } else { "no" }
-            ));
-        }
-        if let Some(at) = self.at {
-            output.push_str(&format!(
-                "{}  (at {} {} {})\n",
-                pad,
-                format_number(at.x),
-                format_number(at.y),
-                format_number(at.rotation)
-            ));
-        }
-        if let Some(size) = self.size {
-            output.push_str(&format!(
-                "{}  (size {} {})\n",
-                pad,
-                format_number(size.width),
-                format_number(size.height)
-            ));
-        }
-        if let Some(margins) = self.margins {
-            output.push_str(&format!(
-                "{}  (margins {} {} {} {})\n",
-                pad,
-                format_number(margins.left),
-                format_number(margins.top),
-                format_number(margins.right),
-                format_number(margins.bottom)
-            ));
-        }
-        output.push_str(&format!(
-            "{}  (span {} {})\n",
-            pad, self.column_span, self.row_span
-        ));
-        output.push_str(&format!("{} ", pad));
-        write_inline_fill(output, self.fill.as_ref());
-        output.push('\n');
-        write_text_effects_line(output, indent + 2, self.effects.as_ref());
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
-        }
-        if self.locked == Some(true) {
-            output.push_str(&format!("{}  (locked yes)\n", pad));
-        }
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct KicadGroup {
     pub name: String,
     pub uuid: Option<String>,
@@ -4413,164 +4203,6 @@ impl KicadProperty {
         }
         output.push_str(&format!("{})\n", pad));
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadWire {
-    pub points: Vec<KicadPoint>,
-    pub stroke: Option<KicadStroke>,
-    pub uuid: Option<String>,
-}
-
-impl KicadWire {
-    fn write_wire_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!("{}(wire", pad));
-        write_points_sexpr(output, &self.points);
-        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
-        }
-        output.push_str(")\n");
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadBusAlias {
-    pub name: String,
-    pub members: Vec<String>,
-}
-
-impl KicadBusAlias {
-    fn write_bus_alias_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        let members = self
-            .members
-            .iter()
-            .map(|member| sexpr_string(member))
-            .collect::<Vec<_>>()
-            .join(" ");
-        output.push_str(&format!(
-            "{}(bus_alias {} (members {}))\n",
-            pad,
-            sexpr_string(&self.name),
-            members
-        ));
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadBus {
-    pub points: Vec<KicadPoint>,
-    pub stroke: Option<KicadStroke>,
-    pub uuid: Option<String>,
-}
-
-impl KicadBus {
-    fn write_bus_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!("{}(bus", pad));
-        write_points_sexpr(output, &self.points);
-        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
-        }
-        output.push_str(")\n");
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadBusEntry {
-    pub at: KicadPoint,
-    pub size: KicadSize,
-    pub stroke: Option<KicadStroke>,
-    pub uuid: Option<String>,
-}
-
-impl KicadBusEntry {
-    pub fn end(&self) -> KicadPoint {
-        KicadPoint {
-            x: self.at.x + self.size.width,
-            y: self.at.y + self.size.height,
-        }
-    }
-
-    fn write_bus_entry_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!(
-            "{}(bus_entry\n{}  (at {} {})\n{}  (size {} {})\n",
-            pad,
-            pad,
-            format_number(self.at.x),
-            format_number(self.at.y),
-            pad,
-            format_number(self.size.width),
-            format_number(self.size.height)
-        ));
-        output.push_str(&format!("{}  ", pad));
-        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
-        output.push('\n');
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
-        }
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadNetChain {
-    pub name: String,
-    pub from: Option<KicadNetChainEndpoint>,
-    pub to: Option<KicadNetChainEndpoint>,
-    pub net_class: Option<String>,
-    pub color: Option<KicadColor>,
-    pub member_nets: Vec<String>,
-    pub extra: Vec<Sexp>,
-}
-
-impl KicadNetChain {
-    fn write_net_chain_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!("{}(net_chain {}", pad, sexpr_string(&self.name)));
-        if let Some(from) = &self.from {
-            output.push_str(&format!(
-                " (from {} {})",
-                sexpr_string(&from.reference),
-                sexpr_string(&from.pin)
-            ));
-        }
-        if let Some(to) = &self.to {
-            output.push_str(&format!(
-                " (to {} {})",
-                sexpr_string(&to.reference),
-                sexpr_string(&to.pin)
-            ));
-        }
-        if let Some(net_class) = &self.net_class {
-            output.push_str(&format!(" (net_class {})", sexpr_string(net_class)));
-        }
-        if let Some(color) = self.color {
-            color.write_inline_color_sexpr(output);
-        }
-        if !self.member_nets.is_empty() {
-            output.push_str(" (nets");
-            for net in &self.member_nets {
-                output.push_str(&format!(" {}", sexpr_string(net)));
-            }
-            output.push(')');
-        }
-        for item in &self.extra {
-            output.push(' ');
-            write_sexpr_inline(output, item);
-        }
-        output.push_str(")\n");
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadNetChainEndpoint {
-    pub reference: String,
-    pub pin: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4961,66 +4593,6 @@ impl KicadTextBox {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadJunction {
-    pub at: KicadPoint,
-    pub diameter: Option<f64>,
-    pub color: Option<KicadColor>,
-    pub uuid: Option<String>,
-}
-
-impl KicadJunction {
-    fn write_junction_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!(
-            "{}(junction\n{}  (at {} {})\n{}  (diameter {})\n{} ",
-            pad,
-            pad,
-            format_number(self.at.x),
-            format_number(self.at.y),
-            pad,
-            format_number(self.diameter.unwrap_or(0.0)),
-            pad
-        ));
-        self.color
-            .unwrap_or(KicadColor {
-                red: 0.0,
-                green: 0.0,
-                blue: 0.0,
-                alpha: 0.0,
-            })
-            .write_inline_color_sexpr(output);
-        output.push('\n');
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
-        }
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadNoConnect {
-    pub at: KicadPoint,
-    pub uuid: Option<String>,
-}
-
-impl KicadNoConnect {
-    fn write_no_connect_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!(
-            "{}(no_connect\n{}  (at {} {})\n",
-            pad,
-            pad,
-            format_number(self.at.x),
-            format_number(self.at.y)
-        ));
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
-        }
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-
 fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
     let items = list_items(node);
     Some(KicadSymbolInstance {
@@ -5066,38 +4638,6 @@ fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
         uuid: child_value(items, "uuid"),
         alternate: child_value(items, "alternate"),
     })
-}
-
-fn write_table_border_sexpr(output: &mut String, indent: usize, border: Option<&KicadTableBorder>) {
-    let pad = " ".repeat(indent);
-    output.push_str(&format!("{}(border", pad));
-    match border {
-        Some(border) => {
-            write_inline_optional_bool_sexpr(output, "external", border.external);
-            write_inline_optional_bool_sexpr(output, "header", border.header);
-            write_inline_stroke(output, border.stroke.as_ref(), 0.0);
-        }
-        None => output.push_str(" (external yes) (header yes) (stroke (width 0) (type solid))"),
-    }
-    output.push_str(")\n");
-}
-
-fn write_table_separators_sexpr(
-    output: &mut String,
-    indent: usize,
-    separators: Option<&KicadTableSeparators>,
-) {
-    let pad = " ".repeat(indent);
-    output.push_str(&format!("{}(separators", pad));
-    match separators {
-        Some(separators) => {
-            write_inline_optional_bool_sexpr(output, "rows", separators.rows);
-            write_inline_optional_bool_sexpr(output, "cols", separators.cols);
-            write_inline_stroke(output, separators.stroke.as_ref(), 0.0);
-        }
-        None => output.push_str(" (rows yes) (cols yes) (stroke (width 0) (type solid))"),
-    }
-    output.push_str(")\n");
 }
 
 fn parse_symbol_def(node: &Sexp) -> Option<KicadSymbolDef> {
@@ -5255,90 +4795,6 @@ fn parse_property(node: &Sexp) -> Option<KicadProperty> {
     })
 }
 
-fn parse_wire(node: &Sexp) -> KicadWire {
-    let items = list_items(node);
-    KicadWire {
-        points: child(items, "pts").map(parse_points).unwrap_or_default(),
-        stroke: child(items, "stroke").map(parse_stroke),
-        uuid: child_value(items, "uuid"),
-    }
-}
-
-fn parse_bus_alias(node: &Sexp) -> Option<KicadBusAlias> {
-    let items = list_items(node);
-    Some(KicadBusAlias {
-        name: list_value(node, 1)?,
-        members: child(items, "members")
-            .map(|members| {
-                list_items(members)
-                    .iter()
-                    .skip(1)
-                    .filter_map(atom_text)
-                    .map(str::to_string)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default(),
-    })
-}
-
-fn parse_bus(node: &Sexp) -> KicadBus {
-    let items = list_items(node);
-    KicadBus {
-        points: child(items, "pts").map(parse_points).unwrap_or_default(),
-        stroke: child(items, "stroke").map(parse_stroke),
-        uuid: child_value(items, "uuid"),
-    }
-}
-
-fn parse_bus_entry(node: &Sexp) -> Option<KicadBusEntry> {
-    let items = list_items(node);
-    let at = child(items, "at").and_then(parse_at)?;
-    Some(KicadBusEntry {
-        at: KicadPoint { x: at.x, y: at.y },
-        size: child(items, "size").and_then(parse_size)?,
-        stroke: child(items, "stroke").map(parse_stroke),
-        uuid: child_value(items, "uuid"),
-    })
-}
-
-fn parse_net_chain(node: &Sexp) -> Option<KicadNetChain> {
-    let items = list_items(node);
-    let known_heads = ["from", "to", "net_class", "color", "nets"];
-    Some(KicadNetChain {
-        name: list_value(node, 1)?,
-        from: child(items, "from").and_then(parse_net_chain_endpoint),
-        to: child(items, "to").and_then(parse_net_chain_endpoint),
-        net_class: child_value(items, "net_class"),
-        color: child(items, "color").and_then(parse_color),
-        member_nets: child(items, "nets")
-            .map(|nets| {
-                list_items(nets)
-                    .iter()
-                    .skip(1)
-                    .filter_map(atom_text)
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default(),
-        extra: list_items(node)
-            .iter()
-            .skip(2)
-            .filter(|item| {
-                matches!(item, Sexp::List(_))
-                    && head(item).is_none_or(|head| !known_heads.contains(&head))
-            })
-            .cloned()
-            .collect(),
-    })
-}
-
-fn parse_net_chain_endpoint(node: &Sexp) -> Option<KicadNetChainEndpoint> {
-    Some(KicadNetChainEndpoint {
-        reference: list_value(node, 1)?,
-        pin: list_value(node, 2)?,
-    })
-}
-
 fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
     match head(node)? {
         "polyline" | "bezier" | "rectangle" | "circle" | "arc" => {
@@ -5372,82 +4828,6 @@ fn parse_rule_area(node: &Sexp) -> Option<KicadRuleArea> {
         on_board: child_value(items, "on_board").and_then(parse_kicad_bool_value),
         dnp: child_value(items, "dnp").and_then(parse_kicad_bool_value),
     })
-}
-
-fn parse_image(node: &Sexp) -> Option<KicadImage> {
-    let items = list_items(node);
-    Some(KicadImage {
-        at: child(items, "at").and_then(parse_image_at),
-        scale: child_value(items, "scale")
-            .and_then(|value| value.parse().ok())
-            .filter(|scale: &f64| scale.is_finite() && *scale > 0.0)
-            .unwrap_or(1.0),
-        data_base64: child(items, "data").map(parse_data_chunks)?,
-        uuid: child_value(items, "uuid"),
-        locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
-    })
-}
-
-fn parse_table(node: &Sexp) -> Option<KicadTable> {
-    let items = list_items(node);
-    Some(KicadTable {
-        column_count: child_value(items, "column_count")
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(0),
-        border: child(items, "border").map(parse_table_border),
-        separators: child(items, "separators").map(parse_table_separators),
-        column_widths: child(items, "column_widths")
-            .map(parse_number_list)
-            .unwrap_or_default(),
-        row_heights: child(items, "row_heights")
-            .map(parse_number_list)
-            .unwrap_or_default(),
-        cells: child(items, "cells")
-            .map(|cells| {
-                direct_children(list_items(cells), "table_cell")
-                    .filter_map(parse_table_cell)
-                    .collect()
-            })
-            .unwrap_or_default(),
-        uuid: child_value(items, "uuid"),
-        locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
-    })
-}
-
-fn parse_table_cell(node: &Sexp) -> Option<KicadTableCell> {
-    let items = list_items(node);
-    let (column_span, row_span) = child(items, "span").map(parse_span).unwrap_or((1, 1));
-    Some(KicadTableCell {
-        text: list_value(node, 1)?,
-        at: child(items, "at").and_then(parse_at),
-        size: child(items, "size").and_then(parse_size),
-        margins: child(items, "margins").and_then(parse_margins),
-        column_span,
-        row_span,
-        fill: child(items, "fill").map(parse_fill),
-        effects: child(items, "effects").map(parse_text_effects),
-        exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
-        uuid: child_value(items, "uuid"),
-        locked: parse_optional_bool_child(items, "locked"),
-    })
-}
-
-fn parse_table_border(node: &Sexp) -> KicadTableBorder {
-    let items = list_items(node);
-    KicadTableBorder {
-        external: child_value(items, "external").and_then(parse_kicad_bool_value),
-        header: child_value(items, "header").and_then(parse_kicad_bool_value),
-        stroke: child(items, "stroke").map(parse_stroke),
-    }
-}
-
-fn parse_table_separators(node: &Sexp) -> KicadTableSeparators {
-    let items = list_items(node);
-    KicadTableSeparators {
-        rows: child_value(items, "rows").and_then(parse_kicad_bool_value),
-        cols: child_value(items, "cols").and_then(parse_kicad_bool_value),
-        stroke: child(items, "stroke").map(parse_stroke),
-    }
 }
 
 fn parse_group(node: &Sexp) -> Option<KicadGroup> {
@@ -5561,41 +4941,6 @@ fn parse_text_box(node: &Sexp) -> Option<KicadTextBox> {
         locked: parse_optional_bool_child(items, "locked"),
         effects: child(items, "effects").map(parse_text_effects),
     })
-}
-
-fn parse_junction(node: &Sexp) -> Option<KicadJunction> {
-    let items = list_items(node);
-    let at = child(items, "at").and_then(parse_at)?;
-    Some(KicadJunction {
-        at: KicadPoint { x: at.x, y: at.y },
-        diameter: child_value(items, "diameter").and_then(|value| value.parse().ok()),
-        color: child(items, "color").and_then(parse_color),
-        uuid: child_value(items, "uuid"),
-    })
-}
-
-fn parse_no_connect(node: &Sexp) -> Option<KicadNoConnect> {
-    let items = list_items(node);
-    let at = child(items, "at").and_then(parse_at)?;
-    Some(KicadNoConnect {
-        at: KicadPoint { x: at.x, y: at.y },
-        uuid: child_value(items, "uuid"),
-    })
-}
-
-fn parse_span(node: &Sexp) -> (usize, usize) {
-    let items = list_items(node);
-    let columns = items
-        .get(1)
-        .and_then(atom_text)
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(1);
-    let rows = items
-        .get(2)
-        .and_then(atom_text)
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(1);
-    (columns, rows)
 }
 
 fn collect_pin_defs(node: &Sexp) -> Vec<KicadPinDef> {
@@ -5831,96 +5176,6 @@ fn unescape_kicad_brace_string(value: &str) -> String {
         }
     }
     output
-}
-
-fn parse_data_chunks(node: &Sexp) -> String {
-    list_items(node)
-        .iter()
-        .skip(1)
-        .filter_map(atom_text)
-        .collect::<String>()
-}
-
-fn parse_number_list(node: &Sexp) -> Vec<f64> {
-    list_items(node)
-        .iter()
-        .skip(1)
-        .filter_map(atom_text)
-        .filter_map(|value| value.parse().ok())
-        .collect()
-}
-fn write_base64_data_sexpr(output: &mut String, data: &str, indent: usize) {
-    let pad = " ".repeat(indent);
-    output.push_str(&format!("{}(data", pad));
-    let mut wrote_chunk = false;
-    for chunk in data.as_bytes().chunks(76) {
-        wrote_chunk = true;
-        output.push_str(&format!(
-            "\n{}  {}",
-            pad,
-            sexpr_string(std::str::from_utf8(chunk).unwrap_or_default())
-        ));
-    }
-    if wrote_chunk {
-        output.push('\n');
-        output.push_str(&pad);
-    }
-    output.push_str(")\n");
-}
-fn png_size_from_base64(data: &str) -> Option<(u32, u32)> {
-    let header = decode_base64_prefix(data, 24)?;
-    if header.len() < 24 || &header[0..8] != b"\x89PNG\r\n\x1a\n" || &header[12..16] != b"IHDR" {
-        return None;
-    }
-    let width = u32::from_be_bytes([header[16], header[17], header[18], header[19]]);
-    let height = u32::from_be_bytes([header[20], header[21], header[22], header[23]]);
-    (width > 0 && height > 0).then_some((width, height))
-}
-
-fn base64_starts_with(data: &str, prefix: &[u8]) -> bool {
-    decode_base64_prefix(data, prefix.len())
-        .map(|decoded| decoded.starts_with(prefix))
-        .unwrap_or(false)
-}
-
-fn decode_base64_prefix(data: &str, wanted_len: usize) -> Option<Vec<u8>> {
-    let mut decoded = Vec::with_capacity(wanted_len);
-    let mut buffer = [0_u8; 4];
-    let mut buffer_len = 0;
-
-    for byte in data.bytes().filter(|byte| !byte.is_ascii_whitespace()) {
-        let value = match byte {
-            b'A'..=b'Z' => byte - b'A',
-            b'a'..=b'z' => byte - b'a' + 26,
-            b'0'..=b'9' => byte - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            b'=' => 64,
-            _ => return None,
-        };
-        buffer[buffer_len] = value;
-        buffer_len += 1;
-
-        if buffer_len == 4 {
-            decoded.push((buffer[0] << 2) | (buffer[1] >> 4));
-            if buffer[2] != 64 {
-                decoded.push((buffer[1] << 4) | (buffer[2] >> 2));
-            }
-            if buffer[3] != 64 {
-                decoded.push((buffer[2] << 6) | buffer[3]);
-            }
-            if decoded.len() >= wanted_len {
-                decoded.truncate(wanted_len);
-                return Some(decoded);
-            }
-            if buffer[2] == 64 || buffer[3] == 64 {
-                break;
-            }
-            buffer_len = 0;
-        }
-    }
-
-    (decoded.len() >= wanted_len).then_some(decoded)
 }
 
 pub(crate) fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
@@ -6238,7 +5493,7 @@ pub(crate) fn parse_kicad_bool_value(value: String) -> Option<bool> {
     }
 }
 
-fn parse_optional_bool_child(items: &[Sexp], name: &str) -> Option<bool> {
+pub(crate) fn parse_optional_bool_child(items: &[Sexp], name: &str) -> Option<bool> {
     child(items, name).map(|node| {
         list_value(node, 1)
             .and_then(parse_kicad_bool_value)
