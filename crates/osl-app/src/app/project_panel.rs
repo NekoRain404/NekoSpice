@@ -1,6 +1,6 @@
 use super::localization::UiText;
 use super::widgets::metric_row;
-use super::{EditNudgeDirection, NekoSpiceApp, theme::StudioTheme};
+use super::{NekoSpiceApp, theme::StudioTheme};
 use eframe::egui;
 use std::path::PathBuf;
 
@@ -99,45 +99,6 @@ impl NekoSpiceApp {
                     self.text(UiText::NoSelectedItem),
                 ));
             }
-            self.draw_selection_property_editor(ui);
-        });
-
-        ui.add_space(8.0);
-        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(
-                mode,
-                self.text(UiText::EditCommands),
-            ));
-            let can_edit = self.document.is_some();
-            let can_delete = self
-                .selected_hit
-                .as_ref()
-                .and_then(|hit| hit.uuid.as_ref())
-                .is_some();
-            if ui
-                .add_enabled(
-                    can_edit && can_delete,
-                    egui::Button::new(self.text(UiText::DeleteSelected)),
-                )
-                .clicked()
-            {
-                self.delete_selected();
-            }
-            ui.horizontal_wrapped(|ui| {
-                for (label, direction) in [
-                    ("Left", EditNudgeDirection::Left),
-                    ("Right", EditNudgeDirection::Right),
-                    ("Up", EditNudgeDirection::Up),
-                    ("Down", EditNudgeDirection::Down),
-                ] {
-                    if ui
-                        .add_enabled(can_edit && can_delete, egui::Button::new(label))
-                        .clicked()
-                    {
-                        self.nudge_selected(direction);
-                    }
-                }
-            });
         });
     }
 }

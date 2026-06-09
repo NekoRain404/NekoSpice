@@ -170,7 +170,7 @@ impl NekoSpiceApp {
         }
     }
 
-    fn poll_simulation_task(&mut self) {
+    pub(in crate::app) fn poll_simulation_task(&mut self) {
         let Some(task) = &self.simulation_panel.active_task else {
             return;
         };

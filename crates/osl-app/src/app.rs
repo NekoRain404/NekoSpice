@@ -22,6 +22,10 @@ mod placement;
 mod preferences;
 mod project_panel;
 mod runtime;
+mod schematic_inspector_panel;
+mod schematic_inspector_sections;
+mod schematic_inspector_simulator;
+mod schematic_inspector_widgets;
 mod schematic_tools;
 mod schematic_workspace;
 mod schematic_workspace_widgets;
@@ -43,6 +47,7 @@ use navigation::StudioWorkspace;
 use placement::SymbolPlacementState;
 use preferences::StudioPreferences;
 pub use runtime::run_native;
+use schematic_inspector_panel::SchematicInspectorPanelState;
 use schematic_tools::SchematicToolState;
 use selection_properties::SelectionPropertyEditorState;
 use simulation_panel::SimulationPanelState;
@@ -61,6 +66,7 @@ pub struct NekoSpiceApp {
     pub(super) selected_symbol_placement: SymbolPlacementConfig,
     pub(crate) placement: Option<SymbolPlacementState>,
     selection_properties: SelectionPropertyEditorState,
+    schematic_inspector: SchematicInspectorPanelState,
     pub(super) schematic_tools: SchematicToolState,
     pub(super) simulation_panel: SimulationPanelState,
     active_workspace: StudioWorkspace,
@@ -116,6 +122,7 @@ impl Default for NekoSpiceApp {
             selected_symbol_placement: SymbolPlacementConfig::default(),
             placement: None,
             selection_properties: SelectionPropertyEditorState::default(),
+            schematic_inspector: SchematicInspectorPanelState::default(),
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
             active_workspace: initial_workspace(),

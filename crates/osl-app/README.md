@@ -62,6 +62,16 @@ search stay in `osl-kicad`.
   document adapter.
 - `app/schematic_tools/state.rs`: active tool state, pending wire/bus starts, sheet options, and other tool-local inputs.
 - `app/schematic_tools/preview.rs`: transient canvas previews for active schematic drawing tools.
+- `app/schematic_inspector_panel.rs`: Schematic right workspace tab state and
+  routing for properties, KiCad inspection, libraries, and simulator context.
+- `app/schematic_inspector_sections.rs`: Schematic right workspace properties,
+  cross-probe actions, KiCad document structure, diagnostics, and library scope
+  sections.
+- `app/schematic_inspector_simulator.rs`: compact right-side simulator status,
+  run shortcuts, live-measurement summary, and handoff to the full Simulation
+  workspace.
+- `app/schematic_inspector_widgets.rs`: Schematic inspector-only tabs, property
+  rows, status pills, action buttons, and captions.
 - `app/schematic_workspace.rs`: Schematic center workspace chrome: document
   tabs, canvas toolbar, framed canvas mounting, and bottom waveform/console dock.
 - `app/schematic_workspace_widgets.rs`: Schematic-only display widgets for tabs,

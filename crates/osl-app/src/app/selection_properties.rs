@@ -1,4 +1,5 @@
 use super::NekoSpiceApp;
+use super::localization::UiText;
 use eframe::egui;
 use osl_kicad::KicadCanvasSymbol;
 
@@ -107,7 +108,7 @@ impl NekoSpiceApp {
         let uuid = symbol.uuid.clone();
 
         ui.separator();
-        ui.heading("Properties");
+        ui.heading(self.text(UiText::Properties));
         ui.label(format!("Symbol: {lib_id}"));
         if let Some(uuid) = &uuid {
             ui.monospace(uuid);
@@ -139,7 +140,10 @@ impl NekoSpiceApp {
             || self.selection_properties.value != original.value
             || self.selection_properties.mirror != original.mirror;
         if ui
-            .add_enabled(changed, egui::Button::new("Apply Properties"))
+            .add_enabled(
+                changed,
+                egui::Button::new(self.text(UiText::ApplyProperties)),
+            )
             .clicked()
         {
             self.apply_selected_symbol_properties(original);
