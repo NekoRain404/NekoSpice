@@ -1,7 +1,8 @@
 use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSchematic,
-    KicadSchematicEdit, KicadSymbolDef, read_kicad_schematic_with_libraries, write_kicad_schematic,
+    KicadSchematicEdit, KicadSize, KicadSymbolDef, read_kicad_schematic_with_libraries,
+    write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
 
@@ -89,6 +90,22 @@ impl KicadGuiDocument {
 
     pub(crate) fn add_wire(&mut self, points: Vec<KicadPoint>) -> Result<KicadEditSummary, String> {
         self.apply_edit(KicadSchematicEdit::AddWire { points, uuid: None })
+    }
+
+    pub(crate) fn add_bus(&mut self, points: Vec<KicadPoint>) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::AddBus { points, uuid: None })
+    }
+
+    pub(crate) fn add_bus_entry(
+        &mut self,
+        at: KicadPoint,
+        size: KicadSize,
+    ) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::AddBusEntry {
+            at,
+            size,
+            uuid: None,
+        })
     }
 
     pub(crate) fn add_junction(&mut self, at: KicadPoint) -> Result<KicadEditSummary, String> {
@@ -333,12 +350,38 @@ mod tests {
             ])
             .unwrap();
         document
+            .add_bus(vec![
+                KicadPoint { x: 101.6, y: 38.1 },
+                KicadPoint { x: 111.76, y: 38.1 },
+            ])
+            .unwrap();
+        document
+            .add_bus_entry(
+                KicadPoint { x: 111.76, y: 38.1 },
+                osl_kicad::KicadSize {
+                    width: 2.54,
+                    height: -2.54,
+                },
+            )
+            .unwrap();
+        document
             .add_label(
                 "sense".to_string(),
                 osl_kicad::KicadLabelKind::Global,
                 KicadAt {
                     x: 111.76,
                     y: 50.8,
+                    rotation: 0.0,
+                },
+            )
+            .unwrap();
+        document
+            .add_label(
+                "sheet_in".to_string(),
+                osl_kicad::KicadLabelKind::Hierarchical,
+                KicadAt {
+                    x: 111.76,
+                    y: 55.88,
                     rotation: 0.0,
                 },
             )
@@ -363,6 +406,8 @@ mod tests {
         let scene = document.scene();
         assert!(document.is_dirty());
         assert_eq!(scene.wires.len(), 4);
+        assert_eq!(scene.buses.len(), 1);
+        assert_eq!(scene.bus_entries.len(), 1);
         assert!(
             scene
                 .labels
@@ -370,6 +415,8 @@ mod tests {
                 .any(|label| label.text == "sense"
                     && label.kind == osl_kicad::KicadLabelKind::Global)
         );
+        assert!(scene.labels.iter().any(|label| label.text == "sheet_in"
+            && label.kind == osl_kicad::KicadLabelKind::Hierarchical));
         assert!(
             scene
                 .text_items

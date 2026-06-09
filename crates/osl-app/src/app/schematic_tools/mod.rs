@@ -1,75 +1,13 @@
 use super::NekoSpiceApp;
-use crate::canvas;
 use crate::document::KicadGuiDocument;
-use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke};
+use eframe::egui::{self, Rect};
 use osl_kicad::{KicadAt, KicadEditSummary, KicadLabelKind, KicadPoint};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum SchematicTool {
-    Select,
-    Wire,
-    Label,
-    GlobalLabel,
-    Text,
-    Junction,
-    NoConnect,
-}
+mod preview;
+mod state;
 
-impl SchematicTool {
-    const ALL: [Self; 7] = [
-        Self::Select,
-        Self::Wire,
-        Self::Label,
-        Self::GlobalLabel,
-        Self::Text,
-        Self::Junction,
-        Self::NoConnect,
-    ];
-
-    fn label(self) -> &'static str {
-        match self {
-            Self::Select => "Select",
-            Self::Wire => "Wire",
-            Self::Label => "Label",
-            Self::GlobalLabel => "Global",
-            Self::Text => "Text",
-            Self::Junction => "Junction",
-            Self::NoConnect => "No Connect",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct SchematicToolState {
-    active: SchematicTool,
-    label_text: String,
-    text_item: String,
-    pending_wire_start: Option<KicadPoint>,
-}
-
-impl Default for SchematicToolState {
-    fn default() -> Self {
-        Self {
-            active: SchematicTool::Select,
-            label_text: "net".to_string(),
-            text_item: ".save v(out)".to_string(),
-            pending_wire_start: None,
-        }
-    }
-}
-
-impl SchematicToolState {
-    pub(super) fn clear_pending(&mut self) {
-        self.pending_wire_start = None;
-    }
-
-    fn set_active(&mut self, tool: SchematicTool) {
-        if self.active != tool {
-            self.active = tool;
-            self.clear_pending();
-        }
-    }
-}
+use state::SchematicTool;
+pub(crate) use state::SchematicToolState;
 
 impl NekoSpiceApp {
     pub(super) fn draw_schematic_tool_controls(&mut self, ui: &mut egui::Ui) {
@@ -84,7 +22,9 @@ impl NekoSpiceApp {
         });
 
         match self.schematic_tools.active {
-            SchematicTool::Label | SchematicTool::GlobalLabel => {
+            SchematicTool::Label
+            | SchematicTool::GlobalLabel
+            | SchematicTool::HierarchicalLabel => {
                 ui.horizontal(|ui| {
                     ui.label("Name");
                     ui.text_edit_singleline(&mut self.schematic_tools.label_text);
@@ -101,6 +41,23 @@ impl NekoSpiceApp {
                     ui.label(format!("Wire start: {:.2}, {:.2}", start.x, start.y));
                 }
             }
+            SchematicTool::Bus => {
+                if let Some(start) = self.schematic_tools.pending_bus_start {
+                    ui.label(format!("Bus start: {:.2}, {:.2}", start.x, start.y));
+                }
+            }
+            SchematicTool::BusEntry => {
+                ui.horizontal(|ui| {
+                    ui.label("dx");
+                    ui.add(egui::DragValue::new(
+                        &mut self.schematic_tools.bus_entry_size.width,
+                    ));
+                    ui.label("dy");
+                    ui.add(egui::DragValue::new(
+                        &mut self.schematic_tools.bus_entry_size.height,
+                    ));
+                });
+            }
             SchematicTool::Select | SchematicTool::Junction | SchematicTool::NoConnect => {}
         }
     }
@@ -110,9 +67,9 @@ impl NekoSpiceApp {
     }
 
     pub(super) fn cancel_schematic_tool_pending(&mut self) {
-        if self.schematic_tools.pending_wire_start.is_some() {
+        if self.schematic_tools.has_pending() {
             self.schematic_tools.clear_pending();
-            self.status_message = Some("Canceled pending wire".to_string());
+            self.status_message = Some("Canceled pending schematic tool".to_string());
         }
     }
 
@@ -121,6 +78,17 @@ impl NekoSpiceApp {
             SchematicTool::Select => false,
             SchematicTool::Wire => {
                 self.handle_wire_tool_click(point);
+                true
+            }
+            SchematicTool::Bus => {
+                self.handle_bus_tool_click(point);
+                true
+            }
+            SchematicTool::BusEntry => {
+                let size = self.schematic_tools.bus_entry_size;
+                self.apply_schematic_tool_edit(Some(point), |document| {
+                    document.add_bus_entry(point, size)
+                });
                 true
             }
             SchematicTool::Label => {
@@ -134,6 +102,13 @@ impl NekoSpiceApp {
                 let text = self.schematic_tools.label_text.clone();
                 self.apply_schematic_tool_edit(Some(point), |document| {
                     document.add_label(text, KicadLabelKind::Global, at_from_point(point))
+                });
+                true
+            }
+            SchematicTool::HierarchicalLabel => {
+                let text = self.schematic_tools.label_text.clone();
+                self.apply_schematic_tool_edit(Some(point), |document| {
+                    document.add_label(text, KicadLabelKind::Hierarchical, at_from_point(point))
                 });
                 true
             }
@@ -165,50 +140,13 @@ impl NekoSpiceApp {
         rect: Rect,
         point: KicadPoint,
     ) {
-        match self.schematic_tools.active {
-            SchematicTool::Wire => {
-                if let Some(start) = self.schematic_tools.pending_wire_start {
-                    canvas::draw_line(
-                        painter,
-                        rect,
-                        self.viewport,
-                        start,
-                        point,
-                        Color32::from_rgb(0, 130, 85),
-                        1.5,
-                    );
-                }
-            }
-            SchematicTool::Label | SchematicTool::GlobalLabel => {
-                painter.text(
-                    self.viewport.world_to_screen(rect, point),
-                    Align2::LEFT_TOP,
-                    &self.schematic_tools.label_text,
-                    FontId::monospace(12.0),
-                    Color32::from_rgb(0, 95, 180),
-                );
-            }
-            SchematicTool::Text => {
-                painter.text(
-                    self.viewport.world_to_screen(rect, point),
-                    Align2::LEFT_TOP,
-                    &self.schematic_tools.text_item,
-                    FontId::monospace(12.0),
-                    Color32::from_rgb(165, 45, 45),
-                );
-            }
-            SchematicTool::Junction => {
-                painter.circle_filled(
-                    self.viewport.world_to_screen(rect, point),
-                    3.0,
-                    Color32::from_rgb(0, 150, 72),
-                );
-            }
-            SchematicTool::NoConnect => {
-                draw_no_connect_preview(painter, rect, self.viewport.world_to_screen(rect, point));
-            }
-            SchematicTool::Select => {}
-        }
+        preview::draw_schematic_tool_preview(
+            painter,
+            rect,
+            self.viewport,
+            &self.schematic_tools,
+            point,
+        );
     }
 
     fn activate_schematic_tool(&mut self, tool: SchematicTool) {
@@ -234,6 +172,23 @@ impl NekoSpiceApp {
         let did_apply =
             self.apply_schematic_tool_edit(None, |document| document.add_wire(vec![start, point]));
         self.schematic_tools.pending_wire_start = Some(if did_apply { point } else { start });
+    }
+
+    fn handle_bus_tool_click(&mut self, point: KicadPoint) {
+        let Some(start) = self.schematic_tools.pending_bus_start.take() else {
+            self.schematic_tools.pending_bus_start = Some(point);
+            self.status_message = Some(format!("Bus start {:.2}, {:.2}", point.x, point.y));
+            return;
+        };
+        if same_point(start, point) {
+            self.schematic_tools.pending_bus_start = Some(start);
+            self.status_message = Some("Bus end must differ from start".to_string());
+            return;
+        }
+
+        let did_apply =
+            self.apply_schematic_tool_edit(None, |document| document.add_bus(vec![start, point]));
+        self.schematic_tools.pending_bus_start = Some(if did_apply { point } else { start });
     }
 
     fn apply_schematic_tool_edit<F>(&mut self, selection_point: Option<KicadPoint>, edit: F) -> bool
@@ -274,27 +229,6 @@ fn at_from_point(point: KicadPoint) -> KicadAt {
 
 fn same_point(left: KicadPoint, right: KicadPoint) -> bool {
     (left.x - right.x).abs() < 1e-6 && (left.y - right.y).abs() < 1e-6
-}
-
-fn draw_no_connect_preview(painter: &egui::Painter, rect: Rect, center: Pos2) {
-    if !rect.contains(center) {
-        return;
-    }
-    let size = 5.0;
-    painter.line_segment(
-        [
-            Pos2::new(center.x - size, center.y - size),
-            Pos2::new(center.x + size, center.y + size),
-        ],
-        Stroke::new(1.5, Color32::from_rgb(55, 55, 55)),
-    );
-    painter.line_segment(
-        [
-            Pos2::new(center.x - size, center.y + size),
-            Pos2::new(center.x + size, center.y - size),
-        ],
-        Stroke::new(1.5, Color32::from_rgb(55, 55, 55)),
-    );
 }
 
 #[cfg(test)]
