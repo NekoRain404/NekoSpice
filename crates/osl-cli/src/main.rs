@@ -103,7 +103,7 @@ Usage:
   osl --version
 
 Three-day target:
-  batch ngspice runs, reproducible run metadata, HTML/JSON reports, and CI-friendly pass/fail output.
+  batch ngspice runs, reproducible run metadata, HTML/JSON/JUnit reports, and CI-friendly pass/fail output.
 "
     );
 }
@@ -173,6 +173,7 @@ fn verify_command(args: &[String]) -> OslResult<i32> {
     };
     write_text(&output_dir.join("verify.json"), &report.to_json())?;
     write_text(&output_dir.join("report.html"), &report.to_html())?;
+    write_text(&output_dir.join("junit.xml"), &report.to_junit_xml())?;
 
     println!(
         "verify {}: {} passed, {} failed, jobs={} -> {}",
@@ -233,6 +234,7 @@ fn bench_command(args: &[String]) -> OslResult<i32> {
     };
     write_text(&output_dir.join("bench.json"), &report.to_json())?;
     write_text(&output_dir.join("report.html"), &report.to_html())?;
+    write_text(&output_dir.join("junit.xml"), &report.to_junit_xml())?;
 
     println!(
         "bench: {} passed, {} failed -> {}",

@@ -322,6 +322,104 @@ impl VerifyReport {
             rows
         )
     }
+
+    pub fn to_junit_xml(&self) -> String {
+        let testcases = self
+            .results
+            .iter()
+            .map(junit_testcase_xml)
+            .collect::<String>();
+        format!(
+            concat!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
+                "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" errors=\"0\" time=\"{}\">\n",
+                "{}",
+                "</testsuite>\n"
+            ),
+            xml_escape(&self.project),
+            self.results.len(),
+            self.failed_count(),
+            junit_seconds(
+                self.results
+                    .iter()
+                    .map(|result| result.metadata.duration_ms)
+                    .sum()
+            ),
+            testcases
+        )
+    }
+}
+
+fn junit_testcase_xml(result: &VerifyRunResult) -> String {
+    let testcase_open = format!(
+        "  <testcase classname=\"{}\" name=\"{}\" time=\"{}\">",
+        xml_escape(&result.netlist),
+        xml_escape(&result.name),
+        junit_seconds(result.metadata.duration_ms)
+    );
+    if result.status() == RunStatus::Passed {
+        return format!("{testcase_open}</testcase>\n");
+    }
+
+    let message = result_failure_message(result);
+    let details = result_failure_details(result);
+    format!(
+        concat!(
+            "{}\n",
+            "    <failure message=\"{}\"><![CDATA[{}]]></failure>\n",
+            "  </testcase>\n"
+        ),
+        testcase_open,
+        xml_escape(&message),
+        cdata_escape(&details)
+    )
+}
+
+fn result_failure_message(result: &VerifyRunResult) -> String {
+    let failed_checks = result.failed_checks().count();
+    if result.metadata.status != RunStatus::Passed {
+        format!(
+            "simulation {} exit {:?}",
+            result.metadata.status.as_str(),
+            result.metadata.exit_code
+        )
+    } else if failed_checks == 1 {
+        "1 failed check".to_string()
+    } else {
+        format!("{failed_checks} failed checks")
+    }
+}
+
+fn result_failure_details(result: &VerifyRunResult) -> String {
+    let mut details = Vec::new();
+    details.push(format!("run: {}", result.name));
+    details.push(format!("netlist: {}", result.netlist));
+    details.push(format!("run_dir: {}", result.run_dir));
+    details.push(format!(
+        "simulation_status: {}",
+        result.metadata.status.as_str()
+    ));
+    details.push(format!("exit_code: {:?}", result.metadata.exit_code));
+    details.push(format!("duration_ms: {}", result.metadata.duration_ms));
+
+    let parameters = parameters_text(&result.parameters);
+    details.push(format!("parameters: {parameters}"));
+
+    for check in result.failed_checks() {
+        details.push(format!(
+            "check {} {} signal={} value={} min={} max={} summary={} message={}",
+            check.name,
+            check.status_text(),
+            check.signal,
+            option_f64_text(check.value),
+            option_f64_text(check.min),
+            option_f64_text(check.max),
+            summary_text(check.summary),
+            check.message
+        ));
+    }
+
+    details.join("\n")
 }
 
 pub fn report_css() -> &'static str {
@@ -357,6 +455,12 @@ fn option_f64_json(value: Option<f64>) -> String {
             }
         })
         .unwrap_or_else(|| "null".to_string())
+}
+
+fn option_f64_text(value: Option<f64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".to_string())
 }
 
 fn summary_json(summary: Option<WaveformSummary>) -> String {
@@ -408,6 +512,29 @@ fn parameters_text(parameters: &[ParameterOverride]) -> String {
     }
 }
 
+fn junit_seconds(duration_ms: u128) -> String {
+    format!("{:.6}", duration_ms as f64 / 1000.0)
+}
+
+fn xml_escape(input: &str) -> String {
+    let mut escaped = String::with_capacity(input.len());
+    for character in input.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&apos;"),
+            character => escaped.push(character),
+        }
+    }
+    escaped
+}
+
+fn cdata_escape(input: &str) -> String {
+    input.replace("]]>", "]]]]><![CDATA[>")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CheckResult, VerifyReport, VerifyRunResult};
@@ -442,6 +569,37 @@ mod tests {
         assert!(html.contains("NekoSpice Verification Report"));
         assert!(html.contains("runs/rc_fast/report.html"));
         assert!(html.contains("samples=2"));
+    }
+
+    #[test]
+    fn renders_junit_xml_for_ci() {
+        let report = VerifyReport {
+            project: "demo & ci".to_string(),
+            results: vec![sample_run(
+                "/tmp/demo/runs/rc_fast",
+                false,
+                Some(WaveformSummary {
+                    samples: 2,
+                    first: 0.0,
+                    last: 1.0,
+                    min: 0.0,
+                    max: 1.0,
+                    avg: 0.5,
+                    peak_to_peak: 1.0,
+                    rms: 0.707,
+                }),
+            )],
+        };
+
+        let xml = report.to_junit_xml();
+
+        assert!(xml.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+        assert!(xml.contains("name=\"demo &amp; ci\""));
+        assert!(xml.contains("tests=\"1\" failures=\"1\""));
+        assert!(xml.contains("<testcase classname=\"rc.cir\" name=\"rc\" time=\"0.012000\">"));
+        assert!(xml.contains("<failure message=\"1 failed check\">"));
+        assert!(xml.contains("signal=v(out)"));
+        assert!(xml.contains("summary=samples=2"));
     }
 
     #[test]
