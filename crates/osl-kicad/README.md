@@ -16,6 +16,9 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
   metadata, and embedded/top-level instance parse/write helpers.
 - `schematic_summary.rs` owns schematic summary JSON generation and related
   metadata/style/count aggregation helpers.
+- `style.rs` owns reusable KiCad stroke/fill/color/text-effects/margins IR,
+  default text effects, style parse/write helpers, and style JSON projection
+  helpers shared by schematic, symbol, canvas, and renderer paths.
 - `project.rs` owns `.kicad_pro` project JSON parsing, project summary DTOs, and
   schematic stem candidate discovery used by KiCad project import paths.
 - `symbol_library.rs` owns `.kicad_sym` library containers, `sym-lib-table`
