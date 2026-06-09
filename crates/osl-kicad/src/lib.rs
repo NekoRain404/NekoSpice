@@ -4186,14 +4186,7 @@ impl KicadCanvasScene {
             }
         }
         for graphic in &self.graphics {
-            push_canvas_hit(
-                &mut hits,
-                "graphic",
-                graphic.uuid(),
-                graphic.kind().to_string(),
-                graphic.bounds(),
-                point,
-            );
+            push_canvas_graphic_hit(&mut hits, graphic, point);
         }
         for image in &self.images {
             push_canvas_hit(
@@ -4784,6 +4777,44 @@ impl KicadCanvasGraphic {
         }
     }
 
+    fn hits_point(&self, point: KicadPoint) -> bool {
+        match self {
+            Self::Polyline { points, stroke, .. } | Self::Bezier { points, stroke, .. } => {
+                kicad_polyline_hits_point(points, stroke.as_ref(), point)
+            }
+            Self::Rectangle {
+                start,
+                end,
+                stroke,
+                fill,
+                ..
+            } => kicad_rectangle_hits_point(*start, *end, stroke.as_ref(), fill.as_ref(), point),
+            Self::Circle {
+                center,
+                radius,
+                stroke,
+                fill,
+                ..
+            } => kicad_circle_hits_point(*center, *radius, stroke.as_ref(), fill.as_ref(), point),
+            Self::Arc {
+                start,
+                mid,
+                end,
+                stroke,
+                ..
+            } => {
+                let mut points = vec![*start];
+                if let Some(mid) = mid {
+                    points.push(*mid);
+                }
+                points.push(*end);
+                kicad_polyline_hits_point(&points, stroke.as_ref(), point)
+            }
+            Self::Text { at, .. } => kicad_at_bounds(*at, KICAD_CANVAS_POINT_BOUNDS_RADIUS)
+                .is_some_and(|bounds| bounds.contains(point)),
+        }
+    }
+
     fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
         match self {
             Self::Polyline { points, .. } => {
@@ -5203,6 +5234,24 @@ fn push_canvas_hit(
             kind: kind.to_string(),
             uuid,
             label,
+            bounds,
+        });
+    }
+}
+
+fn push_canvas_graphic_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    graphic: &KicadCanvasGraphic,
+    point: KicadPoint,
+) {
+    let Some(bounds) = graphic.bounds() else {
+        return;
+    };
+    if bounds.contains(point) && graphic.hits_point(point) {
+        hits.push(KicadCanvasHit {
+            kind: "graphic".to_string(),
+            uuid: graphic.uuid(),
+            label: graphic.kind().to_string(),
             bounds,
         });
     }
@@ -7855,6 +7904,56 @@ fn kicad_polyline_hits_point(
     points
         .windows(2)
         .any(|segment| kicad_point_segment_distance(point, segment[0], segment[1]) <= tolerance)
+}
+
+fn kicad_rectangle_hits_point(
+    start: KicadPoint,
+    end: KicadPoint,
+    stroke: Option<&KicadStroke>,
+    fill: Option<&KicadFill>,
+    point: KicadPoint,
+) -> bool {
+    let min = KicadPoint {
+        x: start.x.min(end.x),
+        y: start.y.min(end.y),
+    };
+    let max = KicadPoint {
+        x: start.x.max(end.x),
+        y: start.y.max(end.y),
+    };
+    let shape_bounds = KicadBoundingBox { min, max };
+    if kicad_fill_is_solid(fill) && shape_bounds.contains(point) {
+        return true;
+    }
+
+    let corners = [
+        min,
+        KicadPoint { x: max.x, y: min.y },
+        max,
+        KicadPoint { x: min.x, y: max.y },
+        min,
+    ];
+    kicad_polyline_hits_point(&corners, stroke, point)
+}
+
+fn kicad_circle_hits_point(
+    center: KicadPoint,
+    radius: f64,
+    stroke: Option<&KicadStroke>,
+    fill: Option<&KicadFill>,
+    point: KicadPoint,
+) -> bool {
+    let distance = kicad_point_distance(center, point);
+    let radius = radius.abs();
+    if kicad_fill_is_solid(fill) && distance <= radius {
+        return true;
+    }
+    (distance - radius).abs() <= kicad_stroke_hit_tolerance(stroke)
+}
+
+fn kicad_fill_is_solid(fill: Option<&KicadFill>) -> bool {
+    fill.and_then(|fill| fill.fill_type.as_deref())
+        .is_some_and(|fill_type| !fill_type.eq_ignore_ascii_case("none"))
 }
 
 fn kicad_stroke_hit_tolerance(stroke: Option<&KicadStroke>) -> f64 {
@@ -15123,6 +15222,78 @@ mod tests {
         let entry_hit = scene.hit_test(KicadPoint { x: 31.27, y: 18.73 });
         assert!(entry_hit.hits.iter().any(|hit| hit.kind == "bus-entry"
             && hit.uuid.as_deref() == Some("44444444-4444-4444-4444-444444444444")));
+    }
+
+    #[test]
+    fn hit_tests_schematic_graphics_by_shape() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-1111-1111-111111111111")
+  (paper "A4")
+  (rectangle (start 10 10) (end 20 20) (stroke (width 0) (type default)) (fill (type none)) (uuid "22222222-2222-2222-2222-222222222222"))
+  (rectangle (start 30 10) (end 40 20) (stroke (width 0) (type default)) (fill (type color) (color 255 228 206 0.5)) (uuid "33333333-3333-3333-3333-333333333333"))
+  (circle (center 55 15) (radius 5) (stroke (width 0) (type default)) (fill (type none)) (uuid "44444444-4444-4444-4444-444444444444"))
+  (polyline (pts (xy 10 30) (xy 20 30) (xy 20 40)) (stroke (width 0) (type default)) (fill (type none)) (uuid "55555555-5555-5555-5555-555555555555"))
+)"#,
+            "graphic_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+
+        let hollow_rectangle_center = scene.hit_test(KicadPoint { x: 15.0, y: 15.0 });
+        assert!(
+            !hollow_rectangle_center
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "graphic"
+                    && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222"))
+        );
+
+        let hollow_rectangle_edge = scene.hit_test(KicadPoint { x: 15.0, y: 10.4 });
+        assert!(
+            hollow_rectangle_edge
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "graphic"
+                    && hit.label == "rectangle"
+                    && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222"))
+        );
+
+        let filled_rectangle_center = scene.hit_test(KicadPoint { x: 35.0, y: 15.0 });
+        assert!(
+            filled_rectangle_center
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "graphic"
+                    && hit.label == "rectangle"
+                    && hit.uuid.as_deref() == Some("33333333-3333-3333-3333-333333333333"))
+        );
+
+        let hollow_circle_center = scene.hit_test(KicadPoint { x: 55.0, y: 15.0 });
+        assert!(
+            !hollow_circle_center
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "graphic"
+                    && hit.uuid.as_deref() == Some("44444444-4444-4444-4444-444444444444"))
+        );
+
+        let hollow_circle_edge = scene.hit_test(KicadPoint { x: 60.0, y: 15.0 });
+        assert!(
+            hollow_circle_edge
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "graphic"
+                    && hit.label == "circle"
+                    && hit.uuid.as_deref() == Some("44444444-4444-4444-4444-444444444444"))
+        );
+
+        let polyline_hit = scene.hit_test(KicadPoint { x: 20.0, y: 35.0 });
+        assert!(polyline_hit.hits.iter().any(|hit| hit.kind == "graphic"
+            && hit.label == "polyline"
+            && hit.uuid.as_deref() == Some("55555555-5555-5555-5555-555555555555")));
     }
 
     #[test]
