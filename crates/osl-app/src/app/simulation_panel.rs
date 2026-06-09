@@ -1,14 +1,19 @@
 use super::NekoSpiceApp;
+use crate::simulation::GuiSimulationRun;
 use eframe::egui::{self, Color32};
+use osl_core::RunStatus;
 use osl_kicad::{KicadDiagnosticSeverity, KicadSimulationDirective, KicadSimulationDirectiveKind};
+use std::path::Path;
 
 const NETLIST_PREVIEW_LINES: usize = 18;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) struct SimulationPanelState {
     pub(super) directive_kind: KicadSimulationDirectiveKind,
     pub(super) directive_body: String,
     pub(super) show_netlist: bool,
+    pub(super) last_run: Option<GuiSimulationRun>,
+    pub(super) last_error: Option<String>,
 }
 
 impl Default for SimulationPanelState {
@@ -17,6 +22,8 @@ impl Default for SimulationPanelState {
             directive_kind: KicadSimulationDirectiveKind::Tran,
             directive_body: "1u 1m".to_string(),
             show_netlist: true,
+            last_run: None,
+            last_error: None,
         }
     }
 }
@@ -25,6 +32,16 @@ impl NekoSpiceApp {
     pub(super) fn draw_simulation_panel(&mut self, ui: &mut egui::Ui) {
         ui.heading("Simulation");
         self.draw_simulation_directive_editor(ui);
+
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(self.document.is_some(), egui::Button::new("Run ngspice"))
+                .clicked()
+            {
+                self.run_simulation_from_panel();
+            }
+        });
+        self.draw_simulation_run_status(ui);
 
         let Some(document) = &self.document else {
             ui.label("No editable schematic loaded");
@@ -135,6 +152,52 @@ impl NekoSpiceApp {
             Err(error) => {
                 self.status_message = Some(error);
             }
+        }
+    }
+
+    fn run_simulation_from_panel(&mut self) {
+        let Some(document) = &self.document else {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+        let runs_root = Path::new("runs").join("gui");
+        match crate::simulation::run_document_with_ngspice(document, &runs_root) {
+            Ok(run) => {
+                self.status_message = Some(format!(
+                    "Simulation {} in {} ms",
+                    run.metadata.status.as_str(),
+                    run.metadata.duration_ms
+                ));
+                self.simulation_panel.last_error = None;
+                self.simulation_panel.last_run = Some(run);
+            }
+            Err(error) => {
+                self.status_message = Some(error.clone());
+                self.simulation_panel.last_run = None;
+                self.simulation_panel.last_error = Some(error);
+            }
+        }
+    }
+
+    fn draw_simulation_run_status(&mut self, ui: &mut egui::Ui) {
+        if let Some(error) = &self.simulation_panel.last_error {
+            ui.colored_label(severity_color(KicadDiagnosticSeverity::Error), error);
+        }
+        if let Some(run) = &self.simulation_panel.last_run {
+            let color = match run.metadata.status {
+                RunStatus::Passed => Color32::from_rgb(40, 140, 80),
+                RunStatus::Failed => severity_color(KicadDiagnosticSeverity::Error),
+            };
+            ui.colored_label(
+                color,
+                format!(
+                    "{}: {} ms, exit {:?}",
+                    run.metadata.status.as_str(),
+                    run.metadata.duration_ms,
+                    run.metadata.exit_code
+                ),
+            );
+            ui.monospace(run.output_dir.display().to_string());
         }
     }
 }

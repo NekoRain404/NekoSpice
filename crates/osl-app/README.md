@@ -13,7 +13,9 @@ search stay in `osl-kicad`.
 - `app/placement.rs`: symbol placement mode state, repeat placement, and post-edit selection refresh.
 - `app/runtime.rs`: native window options, wgpu renderer selection, and initial egui style.
 - `app/selection_properties.rs`: selected symbol property editor state sync and `KicadSchematicEdit::{SetSymbolProperty, ConfigureSymbol}` routing.
-- `app/simulation_panel.rs`: simulation directive editor, schematic diagnostics, and SPICE netlist preview routed through the document adapter.
+- `app/simulation_panel.rs`: simulation directive editor, schematic diagnostics,
+  SPICE netlist preview, and ngspice run controls routed through the document
+  and simulation adapters.
 - `app/schematic_tools/mod.rs`: schematic tool UI, canvas click routing, and GUI calls into the document adapter.
 - `app/schematic_tools/state.rs`: active tool state, pending wire/bus starts, sheet options, and other tool-local inputs.
 - `app/schematic_tools/preview.rs`: transient canvas previews for active schematic drawing tools.
@@ -21,6 +23,8 @@ search stay in `osl-kicad`.
 - `app/symbol_placement_controls.rs`: unit, body-style, and pin-alternate controls for KiCad-compatible symbol placement.
 - `document.rs`: editable KiCad schematic adapter around `KicadSchematicEdit`,
   structured simulation directive updates, check reports, and netlist previews.
+- `simulation.rs`: GUI-facing simulation run adapter that writes the current
+  schematic netlist to a run directory and invokes `osl-sim` backends.
 - `library.rs`: GUI-facing symbol-library table, definition, dependency, and preview adapter around `KicadSymbolLibraryIndex`.
 - `placement_config.rs`: GUI-neutral symbol placement scope (`unit` / `body_style` / pin alternates) shared by preview and document edits.
 - `viewport.rs`: world/screen transforms, zoom, pan, fit-to-scene, and culling bounds.
@@ -36,3 +40,5 @@ search stay in `osl-kicad`.
 - Symbol placement starts in the library/document adapters, then the UI wires selection, scope controls, preview, and canvas clicks to those adapters; repeat placement is UI state only, not KiCad file logic.
 - Schematic drawing tools keep transient UI state under `app/schematic_tools/` and route all file mutations through `document.rs`, which in turn calls `KicadSchematicEdit`.
 - Simulation setup UI should stay in GUI state and route KiCad-compatible directive changes through `document.rs`, not by editing text items directly.
+- Simulation execution should route through `simulation.rs` and `osl-sim`; UI
+  widgets should not invoke simulator processes directly.
