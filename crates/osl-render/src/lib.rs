@@ -383,13 +383,15 @@ fn render_text_box(output: &mut String, viewport: &SvgViewport, text_box: &Kicad
     let Some(at) = text_box.at else {
         return;
     };
-    let origin = viewport.project(at_point(at));
     let margin = text_box
         .margins
         .map(|margins| margins.left.max(0.0) * viewport.scale)
         .unwrap_or(6.0);
 
-    output.push_str("    <g data-text-box=\"true\">\n");
+    output.push_str(&format!(
+        "    <g data-text-box=\"true\"{}>\n",
+        svg_local_transform(at, viewport)
+    ));
     if let Some(size) = text_box.size {
         let stroke = svg_stroke_color(text_box.stroke.as_ref(), "#64748b");
         let stroke_width = svg_stroke_width(text_box.stroke.as_ref(), viewport, 1.4);
@@ -398,8 +400,8 @@ fn render_text_box(output: &mut String, viewport: &SvgViewport, text_box: &Kicad
         let fill_opacity = if fill == "none" { "1" } else { "0.22" };
         output.push_str(&format!(
             "      <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"2\" stroke=\"{}\" stroke-width=\"{}\"{} fill=\"{}\" fill-opacity=\"{}\"/>\n",
-            fmt(origin.x),
-            fmt(origin.y),
+            fmt(0.0),
+            fmt(0.0),
             fmt(size.width.abs() * viewport.scale),
             fmt(size.height.abs() * viewport.scale),
             stroke,
@@ -410,8 +412,8 @@ fn render_text_box(output: &mut String, viewport: &SvgViewport, text_box: &Kicad
         ));
     }
 
-    let text_x = origin.x + margin;
-    let mut text_y = origin.y + margin + 11.0;
+    let text_x = margin;
+    let mut text_y = margin + 11.0;
     let text_fill = text_box
         .effects
         .as_ref()
@@ -521,6 +523,24 @@ fn svg_text_baseline(effects: &KicadTextEffects) -> Option<&'static str> {
     }
 }
 
+fn svg_local_transform(at: KicadAt, viewport: &SvgViewport) -> String {
+    let origin = viewport.project(at_point(at));
+    if at.rotation == 0.0 {
+        format!(
+            " transform=\"translate({} {})\"",
+            fmt(origin.x),
+            fmt(origin.y)
+        )
+    } else {
+        format!(
+            " transform=\"translate({} {}) rotate({})\"",
+            fmt(origin.x),
+            fmt(origin.y),
+            fmt(at.rotation)
+        )
+    }
+}
+
 fn svg_color(color: KicadColor) -> String {
     format!(
         "rgba({},{},{},{})",
@@ -617,15 +637,18 @@ fn render_table(output: &mut String, viewport: &SvgViewport, table: &KicadCanvas
         let Some(size) = cell.size else {
             continue;
         };
-        let origin = viewport.project(at_point(at));
-        let width = size.width * viewport.scale;
-        let height = size.height * viewport.scale;
+        let width = size.width.abs() * viewport.scale;
+        let height = size.height.abs() * viewport.scale;
         let fill = svg_fill_color(cell.fill.as_ref(), "#ffffff");
         let fill_opacity = if fill == "none" { "1" } else { "0.55" };
         output.push_str(&format!(
-            "      <rect data-table-cell=\"true\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"#64748b\" stroke-width=\"1\" fill=\"{}\" fill-opacity=\"{}\"/>\n",
-            fmt(origin.x),
-            fmt(origin.y),
+            "      <g data-table-cell-transform=\"true\"{}>\n",
+            svg_local_transform(at, viewport)
+        ));
+        output.push_str(&format!(
+            "        <rect data-table-cell=\"true\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" stroke=\"#64748b\" stroke-width=\"1\" fill=\"{}\" fill-opacity=\"{}\"/>\n",
+            fmt(0.0),
+            fmt(0.0),
             fmt(width),
             fmt(height),
             fill,
@@ -643,13 +666,14 @@ fn render_table(output: &mut String, viewport: &SvgViewport, table: &KicadCanvas
                 .map(svg_color)
                 .unwrap_or_else(|| "#334155".to_string());
             output.push_str(&format!(
-                "      <text x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\">{}</text>\n",
-                fmt(origin.x + margin),
-                fmt(origin.y + margin + 10.0),
+                "        <text x=\"{}\" y=\"{}\" fill=\"{}\" stroke=\"none\">{}</text>\n",
+                fmt(margin),
+                fmt(margin + 10.0),
                 text_fill,
                 html_escape(&cell.text)
             ));
         }
+        output.push_str("      </g>\n");
     }
     output.push_str("    </g>\n");
 }
@@ -1352,6 +1376,33 @@ mod tests {
     }
 
     #[test]
+    fn renders_rotated_schematic_text_boxes_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (text_box "Rotated"
+    (at 20 10 45)
+    (size 10 4)
+    (margins 1 1 1 1)
+    (uuid "33333333-3333-4333-8333-333333333333")
+  )
+)"#,
+            "rotated_text_box.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-text-box=\"true\""));
+        assert!(svg.contains("rotate(45)"));
+        assert!(svg.contains("<rect x=\"0\" y=\"0\""));
+        assert!(svg.contains("Rotated"));
+    }
+
+    #[test]
     fn renders_schematic_images_to_svg() {
         let schematic = parse_kicad_schematic(
             r#"(kicad_sch
@@ -1420,5 +1471,40 @@ mod tests {
         assert!(svg.contains("data-table-cell=\"true\""));
         assert!(svg.contains("LED pin"));
         assert!(svg.contains("Expected net"));
+    }
+
+    #[test]
+    fn renders_rotated_schematic_table_cells_to_svg() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (table
+    (column_count 1)
+    (column_widths 10)
+    (row_heights 4)
+    (cells
+      (table_cell "Rotated cell"
+        (at 40 10 45)
+        (size 10 4)
+        (margins 1 1 1 1)
+        (span 1 1)
+      )
+    )
+  )
+)"#,
+            "rotated_table.kicad_sch",
+        )
+        .unwrap();
+
+        let svg = render_kicad_scene_svg(&schematic.canvas_scene());
+
+        assert!(svg.contains("data-kicad-table=\"true\""));
+        assert!(svg.contains("data-table-cell-transform=\"true\""));
+        assert!(svg.contains("rotate(45)"));
+        assert!(svg.contains("<rect data-table-cell=\"true\" x=\"0\" y=\"0\""));
+        assert!(svg.contains("Rotated cell"));
     }
 }
