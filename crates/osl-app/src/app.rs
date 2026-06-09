@@ -11,6 +11,7 @@ mod panels;
 mod placement;
 mod runtime;
 mod schematic_tools;
+mod selection_properties;
 mod symbol_browser;
 mod symbol_placement_controls;
 
@@ -32,6 +33,9 @@ pub struct NekoSpiceApp {
     pub(super) selected_symbol_id: Option<String>,
     pub(super) selected_symbol_placement: SymbolPlacementConfig,
     pub(crate) placement: Option<SymbolPlacementState>,
+    pub(super) property_reference: String,
+    pub(super) property_value: String,
+    pub(super) property_selection_uuid: Option<String>,
     pub(super) schematic_tools: SchematicToolState,
     pub(super) symbol_search: String,
     pub(super) load_error: Option<String>,
@@ -83,6 +87,9 @@ impl Default for NekoSpiceApp {
             selected_symbol_id: None,
             selected_symbol_placement: SymbolPlacementConfig::default(),
             placement: None,
+            property_reference: String::new(),
+            property_value: String::new(),
+            property_selection_uuid: None,
             schematic_tools: SchematicToolState::default(),
             symbol_search: String::new(),
             load_error: None,
@@ -106,6 +113,7 @@ impl NekoSpiceApp {
                 self.document = Some(document);
                 self.scene = Some(scene);
                 self.selected_hit = None;
+                self.clear_property_editor();
                 self.schematic_tools.clear_pending();
                 self.load_error = None;
                 self.status_message = Some("Loaded schematic".to_string());
@@ -154,6 +162,7 @@ impl NekoSpiceApp {
                 self.viewport.fit_scene(scene.bounds);
                 self.scene = Some(scene);
                 self.selected_hit = None;
+                self.clear_property_editor();
                 self.load_error = None;
                 self.status_message =
                     Some(format!("Deleted {} {}", summary.operation, summary.target));
@@ -179,6 +188,7 @@ impl NekoSpiceApp {
                 let scene = document.scene();
                 self.selected_hit = scene.item_hit_by_uuid(&uuid);
                 self.scene = Some(scene);
+                self.sync_property_editor_from_selection();
                 self.load_error = None;
                 self.status_message =
                     Some(format!("Moved {} {}", summary.operation, summary.target));

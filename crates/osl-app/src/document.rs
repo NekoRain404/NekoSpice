@@ -60,6 +60,20 @@ impl KicadGuiDocument {
         })
     }
 
+    pub(crate) fn set_symbol_property(
+        &mut self,
+        reference: String,
+        name: String,
+        value: String,
+    ) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::SetSymbolProperty {
+            reference,
+            name,
+            value,
+            at: None,
+        })
+    }
+
     pub(crate) fn place_symbol_from_definition(
         &mut self,
         definition: KicadSymbolDef,
@@ -353,6 +367,33 @@ mod tests {
             .find(|symbol| symbol.reference() == Some("U1"))
             .unwrap();
         assert_eq!(placed.pins[1].alternate.as_deref(), Some("ALT2"));
+    }
+
+    #[test]
+    fn document_sets_selected_symbol_properties_for_gui_editor() {
+        let temp = crate::test_support::temp_schematic_copy("gui_properties");
+        let temp_path = temp.path();
+
+        let mut document = KicadGuiDocument::load(temp_path.to_path_buf()).unwrap();
+        document
+            .set_symbol_property(
+                "R1".to_string(),
+                "Reference".to_string(),
+                "RLOAD".to_string(),
+            )
+            .unwrap();
+        document
+            .set_symbol_property("RLOAD".to_string(), "Value".to_string(), "2k".to_string())
+            .unwrap();
+
+        let scene = document.scene();
+        let symbol = scene
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference == "RLOAD")
+            .unwrap();
+        assert_eq!(symbol.value, "2k");
+        assert!(document.is_dirty());
     }
 
     #[test]

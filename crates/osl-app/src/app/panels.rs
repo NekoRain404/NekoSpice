@@ -117,6 +117,7 @@ impl NekoSpiceApp {
         } else {
             ui.label("None");
         }
+        self.draw_selection_property_editor(ui);
 
         ui.separator();
         self.draw_schematic_tool_controls(ui);

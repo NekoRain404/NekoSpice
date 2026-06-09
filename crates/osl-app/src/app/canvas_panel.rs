@@ -40,6 +40,7 @@ impl NekoSpiceApp {
             } else if self.handle_schematic_tool_click(schematic_point) {
             } else if let Some(scene) = &self.scene {
                 self.selected_hit = scene.hit_test(schematic_point).hits.into_iter().next();
+                self.sync_property_editor_from_selection();
             }
         }
 

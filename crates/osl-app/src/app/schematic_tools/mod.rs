@@ -241,6 +241,7 @@ impl NekoSpiceApp {
                 self.selected_hit =
                     selection_point.and_then(|point| scene.hit_test(point).hits.into_iter().next());
                 self.scene = Some(scene);
+                self.sync_property_editor_from_selection();
                 self.load_error = None;
                 self.status_message =
                     Some(format!("Edited {} {}", summary.operation, summary.target));

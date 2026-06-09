@@ -91,6 +91,7 @@ impl NekoSpiceApp {
                 let scene = document.scene();
                 self.selected_hit = hit_for_symbol_reference(&scene, &placement.reference);
                 self.scene = Some(scene);
+                self.sync_property_editor_from_selection();
                 if !keep_active {
                     self.placement = None;
                 }
