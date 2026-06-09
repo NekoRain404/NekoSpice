@@ -4244,14 +4244,7 @@ impl KicadCanvasScene {
             );
         }
         for sheet in &self.sheets {
-            push_canvas_hit(
-                &mut hits,
-                "sheet",
-                sheet.uuid.clone(),
-                sheet.name.clone(),
-                sheet.bounds,
-                point,
-            );
+            push_canvas_sheet_hit(&mut hits, sheet, point);
             for pin in &sheet.pins {
                 push_canvas_sheet_pin_hit(&mut hits, pin, point);
             }
@@ -5320,6 +5313,24 @@ fn push_canvas_rule_area_hit(
             uuid: rule_area.uuid.clone(),
             label: "rule-area".to_string(),
             bounds,
+        });
+    }
+}
+
+fn push_canvas_sheet_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    sheet: &KicadCanvasSheet,
+    point: KicadPoint,
+) {
+    let Some(sheet_box) = kicad_sheet_box_bounds(sheet.at, sheet.size) else {
+        return;
+    };
+    if sheet_box.contains(point) {
+        hits.push(KicadCanvasHit {
+            kind: "sheet".to_string(),
+            uuid: sheet.uuid.clone(),
+            label: sheet.name.clone(),
+            bounds: sheet.bounds.unwrap_or(sheet_box),
         });
     }
 }
@@ -8058,6 +8069,30 @@ fn kicad_points_bounds(points: &[KicadPoint], padding: f64) -> Option<KicadBound
 fn kicad_sheet_pin_bounds(at: KicadAt) -> Option<KicadBoundingBox> {
     let points = [at.point(), pin_body_end(at, KICAD_SHEET_PIN_STUB_LENGTH)];
     kicad_points_bounds(&points, KICAD_CANVAS_LINE_BOUNDS_PADDING)
+}
+
+fn kicad_sheet_box_bounds(
+    at: Option<KicadAt>,
+    size: Option<KicadSize>,
+) -> Option<KicadBoundingBox> {
+    let at = at?;
+    let size = size?;
+    let corners = [
+        at.point(),
+        KicadPoint {
+            x: at.x + size.width,
+            y: at.y,
+        },
+        KicadPoint {
+            x: at.x + size.width,
+            y: at.y + size.height,
+        },
+        KicadPoint {
+            x: at.x,
+            y: at.y + size.height,
+        },
+    ];
+    kicad_points_bounds(&corners, 0.0)
 }
 
 fn kicad_rotated_rect_corners(at: KicadAt, size: KicadSize) -> [KicadPoint; 4] {
@@ -15913,6 +15948,8 @@ mod tests {
         let pin_hit = scene.hit_test(KicadPoint { x: 48.73, y: 45.0 });
         assert!(pin_hit.hits.iter().any(|hit| hit.kind == "sheet-pin"
             && hit.uuid.as_deref() == Some("11111111-1111-4111-8111-111111111111")));
+        assert!(!pin_hit.hits.iter().any(|hit| hit.kind == "sheet"
+            && hit.uuid.as_deref() == Some("33333333-3333-4333-8333-333333333333")));
 
         let anchor_box_miss = scene.hit_test(KicadPoint { x: 50.0, y: 46.2 });
         assert!(
@@ -15922,10 +15959,14 @@ mod tests {
                 .any(|hit| hit.kind == "sheet-pin"
                     && hit.uuid.as_deref() == Some("11111111-1111-4111-8111-111111111111"))
         );
+        assert!(anchor_box_miss.hits.iter().any(|hit| hit.kind == "sheet"
+            && hit.uuid.as_deref() == Some("33333333-3333-4333-8333-333333333333")));
 
         let corner_miss = scene.hit_test(KicadPoint { x: 46.86, y: 45.62 });
         assert!(!corner_miss.hits.iter().any(|hit| hit.kind == "sheet-pin"
             && hit.uuid.as_deref() == Some("11111111-1111-4111-8111-111111111111")));
+        assert!(!corner_miss.hits.iter().any(|hit| hit.kind == "sheet"
+            && hit.uuid.as_deref() == Some("33333333-3333-4333-8333-333333333333")));
     }
 
     #[test]
