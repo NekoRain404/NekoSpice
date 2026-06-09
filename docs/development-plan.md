@@ -202,7 +202,7 @@ osl verify examples/buck_converter/validation.yaml --output reports/buck_001
 
 当前进展：
 
-- 已新增 `osl-app` / `nekospice` GUI alpha crate，使用 `eframe` 并显式选择 `wgpu` renderer，先复用 Rust-native KiCad canvas scene 和 `KicadCanvasScene::hit_test` 后端实现打开 `.kicad_sch`、基础原理图显示、缩放、平移、fit 和点击选择。GUI 侧只负责视窗与绘制策略，KiCad item bounds / intersection 等几何能力由 `osl-kicad` 暴露并复用；当前已按可见世界 bounds 做 viewport culling，并通过 GUI document adapter 调用 `KicadSchematicEdit::{DeleteItem, MoveItem}` 与 KiCad writer 实现选中项删除、方向键/按钮移动和保存闭环。界面已整理为左侧项目/选择状态、中间原理图画布、右侧 symbol library browser 的三栏结构；右侧库浏览器通过 `KicadSymbolLibraryIndex` 加载 `sym-lib-table` 并搜索 symbol 元数据，GUI 不直接解析 `.kicad_sym`。编辑后由 `KicadCanvasScene::item_hit_by_uuid` 刷新选中状态，避免 GUI 层直接耦合 KiCad S-expression 或几何细节。后续把 egui painter 原型替换为 schematic / waveform 专用 wgpu 批渲染 pipeline，并把 library browser 连接到 symbol placement。
+- 已新增 `osl-app` / `nekospice` GUI alpha crate，使用 `eframe` 并显式选择 `wgpu` renderer，先复用 Rust-native KiCad canvas scene 和 `KicadCanvasScene::hit_test` 后端实现打开 `.kicad_sch`、基础原理图显示、缩放、平移、fit 和点击选择。GUI 侧只负责视窗与绘制策略，KiCad item bounds / intersection 等几何能力由 `osl-kicad` 暴露并复用；当前已按可见世界 bounds 做 viewport culling，并通过 GUI document adapter 调用 `KicadSchematicEdit::{DeleteItem, MoveItem}` 与 KiCad writer 实现选中项删除、方向键/按钮移动和保存闭环。界面已整理为左侧项目/选择状态、中间原理图画布、右侧 symbol library browser 的三栏结构；右侧库浏览器通过 `KicadSymbolLibraryIndex` 加载 `sym-lib-table` 并搜索 symbol 元数据，GUI 不直接解析 `.kicad_sym`。编辑后由 `KicadCanvasScene::item_hit_by_uuid` 刷新选中状态，避免 GUI 层直接耦合 KiCad S-expression 或几何细节。`osl-app` 已拆分为 app state/event routing、panel composition、document adapter、library adapter、viewport transforms 和 canvas drawing 模块，并在 crate README 记录边界，后续把 egui painter 原型替换为 schematic / waveform 专用 wgpu 批渲染 pipeline，并把 library browser 连接到 symbol placement。
 
 验收标准：
 
