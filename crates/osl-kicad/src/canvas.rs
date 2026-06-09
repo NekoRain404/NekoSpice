@@ -6,6 +6,7 @@ use crate::geometry::{
     kicad_polyline_hits_point, kicad_rectangle_hits_point, kicad_sheet_pin_bounds,
     kicad_text_bounds, pin_body_end, sample_kicad_arc_points,
 };
+use crate::transform::transform_local_point;
 use crate::{
     KicadAt, KicadBoundingBox, KicadBoundingBoxBuilder, KicadColor, KicadFill, KicadLabelKind,
     KicadMargins, KicadPinAlternate, KicadPinDef, KicadPinDisplay, KicadPoint, KicadProperty,
@@ -14,7 +15,7 @@ use crate::{
     kicad_bounding_box_value, kicad_color_value, kicad_fill_value, kicad_margins_value,
     kicad_pin_alternate_value, kicad_pin_display_value, kicad_point_value, kicad_points_value,
     kicad_property_value, kicad_size_value, kicad_stroke_value, kicad_text_effects_value,
-    resolve_symbol_definition, transform_local_point,
+    resolve_symbol_definition,
 };
 use osl_core::json_escape;
 

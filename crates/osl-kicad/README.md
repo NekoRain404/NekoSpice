@@ -25,6 +25,9 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
   the parser/writer layers.
 - `json.rs` owns small shared JSON summary formatting helpers used by project,
   schematic, and library reports.
+- `transform.rs` owns symbol mirror normalization plus local-to-symbol point/at
+  transforms and rotation normalization shared by canvas, netlist, and editing
+  paths.
 - `geometry.rs` owns reusable schematic/canvas geometry: bounding boxes,
   point/segment distances, rotated rectangles, sheet pin and no-connect marker
   geometry, text bounds estimation, polygon/polyline/Bezier/arc hit-testing, and

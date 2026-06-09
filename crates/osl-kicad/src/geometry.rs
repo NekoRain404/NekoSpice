@@ -1,5 +1,6 @@
 use crate::{
-    KicadAt, KicadFill, KicadPoint, KicadSize, KicadStroke, KicadTextEffects, normalized_rotation,
+    KicadAt, KicadFill, KicadPoint, KicadSize, KicadStroke, KicadTextEffects,
+    transform::rotate_point,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -589,31 +590,5 @@ pub(crate) fn pin_body_end(at: KicadAt, length: f64) -> KicadPoint {
     KicadPoint {
         x: at.x + length * radians.cos(),
         y: at.y + length * radians.sin(),
-    }
-}
-
-pub(crate) fn rotate_point(point: KicadPoint, rotation: f64) -> KicadPoint {
-    let normalized = normalized_rotation(rotation).round() as i32;
-    match normalized {
-        0 => point,
-        90 => KicadPoint {
-            x: -point.y,
-            y: point.x,
-        },
-        180 => KicadPoint {
-            x: -point.x,
-            y: -point.y,
-        },
-        270 => KicadPoint {
-            x: point.y,
-            y: -point.x,
-        },
-        _ => {
-            let radians = rotation.to_radians();
-            KicadPoint {
-                x: point.x * radians.cos() - point.y * radians.sin(),
-                y: point.x * radians.sin() + point.y * radians.cos(),
-            }
-        }
     }
 }

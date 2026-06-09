@@ -6,6 +6,7 @@ mod json;
 mod library_index;
 mod project;
 mod sexpr;
+mod transform;
 
 pub use canvas::{
     KicadCanvasBus, KicadCanvasBusEntry, KicadCanvasDirectiveLabel, KicadCanvasGraphic,
@@ -24,6 +25,7 @@ pub use library_index::{
 };
 pub use project::{KicadProject, KicadProjectSheet, parse_kicad_project};
 pub use sexpr::{Sexp, parse_sexpr};
+pub use transform::normalize_symbol_mirror;
 
 use edit::{
     delete_summary, fnv1a64, is_valid_bus_entry_size, move_sheet_pin_by_uuid, move_summary,
@@ -36,7 +38,7 @@ use edit::{
 use geometry::KICAD_CANVAS_POINT_BOUNDS_RADIUS;
 use geometry::{
     KICAD_CANVAS_LINE_BOUNDS_PADDING, KicadBoundingBoxBuilder, kicad_points_bounds,
-    kicad_rotated_rect_bounds, pin_body_end, rotate_point,
+    kicad_rotated_rect_bounds, pin_body_end,
 };
 use json::{json_bool_option, json_option};
 use osl_core::{OslError, OslResult, json_escape, read_text, write_text};
@@ -49,6 +51,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use transform::{transform_local_at, transform_local_point, transform_symbol_point};
 pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
     let content = read_text(path)?;
     parse_kicad_schematic(&content, &path.display().to_string())
@@ -6343,16 +6346,13 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
 }
 
 fn parse_symbol_mirror(node: &Sexp) -> Option<String> {
-    let mut axes = BTreeSet::new();
-    for axis in list_items(node).iter().skip(1).filter_map(atom_text) {
-        match axis {
-            "x" | "y" => {
-                axes.insert(axis);
-            }
-            _ => return None,
-        }
-    }
-    symbol_mirror_from_axes(axes)
+    let mirror = list_items(node)
+        .iter()
+        .skip(1)
+        .filter_map(atom_text)
+        .collect::<Vec<_>>()
+        .join(" ");
+    normalize_symbol_mirror(&mirror).ok().flatten()
 }
 
 fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
@@ -7859,109 +7859,6 @@ fn expand_kicad_uri(uri: &str, base_dir: &Path) -> String {
     expanded
 }
 
-fn transform_symbol_point(pin_at: KicadAt, symbol_at: KicadAt, mirror: Option<&str>) -> KicadPoint {
-    transform_local_point(pin_at.point(), symbol_at, mirror)
-}
-
-pub(crate) fn transform_local_point(
-    local: KicadPoint,
-    symbol_at: KicadAt,
-    mirror: Option<&str>,
-) -> KicadPoint {
-    let rotated = rotate_point(mirror_point(local, mirror), symbol_at.rotation);
-    KicadPoint {
-        x: symbol_at.x + rotated.x,
-        y: symbol_at.y + rotated.y,
-    }
-}
-
-pub(crate) fn transform_local_at(
-    local_at: KicadAt,
-    symbol_at: KicadAt,
-    mirror: Option<&str>,
-) -> KicadAt {
-    let point = transform_local_point(local_at.point(), symbol_at, mirror);
-    KicadAt {
-        x: point.x,
-        y: point.y,
-        rotation: normalized_rotation(
-            mirror_rotation(local_at.rotation, mirror) + symbol_at.rotation,
-        ),
-    }
-}
-
-fn mirror_point(point: KicadPoint, mirror: Option<&str>) -> KicadPoint {
-    let mut mirrored = point;
-    if mirror_has_axis(mirror, "x") {
-        mirrored.y = -mirrored.y;
-    }
-    if mirror_has_axis(mirror, "y") {
-        mirrored.x = -mirrored.x;
-    }
-    mirrored
-}
-
-fn mirror_rotation(rotation: f64, mirror: Option<&str>) -> f64 {
-    let mut mirrored = rotation;
-    if mirror_has_axis(mirror, "x") {
-        mirrored = -mirrored;
-    }
-    if mirror_has_axis(mirror, "y") {
-        mirrored = 180.0 - mirrored;
-    }
-    normalized_rotation(mirrored)
-}
-
-fn mirror_has_axis(mirror: Option<&str>, axis: &str) -> bool {
-    mirror
-        .into_iter()
-        .flat_map(str::split_whitespace)
-        .any(|candidate| candidate == axis)
-}
-
-pub fn normalize_symbol_mirror(value: &str) -> OslResult<Option<String>> {
-    let trimmed = value.trim();
-    if trimmed.eq_ignore_ascii_case("none") || trimmed.eq_ignore_ascii_case("normal") {
-        return Ok(None);
-    }
-    let axes = mirror_axes(trimmed)?;
-    symbol_mirror_from_axes(axes).map(Some).ok_or_else(|| {
-        OslError::InvalidInput("KiCad symbol mirror must be x, y, xy, or none".to_string())
-    })
-}
-
-fn mirror_axes(value: &str) -> OslResult<BTreeSet<&str>> {
-    let mut axes = BTreeSet::new();
-    if value.contains(char::is_whitespace) {
-        for axis in value.split_whitespace() {
-            insert_mirror_axis(&mut axes, axis)?;
-        }
-    } else {
-        for axis in value.split("") {
-            if !axis.is_empty() {
-                insert_mirror_axis(&mut axes, axis)?;
-            }
-        }
-    }
-    Ok(axes)
-}
-
-fn insert_mirror_axis<'a>(axes: &mut BTreeSet<&'a str>, axis: &'a str) -> OslResult<()> {
-    match axis {
-        "x" | "y" => {
-            axes.insert(axis);
-            Ok(())
-        }
-        _ => Err(OslError::InvalidInput(format!(
-            "unsupported KiCad symbol mirror axis '{axis}'"
-        ))),
-    }
-}
-
-fn symbol_mirror_from_axes(axes: BTreeSet<&str>) -> Option<String> {
-    let mirror = axes.into_iter().collect::<Vec<_>>().join(" ");
-    (!mirror.is_empty()).then_some(mirror)
-}
 pub(crate) fn canvas_symbol_bounds(
     graphics: &[KicadCanvasGraphic],
     pins: &[KicadCanvasPin],
@@ -7983,15 +7880,6 @@ pub(crate) fn canvas_symbol_bounds(
     }
     bounds.finish()
 }
-fn normalized_rotation(rotation: f64) -> f64 {
-    let normalized = rotation % 360.0;
-    if normalized < 0.0 {
-        normalized + 360.0
-    } else {
-        normalized
-    }
-}
-
 fn compare_pin_numbers(left: &&KicadPinDef, right: &&KicadPinDef) -> Ordering {
     match (left.number().parse::<u32>(), right.number().parse::<u32>()) {
         (Ok(left), Ok(right)) => left.cmp(&right),
