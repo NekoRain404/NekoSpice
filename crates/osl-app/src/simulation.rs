@@ -1,4 +1,5 @@
 use crate::document::KicadGuiDocument;
+use crate::waveform_summary::GuiWaveformSummaryState;
 #[cfg(test)]
 use osl_core::OslError;
 use osl_core::{OslResult, RunMetadata, make_run_id, write_text};
@@ -11,6 +12,7 @@ use std::thread;
 pub(crate) struct GuiSimulationRun {
     pub(crate) output_dir: PathBuf,
     pub(crate) metadata: RunMetadata,
+    pub(crate) waveform: GuiWaveformSummaryState,
 }
 
 #[derive(Debug, Clone)]
@@ -87,9 +89,11 @@ fn run_job_with_backend(
     let source_netlist = output_dir.join("schematic.cir");
     write_text(&source_netlist, &job.netlist)?;
     let metadata = backend.run(&source_netlist, &output_dir)?;
+    let waveform = GuiWaveformSummaryState::from_run_dir(&output_dir);
     Ok(GuiSimulationRun {
         output_dir,
         metadata,
+        waveform,
     })
 }
 
@@ -128,6 +132,23 @@ mod tests {
     #[derive(Debug)]
     struct RecordingBackend;
 
+    const SAMPLE_RAW: &str = r#"
+Title: gui run
+Plotname: Transient Analysis
+Flags: real
+No. Variables: 2
+No. Points: 2
+Variables:
+	0	time	time
+	1	v(out)	voltage
+Values:
+ 0	0.000000000000000e+00
+	1.000000000000000e+00
+
+ 1	1.000000000000000e-06
+	3.000000000000000e+00
+"#;
+
     impl SimulatorBackend for RecordingBackend {
         fn name(&self) -> &'static str {
             "recording"
@@ -153,6 +174,7 @@ mod tests {
         ) -> OslResult<RunMetadata> {
             assert!(source_netlist.is_file());
             assert!(output_dir.is_dir());
+            osl_core::write_text(&output_dir.join("waveform.raw"), SAMPLE_RAW)?;
             Ok(RunMetadata {
                 schema_version: 1,
                 run_id: "recorded".to_string(),
@@ -166,10 +188,16 @@ mod tests {
                 duration_ms: 0,
                 started_unix_ms: 0,
                 parameters: Vec::new(),
-                artifacts: vec![Artifact {
-                    path: "schematic.cir".to_string(),
-                    kind: "netlist".to_string(),
-                }],
+                artifacts: vec![
+                    Artifact {
+                        path: "schematic.cir".to_string(),
+                        kind: "netlist".to_string(),
+                    },
+                    Artifact {
+                        path: "waveform.raw".to_string(),
+                        kind: "waveform".to_string(),
+                    },
+                ],
             })
         }
     }
@@ -187,6 +215,11 @@ mod tests {
         let netlist = fs::read_to_string(netlist_path).unwrap();
         assert!(netlist.contains(".tran 1u 1m"));
         assert_eq!(run.metadata.backend, "recording");
+        let GuiWaveformSummaryState::Ready(summary) = run.waveform else {
+            panic!("expected waveform summary");
+        };
+        assert_eq!(summary.point_count, 2);
+        assert_eq!(summary.variables[1].name, "v(out)");
         let _ = fs::remove_dir_all(runs_root);
     }
 
@@ -210,6 +243,7 @@ mod tests {
 
         assert_eq!(run.metadata.backend, "recording");
         assert!(run.output_dir.join("schematic.cir").is_file());
+        assert!(matches!(run.waveform, GuiWaveformSummaryState::Ready(_)));
         let _ = fs::remove_dir_all(runs_root);
     }
 }

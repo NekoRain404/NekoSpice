@@ -1778,6 +1778,7 @@ dependencies = [
  "osl-core",
  "osl-kicad",
  "osl-sim",
+ "osl-waveform",
 ]
 
 [[package]]

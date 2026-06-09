@@ -13,3 +13,4 @@ eframe = { version = "0.34.3", default-features = false, features = ["default_fo
 osl-core = { path = "../osl-core" }
 osl-kicad = { path = "../osl-kicad" }
 osl-sim = { path = "../osl-sim" }
+osl-waveform = { path = "../osl-waveform" }

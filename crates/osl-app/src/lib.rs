@@ -13,6 +13,7 @@ mod simulation;
 #[cfg(test)]
 mod test_support;
 mod viewport;
+mod waveform_summary;
 
 pub use app::{NekoSpiceApp, load_canvas_scene, run_native};
 

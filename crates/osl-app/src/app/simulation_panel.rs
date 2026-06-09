@@ -1,9 +1,11 @@
 use super::NekoSpiceApp;
 use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
+use crate::waveform_summary::{GuiWaveformSummary, GuiWaveformSummaryState};
 use eframe::egui::{self, Color32};
 use osl_core::RunStatus;
 use osl_kicad::{KicadDiagnosticSeverity, KicadSimulationDirective, KicadSimulationDirectiveKind};
 use std::path::Path;
+use std::time::Duration;
 
 const NETLIST_PREVIEW_LINES: usize = 18;
 
@@ -37,6 +39,9 @@ impl NekoSpiceApp {
         self.draw_simulation_directive_editor(ui);
 
         let is_running = self.simulation_panel.active_task.is_some();
+        if is_running {
+            ui.ctx().request_repaint_after(Duration::from_millis(100));
+        }
         ui.horizontal(|ui| {
             if ui
                 .add_enabled(
@@ -233,6 +238,7 @@ impl NekoSpiceApp {
                 ),
             );
             ui.monospace(run.output_dir.display().to_string());
+            draw_waveform_summary(ui, &run.waveform);
         }
     }
 }
@@ -244,6 +250,97 @@ fn draw_simulation_directives(ui: &mut egui::Ui, directives: &[KicadSimulationDi
             ui.monospace(directive.kind.to_string());
             ui.label(&directive.text);
         });
+    }
+}
+
+fn draw_waveform_summary(ui: &mut egui::Ui, waveform: &GuiWaveformSummaryState) {
+    match waveform {
+        GuiWaveformSummaryState::Ready(summary) => draw_ready_waveform_summary(ui, summary),
+        GuiWaveformSummaryState::Missing { raw_path } => {
+            ui.label("Waveform: no waveform.raw");
+            ui.monospace(raw_path.display().to_string());
+        }
+        GuiWaveformSummaryState::Error { raw_path, message } => {
+            ui.colored_label(
+                severity_color(KicadDiagnosticSeverity::Warning),
+                format!("Waveform parse failed: {message}"),
+            );
+            ui.monospace(raw_path.display().to_string());
+        }
+    }
+}
+
+fn draw_ready_waveform_summary(ui: &mut egui::Ui, summary: &GuiWaveformSummary) {
+    ui.separator();
+    ui.label(format!(
+        "Waveform: {} points, {} variables",
+        summary.point_count, summary.variable_count
+    ));
+    if !summary.plot_name.is_empty() {
+        ui.label(format!("Plot: {}", summary.plot_name));
+    }
+    if !summary.title.is_empty() {
+        ui.label(format!("Title: {}", summary.title));
+    }
+    ui.monospace(summary.raw_path.display().to_string());
+
+    egui::Grid::new("simulation_waveform_summary")
+        .num_columns(5)
+        .spacing(egui::Vec2::new(8.0, 2.0))
+        .striped(true)
+        .show(ui, |ui| {
+            ui.strong("Signal");
+            ui.strong("Last");
+            ui.strong("Min");
+            ui.strong("Max");
+            ui.strong("P-P");
+            ui.end_row();
+            for variable in &summary.variables {
+                ui.label(variable_label(
+                    &variable.name,
+                    &variable.unit,
+                    variable.samples,
+                ))
+                .on_hover_text(variable_hover_text(variable.first, variable.rms));
+                ui.monospace(format_compact_f64(variable.last));
+                ui.monospace(format_compact_f64(variable.min));
+                ui.monospace(format_compact_f64(variable.max));
+                ui.monospace(format_compact_f64(variable.peak_to_peak));
+                ui.end_row();
+            }
+        });
+    if summary.omitted_variable_count > 0 {
+        ui.label(format!("{} more variables", summary.omitted_variable_count));
+    }
+}
+
+fn variable_hover_text(first: f64, rms: f64) -> String {
+    format!(
+        "First: {}\nRMS: {}",
+        format_compact_f64(first),
+        format_compact_f64(rms)
+    )
+}
+
+fn variable_label(name: &str, unit: &str, samples: usize) -> String {
+    if unit.is_empty() {
+        format!("{name} ({samples})")
+    } else {
+        format!("{name} [{unit}] ({samples})")
+    }
+}
+
+fn format_compact_f64(value: f64) -> String {
+    if !value.is_finite() {
+        return value.to_string();
+    }
+    let absolute = value.abs();
+    if value == 0.0 {
+        "0".to_string()
+    } else if !(1.0e-3..1.0e4).contains(&absolute) {
+        format!("{value:.3e}")
+    } else {
+        format!("{value:.4}")
     }
 }
 
