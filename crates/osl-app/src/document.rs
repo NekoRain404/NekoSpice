@@ -1,7 +1,7 @@
 use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
-    KicadAt, KicadCanvasScene, KicadEditSummary, KicadPoint, KicadSchematic, KicadSchematicEdit,
-    KicadSymbolDef, read_kicad_schematic_with_libraries, write_kicad_schematic,
+    KicadAt, KicadCanvasScene, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSchematic,
+    KicadSchematicEdit, KicadSymbolDef, read_kicad_schematic_with_libraries, write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
 
@@ -43,14 +43,9 @@ impl KicadGuiDocument {
     }
 
     pub(crate) fn delete_item(&mut self, uuid: &str) -> Result<KicadEditSummary, String> {
-        self.schematic
-            .apply_edit(KicadSchematicEdit::DeleteItem {
-                uuid: uuid.to_string(),
-            })
-            .inspect(|_| {
-                self.dirty = true;
-            })
-            .map_err(|error| error.to_string())
+        self.apply_edit(KicadSchematicEdit::DeleteItem {
+            uuid: uuid.to_string(),
+        })
     }
 
     pub(crate) fn move_item(
@@ -58,15 +53,10 @@ impl KicadGuiDocument {
         uuid: &str,
         delta: KicadPoint,
     ) -> Result<KicadEditSummary, String> {
-        self.schematic
-            .apply_edit(KicadSchematicEdit::MoveItem {
-                uuid: uuid.to_string(),
-                delta,
-            })
-            .inspect(|_| {
-                self.dirty = true;
-            })
-            .map_err(|error| error.to_string())
+        self.apply_edit(KicadSchematicEdit::MoveItem {
+            uuid: uuid.to_string(),
+            delta,
+        })
     }
 
     pub(crate) fn place_symbol_from_definition(
@@ -79,33 +69,75 @@ impl KicadGuiDocument {
         let reference = self.next_reference_for_definition(&definition);
         let lib_id = definition.name.clone();
         let value = definition.property("Value").unwrap_or("").to_string();
-        self.schematic
-            .apply_edit(KicadSchematicEdit::PlaceSymbol {
-                definition: Box::new(definition),
-                library_symbols,
-                reference: reference.clone(),
-                value,
-                at,
-                unit: config.unit_option(),
-                body_style: config.body_style,
-                pin_alternates: config.pin_alternates,
-                uuid: None,
-            })
-            .inspect(|_| {
-                self.dirty = true;
-            })
-            .map(|summary| KicadSymbolPlacementResult {
-                summary,
-                reference,
-                lib_id,
-            })
-            .map_err(|error| error.to_string())
+        self.apply_edit(KicadSchematicEdit::PlaceSymbol {
+            definition: Box::new(definition),
+            library_symbols,
+            reference: reference.clone(),
+            value,
+            at,
+            unit: config.unit_option(),
+            body_style: config.body_style,
+            pin_alternates: config.pin_alternates,
+            uuid: None,
+        })
+        .map(|summary| KicadSymbolPlacementResult {
+            summary,
+            reference,
+            lib_id,
+        })
+    }
+
+    pub(crate) fn add_wire(&mut self, points: Vec<KicadPoint>) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::AddWire { points, uuid: None })
+    }
+
+    pub(crate) fn add_junction(&mut self, at: KicadPoint) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::AddJunction { at, uuid: None })
+    }
+
+    pub(crate) fn add_no_connect(&mut self, at: KicadPoint) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::AddNoConnect { at, uuid: None })
+    }
+
+    pub(crate) fn add_label(
+        &mut self,
+        text: String,
+        kind: KicadLabelKind,
+        at: KicadAt,
+    ) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::AddLabel {
+            text,
+            kind,
+            at,
+            uuid: None,
+        })
+    }
+
+    pub(crate) fn add_text(
+        &mut self,
+        text: String,
+        at: KicadAt,
+    ) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::AddText {
+            text,
+            at,
+            uuid: None,
+        })
     }
 
     pub(crate) fn save(&mut self) -> Result<(), String> {
         write_kicad_schematic(&self.path, &self.schematic)
             .inspect(|_| {
                 self.dirty = false;
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    fn apply_edit(&mut self, edit: KicadSchematicEdit) -> Result<KicadEditSummary, String> {
+        self.schematic
+            .apply_edit(edit)
+            .inspect(|_| {
+                self.dirty = true;
             })
             .map_err(|error| error.to_string())
     }
@@ -286,6 +318,70 @@ mod tests {
             .find(|symbol| symbol.reference() == Some("U1"))
             .unwrap();
         assert_eq!(placed.pins[1].alternate.as_deref(), Some("ALT2"));
+    }
+
+    #[test]
+    fn document_adds_basic_schematic_items_for_gui_tools() {
+        let temp = crate::test_support::temp_schematic_copy("gui_tools");
+        let temp_path = temp.path();
+
+        let mut document = KicadGuiDocument::load(temp_path.to_path_buf()).unwrap();
+        document
+            .add_wire(vec![
+                KicadPoint { x: 101.6, y: 50.8 },
+                KicadPoint { x: 111.76, y: 50.8 },
+            ])
+            .unwrap();
+        document
+            .add_label(
+                "sense".to_string(),
+                osl_kicad::KicadLabelKind::Global,
+                KicadAt {
+                    x: 111.76,
+                    y: 50.8,
+                    rotation: 0.0,
+                },
+            )
+            .unwrap();
+        document
+            .add_text(
+                ".save v(out)".to_string(),
+                KicadAt {
+                    x: 45.72,
+                    y: 35.56,
+                    rotation: 0.0,
+                },
+            )
+            .unwrap();
+        document
+            .add_junction(KicadPoint { x: 101.6, y: 50.8 })
+            .unwrap();
+        document
+            .add_no_connect(KicadPoint { x: 111.76, y: 50.8 })
+            .unwrap();
+
+        let scene = document.scene();
+        assert!(document.is_dirty());
+        assert_eq!(scene.wires.len(), 4);
+        assert!(
+            scene
+                .labels
+                .iter()
+                .any(|label| label.text == "sense"
+                    && label.kind == osl_kicad::KicadLabelKind::Global)
+        );
+        assert!(
+            scene
+                .text_items
+                .iter()
+                .any(|text| text.text == ".save v(out)")
+        );
+        assert!(scene.junctions.iter().any(|junction| {
+            (junction.at.x - 101.6).abs() < 1e-6 && (junction.at.y - 50.8).abs() < 1e-6
+        }));
+        assert!(scene.no_connects.iter().any(|marker| {
+            (marker.at.x - 111.76).abs() < 1e-6 && (marker.at.y - 50.8).abs() < 1e-6
+        }));
     }
 
     #[test]

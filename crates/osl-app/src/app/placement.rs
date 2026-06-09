@@ -16,6 +16,7 @@ impl NekoSpiceApp {
             self.status_message = Some("Select a symbol before placing".to_string());
             return;
         };
+        self.select_schematic_tool();
         self.placement = Some(SymbolPlacementState {
             symbol_id: symbol_id.clone(),
             config: self.selected_symbol_placement.clone(),

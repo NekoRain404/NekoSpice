@@ -12,6 +12,7 @@ search stay in `osl-kicad`.
 - `app/panels.rs`: toolbar, project/selection side panel, and `eframe::App` layout.
 - `app/placement.rs`: symbol placement mode state, repeat placement, and post-edit selection refresh.
 - `app/runtime.rs`: native window options, wgpu renderer selection, and initial egui style.
+- `app/schematic_tools.rs`: active schematic tool state, pending wire routing, edit previews, and GUI calls into the document adapter.
 - `app/symbol_browser.rs`: symbol library browser, metadata details, and preview canvas.
 - `app/symbol_placement_controls.rs`: unit, body-style, and pin-alternate controls for KiCad-compatible symbol placement.
 - `document.rs`: editable KiCad schematic adapter around `KicadSchematicEdit`.
@@ -27,3 +28,4 @@ search stay in `osl-kicad`.
 - KiCad geometry, hit testing, and edit semantics belong in `osl-kicad`; GUI code consumes those APIs.
 - Canvas input handling belongs in `app/canvas_panel.rs`; drawing primitives belong in `canvas/primitives.rs`.
 - Symbol placement starts in the library/document adapters, then the UI wires selection, scope controls, preview, and canvas clicks to those adapters; repeat placement is UI state only, not KiCad file logic.
+- Schematic drawing tools keep transient UI state in `app/schematic_tools.rs` and route all file mutations through `document.rs`, which in turn calls `KicadSchematicEdit`.

@@ -37,6 +37,7 @@ impl NekoSpiceApp {
             let schematic_point = self.viewport.screen_to_world(rect, pointer);
             if self.placement.is_some() {
                 self.place_selected_symbol_at_point(schematic_point);
+            } else if self.handle_schematic_tool_click(schematic_point) {
             } else if let Some(scene) = &self.scene {
                 self.selected_hit = scene.hit_test(schematic_point).hits.into_iter().next();
             }
@@ -68,6 +69,7 @@ impl NekoSpiceApp {
         {
             let schematic_point = self.viewport.screen_to_world(rect, pointer);
             self.draw_symbol_placement_preview(&painter, rect, schematic_point);
+            self.draw_schematic_tool_preview(&painter, rect, schematic_point);
         }
     }
 
@@ -116,6 +118,7 @@ impl NekoSpiceApp {
 
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.cancel_symbol_placement();
+            self.cancel_schematic_tool_pending();
         }
         if ui.input(|input| input.key_pressed(egui::Key::Delete)) {
             self.delete_selected();

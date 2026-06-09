@@ -59,7 +59,7 @@ impl NekoSpiceApp {
         });
     }
 
-    fn draw_sidebar(&self, ui: &mut egui::Ui) {
+    fn draw_sidebar(&mut self, ui: &mut egui::Ui) {
         ui.heading("Project");
         ui.label("Renderer: wgpu");
         ui.separator();
@@ -117,6 +117,9 @@ impl NekoSpiceApp {
         } else {
             ui.label("None");
         }
+
+        ui.separator();
+        self.draw_schematic_tool_controls(ui);
     }
 }
 

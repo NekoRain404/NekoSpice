@@ -4,7 +4,7 @@ use osl_kicad::{KicadBoundingBox, KicadCanvasScene, KicadPoint};
 
 mod primitives;
 
-pub(crate) use primitives::{draw_bounds, draw_grid};
+pub(crate) use primitives::{draw_bounds, draw_grid, draw_line};
 
 pub(crate) fn draw_scene(
     painter: &egui::Painter,
