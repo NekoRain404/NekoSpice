@@ -37,6 +37,8 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 - `text.rs` owns schematic text/text-box IR, rotated text-box bounds, and
   text-item parse/write helpers.
 - `group.rs` owns schematic group IR and group parse/write helpers.
+- `sheet.rs` owns hierarchical sheet/sheet-pin IR, sheet bounds,
+  Sheetname/Sheetfile default properties, and sheet parse/write helpers.
 - `project.rs` owns `.kicad_pro` project JSON parsing, project summary DTOs, and
   schematic stem candidate discovery used by KiCad project import paths.
 - `symbol_library.rs` owns `.kicad_sym` library containers, `sym-lib-table`
