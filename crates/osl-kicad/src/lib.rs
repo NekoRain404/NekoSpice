@@ -2350,11 +2350,10 @@ impl KicadSchematic {
                 let Some(symbol_at) = symbol.at else {
                     return Vec::new();
                 };
-                self.symbol_definition(&symbol.lib_id)
+                self.resolved_symbol_definition(&symbol.lib_id)
                     .map(|definition| {
                         definition
-                            .pins
-                            .iter()
+                            .scoped_pins(symbol.unit, symbol.body_style)
                             .filter_map(|pin| pin.at)
                             .map(|pin_at| {
                                 transform_symbol_point(pin_at, symbol_at, symbol.mirror.as_deref())
@@ -13646,6 +13645,51 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.to_string().contains("has no alternate 'MISSING'"));
+    }
+
+    #[test]
+    fn checks_no_connect_markers_against_selected_symbol_scope() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:Scoped"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "Scoped" (at 0 -2.54 0))
+      (symbol "Scoped_1_1"
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "A1") (number "1"))
+      )
+      (symbol "Scoped_2_1"
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "A2") (number "2"))
+      )
+    )
+  )
+  (symbol
+    (lib_id "NekoSpice:Scoped")
+    (at 20 10 0)
+    (unit 2)
+    (uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    (property "Reference" "U2" (at 20 7.46 0))
+    (property "Value" "Scoped" (at 20 12.54 0))
+    (pin "2" (uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"))
+  )
+  (no_connect (at 22.54 10) (uuid "cccccccc-cccc-4ccc-8ccc-ccccccccccc1"))
+  (no_connect (at 17.46 10) (uuid "cccccccc-cccc-4ccc-8ccc-ccccccccccc2"))
+)"#,
+            "scoped_no_connect.kicad_sch",
+        )
+        .unwrap();
+
+        let report = schematic.check_report();
+        let floating = report
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "floating-no-connect")
+            .collect::<Vec<_>>();
+        assert_eq!(floating.len(), 1);
+        assert!(floating[0].message.contains("17.46,10"));
     }
 
     #[test]
