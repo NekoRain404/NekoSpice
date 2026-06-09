@@ -60,6 +60,7 @@ fn run_cli() -> OslResult<i32> {
         "model-check" => model_check_command(&args),
         "import" => import_command(&args),
         "kicad-inspect" => kicad_inspect_command(&args),
+        "kicad-select" => kicad_select_command(&args),
         "kicad-check" => kicad_check_command(&args),
         "kicad-export" => kicad_export_command(&args),
         "kicad-edit" => kicad_edit_command(&args),
@@ -84,6 +85,7 @@ Usage:
   osl model-check <netlist-or-directory> [--output <dir>] [--symbol <ltspice.asy>]
   osl import <spice-netlist-or-ltspice.asc-or-kicad_sch-or-kicad-project> [--output <dir>]
   osl kicad-inspect <file.kicad_pro-or-file.kicad_sch-or-file.kicad_sym-or-sym-lib-table> [--canvas] [--index] [--output <file>]
+  osl kicad-select <file.kicad_sch> <x,y> [--output <file>]
   osl kicad-check <file.kicad_sch> [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
@@ -403,6 +405,38 @@ fn kicad_inspect_command(args: &[String]) -> OslResult<i32> {
     if let Some(output) = output {
         write_text(Path::new(&output), &json)?;
         println!("kicad-inspect -> {output}");
+    } else {
+        print!("{json}");
+    }
+    Ok(0)
+}
+
+fn kicad_select_command(args: &[String]) -> OslResult<i32> {
+    let input = positional(args, 0, "missing KiCad path for 'osl kicad-select'")?;
+    let point = positional(args, 1, "missing point for 'osl kicad-select'")?;
+    let output = flag_value(args, "--output");
+    let input_path = Path::new(input);
+    let extension = input_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if extension != "kicad_sch" {
+        return Err(OslError::InvalidInput(format!(
+            "{} is not a supported KiCad select input (.kicad_sch)",
+            input_path.display()
+        )));
+    }
+
+    let point = parse_kicad_point(point, "KiCad canvas select point")?;
+    let json = read_kicad_schematic_with_libraries(input_path)?
+        .canvas_scene()
+        .hit_test(point)
+        .to_json();
+
+    if let Some(output) = output {
+        write_text(Path::new(&output), &json)?;
+        println!("kicad-select -> {output}");
     } else {
         print!("{json}");
     }
@@ -2542,7 +2576,7 @@ fn find_circuits_inner(path: &Path, circuits: &mut Vec<PathBuf>) -> OslResult<()
 mod tests {
     use super::{
         SweepDimension, VerifyConfig, VerifyRun, flag_value, has_flag, parse_kicad_edit_ops,
-        parse_number, parse_positive_u32, positionals,
+        parse_kicad_point, parse_number, parse_positive_u32, positionals,
     };
     use osl_kicad::{KicadLabelKind, KicadSchematicEdit, parse_kicad_symbol_library};
     use std::path::PathBuf;
@@ -2709,6 +2743,22 @@ mod tests {
             flag_value(&args, "--output"),
             Some("symbol_index.json".to_string())
         );
+    }
+
+    #[test]
+    fn parses_kicad_select_point_after_output_flag() {
+        let args = [
+            "input.kicad_sch".to_string(),
+            "88.9,50.8".to_string(),
+            "--output".to_string(),
+            "hits.json".to_string(),
+        ];
+
+        assert_eq!(positionals(&args), vec!["input.kicad_sch", "88.9,50.8"]);
+        assert_eq!(flag_value(&args, "--output"), Some("hits.json".to_string()));
+        let point = parse_kicad_point(positionals(&args)[1], "select point").unwrap();
+        assert_close(point.x, 88.9);
+        assert_close(point.y, 50.8);
     }
 
     #[test]

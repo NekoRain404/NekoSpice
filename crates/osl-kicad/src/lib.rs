@@ -3535,6 +3535,46 @@ pub struct KicadCanvasScene {
     pub bounds: Option<KicadBoundingBox>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasHit {
+    pub kind: String,
+    pub uuid: Option<String>,
+    pub label: String,
+    pub bounds: KicadBoundingBox,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KicadCanvasHitReport {
+    pub source: String,
+    pub at: KicadPoint,
+    pub hit_count: usize,
+    pub hits: Vec<KicadCanvasHit>,
+}
+
+impl KicadCanvasHitReport {
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "source": self.source,
+            "at": kicad_point_value(self.at),
+            "hit_count": self.hit_count,
+            "hits": self.hits.iter().map(KicadCanvasHit::to_json_value).collect::<Vec<_>>(),
+        }))
+        .expect("KiCad canvas hit-test JSON should serialize")
+    }
+}
+
+impl KicadCanvasHit {
+    fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "kind": self.kind,
+            "uuid": self.uuid,
+            "label": self.label,
+            "bounds": kicad_bounding_box_value(self.bounds),
+            "area": self.bounds.area(),
+        })
+    }
+}
+
 impl KicadCanvasScene {
     pub fn from_symbol_definition(
         source: impl Into<String>,
@@ -4113,6 +4153,205 @@ impl KicadCanvasScene {
             .expect("KiCad canvas scene JSON should serialize")
     }
 
+    pub fn hit_test(&self, point: KicadPoint) -> KicadCanvasHitReport {
+        let mut hits = Vec::new();
+        for symbol in &self.symbols {
+            push_canvas_hit(
+                &mut hits,
+                "symbol",
+                symbol.uuid.clone(),
+                symbol.reference.clone(),
+                symbol.bounds,
+                point,
+            );
+        }
+        for sheet in &self.sheets {
+            push_canvas_hit(
+                &mut hits,
+                "sheet",
+                sheet.uuid.clone(),
+                sheet.name.clone(),
+                sheet.bounds,
+                point,
+            );
+            for pin in &sheet.pins {
+                push_canvas_hit(
+                    &mut hits,
+                    "sheet-pin",
+                    pin.uuid.clone(),
+                    pin.name.clone(),
+                    pin.bounds,
+                    point,
+                );
+            }
+        }
+        for graphic in &self.graphics {
+            push_canvas_hit(
+                &mut hits,
+                "graphic",
+                graphic.uuid(),
+                graphic.kind().to_string(),
+                graphic.bounds(),
+                point,
+            );
+        }
+        for image in &self.images {
+            push_canvas_hit(
+                &mut hits,
+                "image",
+                image.uuid.clone(),
+                image.mime_type.clone(),
+                image.bounds,
+                point,
+            );
+        }
+        for table in &self.tables {
+            push_canvas_hit(
+                &mut hits,
+                "table",
+                table.uuid.clone(),
+                "table".to_string(),
+                table.bounds,
+                point,
+            );
+            for cell in &table.cells {
+                push_canvas_hit(
+                    &mut hits,
+                    "table-cell",
+                    cell.uuid.clone(),
+                    cell.text.clone(),
+                    cell.bounds,
+                    point,
+                );
+            }
+        }
+        for rule_area in &self.rule_areas {
+            push_canvas_hit(
+                &mut hits,
+                "rule-area",
+                rule_area.uuid.clone(),
+                "rule-area".to_string(),
+                rule_area.bounds,
+                point,
+            );
+        }
+        for wire in &self.wires {
+            push_canvas_hit(
+                &mut hits,
+                "wire",
+                wire.uuid.clone(),
+                "wire".to_string(),
+                wire.bounds,
+                point,
+            );
+        }
+        for bus in &self.buses {
+            push_canvas_hit(
+                &mut hits,
+                "bus",
+                bus.uuid.clone(),
+                "bus".to_string(),
+                bus.bounds,
+                point,
+            );
+        }
+        for entry in &self.bus_entries {
+            push_canvas_hit(
+                &mut hits,
+                "bus-entry",
+                entry.uuid.clone(),
+                "bus-entry".to_string(),
+                entry.bounds,
+                point,
+            );
+        }
+        for label in &self.directive_labels {
+            push_canvas_hit(
+                &mut hits,
+                "directive-label",
+                label.uuid.clone(),
+                label.text.clone(),
+                label.bounds,
+                point,
+            );
+        }
+        for label in &self.labels {
+            push_canvas_hit(
+                &mut hits,
+                "label",
+                label.uuid.clone(),
+                label.text.clone(),
+                label.bounds,
+                point,
+            );
+        }
+        for text in &self.text_items {
+            push_canvas_hit(
+                &mut hits,
+                "text",
+                text.uuid.clone(),
+                text.text.clone(),
+                text.bounds,
+                point,
+            );
+        }
+        for text_box in &self.text_boxes {
+            push_canvas_hit(
+                &mut hits,
+                "text-box",
+                text_box.uuid.clone(),
+                text_box.text.clone(),
+                text_box.bounds,
+                point,
+            );
+        }
+        for junction in &self.junctions {
+            push_canvas_hit(
+                &mut hits,
+                "junction",
+                junction.uuid.clone(),
+                "junction".to_string(),
+                Some(junction.bounds),
+                point,
+            );
+        }
+        for marker in &self.no_connects {
+            push_canvas_hit(
+                &mut hits,
+                "no-connect",
+                marker.uuid.clone(),
+                "no-connect".to_string(),
+                Some(marker.bounds),
+                point,
+            );
+        }
+        for group in &self.groups {
+            push_canvas_hit(
+                &mut hits,
+                "group",
+                group.uuid.clone(),
+                group.name.clone(),
+                group.bounds,
+                point,
+            );
+        }
+        hits.sort_by(|left, right| {
+            left.bounds
+                .area()
+                .total_cmp(&right.bounds.area())
+                .then_with(|| left.kind.cmp(&right.kind))
+                .then_with(|| left.uuid.cmp(&right.uuid))
+                .then_with(|| left.label.cmp(&right.label))
+        });
+
+        KicadCanvasHitReport {
+            source: self.source.clone(),
+            at: point,
+            hit_count: hits.len(),
+            hits,
+        }
+    }
+
     fn to_json_value(&self) -> serde_json::Value {
         let symbol_graphic_count = self
             .symbols
@@ -4522,6 +4761,17 @@ impl KicadCanvasGraphic {
         }
     }
 
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::Polyline { .. } => "polyline",
+            Self::Bezier { .. } => "bezier",
+            Self::Rectangle { .. } => "rectangle",
+            Self::Circle { .. } => "circle",
+            Self::Arc { .. } => "arc",
+            Self::Text { .. } => "text",
+        }
+    }
+
     fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
         match self {
             Self::Polyline { points, .. } => {
@@ -4922,6 +5172,27 @@ impl KicadCanvasGroup {
             "members": self.members,
             "bounds": self.bounds.map(kicad_bounding_box_value),
         })
+    }
+}
+
+fn push_canvas_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    kind: &str,
+    uuid: Option<String>,
+    label: String,
+    bounds: Option<KicadBoundingBox>,
+    point: KicadPoint,
+) {
+    let Some(bounds) = bounds else {
+        return;
+    };
+    if bounds.contains(point) {
+        hits.push(KicadCanvasHit {
+            kind: kind.to_string(),
+            uuid,
+            label,
+            bounds,
+        });
     }
 }
 
@@ -7460,6 +7731,17 @@ impl KicadBoundingBox {
                 y: self.max.y + padding,
             },
         }
+    }
+
+    fn contains(self, point: KicadPoint) -> bool {
+        point.x >= self.min.x
+            && point.x <= self.max.x
+            && point.y >= self.min.y
+            && point.y <= self.max.y
+    }
+
+    fn area(self) -> f64 {
+        self.width().abs() * self.height().abs()
     }
 }
 
@@ -14676,6 +14958,47 @@ mod tests {
                 .unwrap(),
             super::KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0,
         );
+    }
+
+    #[test]
+    fn hit_tests_kicad_canvas_items_by_bounds() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        let hit_report = schematic
+            .canvas_scene()
+            .hit_test(KicadPoint { x: 88.9, y: 50.8 });
+
+        assert!(hit_report.hit_count >= 2);
+        assert_eq!(hit_report.hits[0].kind, "label");
+        assert_eq!(
+            hit_report.hits[0].uuid.as_deref(),
+            Some("66666666-6666-6666-6666-666666666666")
+        );
+        assert!(hit_report.hits.iter().any(|hit| hit.kind == "wire"
+            && hit.uuid.as_deref() == Some("33333333-3333-3333-3333-333333333333")));
+        let json: serde_json::Value = serde_json::from_str(&hit_report.to_json()).unwrap();
+        assert_eq!(
+            json["hit_count"].as_u64().unwrap(),
+            hit_report.hit_count as u64
+        );
+        assert_eq!(json["hits"][0]["kind"], "label");
+        assert_eq!(
+            json["hits"][0]["uuid"],
+            "66666666-6666-6666-6666-666666666666"
+        );
+        assert!(json["hits"][0]["bounds"]["width"].as_f64().unwrap() > 0.0);
+
+        let empty_report = schematic
+            .canvas_scene()
+            .hit_test(KicadPoint { x: 10.0, y: 10.0 });
+        assert_eq!(empty_report.hit_count, 0);
+        assert!(empty_report.hits.is_empty());
     }
 
     #[test]
