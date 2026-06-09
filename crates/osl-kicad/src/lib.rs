@@ -5,18 +5,22 @@ mod coordinates;
 mod diagnostics;
 mod edit;
 mod geometry;
+mod group;
 mod image;
 mod instances;
 mod json;
+mod labels;
 mod library_index;
 mod markers;
 mod metadata;
 mod project;
+mod property;
 mod schematic_summary;
 mod sexpr;
 mod style;
 mod symbol_library;
 mod table;
+mod text;
 mod transform;
 mod wiring;
 
@@ -36,11 +40,13 @@ pub use diagnostics::{
 };
 pub use edit::{KicadEditSummary, KicadSchematicEdit, KicadSymbolPlacement};
 pub use geometry::{KicadBoundingBox, sample_kicad_arc_points};
+pub use group::KicadGroup;
 pub use image::KicadImage;
 pub use instances::{
     KicadInstancePath, KicadProjectInstance, KicadSheetInstance, KicadSymbolPathInstance,
     KicadVariantInstance,
 };
+pub use labels::{KicadDirectiveLabel, KicadLabel, KicadLabelKind};
 pub use library_index::{
     KicadIndexedLibrary, KicadIndexedSymbol, KicadIndexedSymbolBodyStyle, KicadIndexedSymbolPin,
     KicadIndexedSymbolUnit, KicadLibraryDiagnostic, KicadSymbolLibraryIndex,
@@ -49,6 +55,7 @@ pub use library_index::{
 pub use markers::{KicadJunction, KicadNoConnect};
 pub use metadata::{KicadTitleBlock, KicadTitleComment};
 pub use project::{KicadProject, KicadProjectSheet, parse_kicad_project};
+pub use property::KicadProperty;
 pub use sexpr::{Sexp, parse_sexpr};
 pub use style::{KicadColor, KicadFill, KicadMargins, KicadStroke, KicadTextEffects};
 pub use symbol_library::{
@@ -56,6 +63,7 @@ pub use symbol_library::{
     parse_kicad_symbol_library, parse_kicad_symbol_library_table,
 };
 pub use table::{KicadTable, KicadTableBorder, KicadTableCell, KicadTableSeparators};
+pub use text::{KicadTextBox, KicadTextItem};
 pub use transform::normalize_symbol_mirror;
 pub use wiring::{
     KicadBus, KicadBusAlias, KicadBusEntry, KicadNetChain, KicadNetChainEndpoint, KicadWire,
@@ -77,17 +85,19 @@ use edit::{
 #[cfg(test)]
 use geometry::KICAD_CANVAS_POINT_BOUNDS_RADIUS;
 use geometry::{
-    KICAD_CANVAS_LINE_BOUNDS_PADDING, KicadBoundingBoxBuilder, kicad_points_bounds,
-    kicad_rotated_rect_bounds, pin_body_end,
+    KICAD_CANVAS_LINE_BOUNDS_PADDING, KicadBoundingBoxBuilder, kicad_points_bounds, pin_body_end,
 };
+use group::parse_group;
 use image::parse_image;
 use instances::{
     parse_project_instances, parse_sheet_instances, parse_symbol_path_instances,
     write_project_instances_sexpr, write_sheet_instances_sexpr, write_symbol_path_instances_sexpr,
 };
+use labels::{parse_directive_label, parse_label};
 use markers::{parse_junction, parse_no_connect};
 use metadata::parse_title_block;
 use osl_core::{OslError, OslResult, read_text, write_text};
+use property::parse_property;
 use sexpr::{
     atom_text, child, child_value, direct_children, expect_root_list, format_number, head,
     list_items, list_value, sexpr_atom_or_string, sexpr_string,
@@ -99,11 +109,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 pub(crate) use style::{
     default_kicad_text_effects, kicad_color_value, kicad_fill_value, kicad_margins_value,
-    kicad_stroke_value, kicad_text_effects_value, parse_fill, parse_margins, parse_stroke,
-    parse_text_effects, write_inline_fill, write_inline_optional_fill, write_inline_stroke,
-    write_inline_text_effects, write_optional_bool_sexpr, write_text_effects_line,
+    kicad_stroke_value, kicad_text_effects_value, parse_fill, parse_stroke, parse_text_effects,
+    write_inline_fill, write_inline_optional_fill, write_inline_stroke, write_inline_text_effects,
+    write_optional_bool_sexpr,
 };
 use table::parse_table;
+use text::{parse_text_box, parse_text_item};
 use transform::{transform_local_at, transform_local_point, transform_symbol_point};
 use wiring::{parse_bus, parse_bus_alias, parse_bus_entry, parse_net_chain, parse_wire};
 pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
@@ -4034,32 +4045,6 @@ impl KicadRuleArea {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct KicadGroup {
-    pub name: String,
-    pub uuid: Option<String>,
-    pub locked: Option<bool>,
-    pub members: Vec<String>,
-}
-
-impl KicadGroup {
-    fn write_group_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!("{}(group {}\n", pad, sexpr_string(&self.name)));
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
-        }
-        if self.locked == Some(true) {
-            output.push_str(&format!("{}  (locked yes)\n", pad));
-        }
-        output.push_str(&format!("{}  (members", pad));
-        for member in &self.members {
-            output.push_str(&format!(" {}", sexpr_string(member)));
-        }
-        output.push_str(")\n");
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-#[derive(Debug, Clone, PartialEq)]
 pub struct KicadPinDef {
     pub number: KicadPinText,
     pub name: KicadPinText,
@@ -4153,204 +4138,6 @@ impl KicadPinText {
             None => output.push_str(" (effects (font (size 1.27 1.27)))"),
         }
         output.push(')');
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadProperty {
-    pub name: String,
-    pub value: String,
-    pub id: Option<u32>,
-    pub at: Option<KicadAt>,
-    pub hide: Option<bool>,
-    pub show_name: Option<bool>,
-    pub do_not_autoplace: Option<bool>,
-    pub effects: Option<KicadTextEffects>,
-}
-
-impl KicadProperty {
-    fn write_property_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!(
-            "{}(property {} {}",
-            pad,
-            sexpr_string(&self.name),
-            sexpr_string(&self.value)
-        ));
-        if let Some(id) = self.id {
-            output.push_str(&format!(" (id {})", id));
-        }
-        if let Some(at) = self.at {
-            output.push_str(&format!(
-                " (at {} {} {})",
-                format_number(at.x),
-                format_number(at.y),
-                format_number(at.rotation)
-            ));
-        }
-        output.push('\n');
-        write_optional_bool_sexpr(output, indent + 2, "hide", self.hide);
-        write_optional_bool_sexpr(output, indent + 2, "show_name", self.show_name);
-        write_optional_bool_sexpr(
-            output,
-            indent + 2,
-            "do_not_autoplace",
-            self.do_not_autoplace,
-        );
-        match &self.effects {
-            Some(effects) => effects.write_effects_sexpr(output, indent + 2),
-            None => output.push_str(&format!("{}  (effects (font (size 1.27 1.27)))\n", pad)),
-        }
-        output.push_str(&format!("{})\n", pad));
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadLabel {
-    pub text: String,
-    pub kind: KicadLabelKind,
-    pub at: Option<KicadAt>,
-    pub uuid: Option<String>,
-    pub shape: Option<String>,
-    pub fields_autoplaced: Option<bool>,
-    pub effects: Option<KicadTextEffects>,
-    pub properties: Vec<KicadProperty>,
-}
-
-impl KicadLabel {
-    fn write_label_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!(
-            "{}({} {}",
-            pad,
-            self.kind.sexpr_name(),
-            sexpr_string(&self.text)
-        ));
-        if let Some(shape) = &self.shape {
-            output.push_str(&format!(" (shape {})", sexpr_atom_or_string(shape)));
-        }
-        if let Some(at) = self.at {
-            output.push_str(&format!(
-                " (at {} {} {})",
-                format_number(at.x),
-                format_number(at.y),
-                format_number(at.rotation)
-            ));
-        }
-        if let Some(fields_autoplaced) = self.fields_autoplaced {
-            output.push_str(&format!(
-                " (fields_autoplaced {})",
-                if fields_autoplaced { "yes" } else { "no" }
-            ));
-        }
-        write_inline_text_effects(output, self.effects.as_ref());
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
-        }
-        if self.properties.is_empty() {
-            output.push_str(")\n");
-        } else {
-            output.push('\n');
-            for property in &self.properties {
-                property.write_property_sexpr(output, indent + 2);
-            }
-            output.push_str(&format!("{})\n", pad));
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadDirectiveLabel {
-    pub text: String,
-    pub length: Option<f64>,
-    pub shape: Option<String>,
-    pub at: Option<KicadAt>,
-    pub fields_autoplaced: Option<bool>,
-    pub effects: Option<KicadTextEffects>,
-    pub uuid: Option<String>,
-    pub properties: Vec<KicadProperty>,
-}
-
-impl KicadDirectiveLabel {
-    pub fn property(&self, name: &str) -> Option<&str> {
-        self.properties
-            .iter()
-            .find(|property| property.name == name)
-            .map(|property| property.value.as_str())
-    }
-
-    pub fn display_text(&self) -> &str {
-        ["Netclass", "Net Class", "Component Class"]
-            .into_iter()
-            .find_map(|name| self.property(name).filter(|value| !value.is_empty()))
-            .unwrap_or(&self.text)
-    }
-
-    fn write_directive_label_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!(
-            "{}(netclass_flag {}",
-            pad,
-            sexpr_string(&self.text)
-        ));
-        if let Some(length) = self.length {
-            output.push_str(&format!(" (length {})", format_number(length)));
-        }
-        if let Some(shape) = &self.shape {
-            output.push_str(&format!(" (shape {})", sexpr_atom_or_string(shape)));
-        }
-        if let Some(at) = self.at {
-            output.push_str(&format!(
-                " (at {} {} {})",
-                format_number(at.x),
-                format_number(at.y),
-                format_number(at.rotation)
-            ));
-        }
-        if let Some(fields_autoplaced) = self.fields_autoplaced {
-            output.push_str(&format!(
-                " (fields_autoplaced {})",
-                if fields_autoplaced { "yes" } else { "no" }
-            ));
-        }
-        write_inline_text_effects(output, self.effects.as_ref());
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
-        }
-        if self.properties.is_empty() {
-            output.push_str(")\n");
-        } else {
-            output.push('\n');
-            for property in &self.properties {
-                property.write_property_sexpr(output, indent + 2);
-            }
-            output.push_str(&format!("{})\n", pad));
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KicadLabelKind {
-    Local,
-    Global,
-    Hierarchical,
-}
-
-impl KicadLabelKind {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Local => "local",
-            Self::Global => "global",
-            Self::Hierarchical => "hierarchical",
-        }
-    }
-
-    fn sexpr_name(self) -> &'static str {
-        match self {
-            Self::Local => "label",
-            Self::Global => "global_label",
-            Self::Hierarchical => "hierarchical_label",
-        }
     }
 }
 
@@ -4489,107 +4276,6 @@ impl KicadSheetPin {
         }
         write_inline_text_effects(output, self.effects.as_ref());
         output.push_str(")\n");
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadTextItem {
-    pub text: String,
-    pub at: Option<KicadAt>,
-    pub uuid: Option<String>,
-    pub effects: Option<KicadTextEffects>,
-}
-
-impl KicadTextItem {
-    fn write_text_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!("{}(text {}", pad, sexpr_string(&self.text)));
-        if let Some(at) = self.at {
-            output.push_str(&format!(
-                " (at {} {} {})",
-                format_number(at.x),
-                format_number(at.y),
-                format_number(at.rotation)
-            ));
-        }
-        write_inline_text_effects(output, self.effects.as_ref());
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!(" (uuid {})", sexpr_string(uuid)));
-        }
-        output.push_str(")\n");
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct KicadTextBox {
-    pub text: String,
-    pub at: Option<KicadAt>,
-    pub size: Option<KicadSize>,
-    pub margins: Option<KicadMargins>,
-    pub stroke: Option<KicadStroke>,
-    pub fill: Option<KicadFill>,
-    pub exclude_from_sim: Option<bool>,
-    pub uuid: Option<String>,
-    pub locked: Option<bool>,
-    pub effects: Option<KicadTextEffects>,
-}
-
-impl KicadTextBox {
-    pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
-        kicad_rotated_rect_bounds(self.at?, self.size?)
-    }
-
-    fn write_text_box_sexpr(&self, output: &mut String, indent: usize) {
-        let pad = " ".repeat(indent);
-        output.push_str(&format!("{}(text_box {}\n", pad, sexpr_string(&self.text)));
-        if let Some(exclude_from_sim) = self.exclude_from_sim {
-            output.push_str(&format!(
-                "{}  (exclude_from_sim {})\n",
-                pad,
-                if exclude_from_sim { "yes" } else { "no" }
-            ));
-        }
-        if let Some(at) = self.at {
-            output.push_str(&format!(
-                "{}  (at {} {} {})\n",
-                pad,
-                format_number(at.x),
-                format_number(at.y),
-                format_number(at.rotation)
-            ));
-        }
-        if let Some(size) = self.size {
-            output.push_str(&format!(
-                "{}  (size {} {})\n",
-                pad,
-                format_number(size.width),
-                format_number(size.height)
-            ));
-        }
-        if let Some(margins) = self.margins {
-            output.push_str(&format!(
-                "{}  (margins {} {} {} {})\n",
-                pad,
-                format_number(margins.left),
-                format_number(margins.top),
-                format_number(margins.right),
-                format_number(margins.bottom)
-            ));
-        }
-        output.push_str(&format!("{} ", pad));
-        write_inline_stroke(output, self.stroke.as_ref(), 0.0);
-        output.push('\n');
-        output.push_str(&format!("{} ", pad));
-        write_inline_fill(output, self.fill.as_ref());
-        output.push('\n');
-        write_text_effects_line(output, indent + 2, self.effects.as_ref());
-        if let Some(uuid) = &self.uuid {
-            output.push_str(&format!("{}  (uuid {})\n", pad, sexpr_string(uuid)));
-        }
-        if self.locked == Some(true) {
-            output.push_str(&format!("{}  (locked yes)\n", pad));
-        }
-        output.push_str(&format!("{})\n", pad));
     }
 }
 
@@ -4781,20 +4467,6 @@ fn parse_pin_text(node: &Sexp) -> Option<KicadPinText> {
     ))
 }
 
-fn parse_property(node: &Sexp) -> Option<KicadProperty> {
-    let items = list_items(node);
-    Some(KicadProperty {
-        name: list_value(node, 1)?,
-        value: list_value(node, 2)?,
-        id: child_value(items, "id").and_then(|value| value.parse().ok()),
-        at: child(items, "at").and_then(parse_at),
-        hide: child_value(items, "hide").and_then(parse_kicad_bool_value),
-        show_name: child_value(items, "show_name").and_then(parse_kicad_bool_value),
-        do_not_autoplace: child_value(items, "do_not_autoplace").and_then(parse_kicad_bool_value),
-        effects: child(items, "effects").map(parse_text_effects),
-    })
-}
-
 fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
     match head(node)? {
         "polyline" | "bezier" | "rectangle" | "circle" | "arc" => {
@@ -4830,57 +4502,6 @@ fn parse_rule_area(node: &Sexp) -> Option<KicadRuleArea> {
     })
 }
 
-fn parse_group(node: &Sexp) -> Option<KicadGroup> {
-    let items = list_items(node);
-    Some(KicadGroup {
-        name: list_value(node, 1)?,
-        uuid: child_value(items, "uuid"),
-        locked: child_value(items, "locked").and_then(parse_kicad_bool_value),
-        members: child(items, "members")
-            .map(|members| {
-                list_items(members)
-                    .iter()
-                    .skip(1)
-                    .filter_map(atom_text)
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default(),
-    })
-}
-
-fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
-    let items = list_items(node);
-    Some(KicadLabel {
-        text: list_value(node, 1)?,
-        kind,
-        at: child(items, "at").and_then(parse_at),
-        uuid: child_value(items, "uuid"),
-        shape: child_value(items, "shape"),
-        fields_autoplaced: parse_optional_bool_child(items, "fields_autoplaced"),
-        effects: child(items, "effects").map(parse_text_effects),
-        properties: direct_children(items, "property")
-            .filter_map(parse_property)
-            .collect(),
-    })
-}
-
-fn parse_directive_label(node: &Sexp) -> Option<KicadDirectiveLabel> {
-    let items = list_items(node);
-    Some(KicadDirectiveLabel {
-        text: list_value(node, 1).unwrap_or_default(),
-        length: child_value(items, "length").and_then(|value| value.parse().ok()),
-        shape: child_value(items, "shape"),
-        at: child(items, "at").and_then(parse_at),
-        fields_autoplaced: parse_optional_bool_child(items, "fields_autoplaced"),
-        effects: child(items, "effects").map(parse_text_effects),
-        uuid: child_value(items, "uuid"),
-        properties: direct_children(items, "property")
-            .filter_map(parse_property)
-            .collect(),
-    })
-}
-
 fn parse_sheet(node: &Sexp) -> Option<KicadSheet> {
     let items = list_items(node);
     Some(KicadSheet {
@@ -4913,32 +4534,6 @@ fn parse_sheet_pin(node: &Sexp) -> Option<KicadSheetPin> {
         pin_type: list_value(node, 2).unwrap_or_else(|| "unspecified".to_string()),
         at: child(items, "at").and_then(parse_at),
         uuid: child_value(items, "uuid"),
-        effects: child(items, "effects").map(parse_text_effects),
-    })
-}
-
-fn parse_text_item(node: &Sexp) -> Option<KicadTextItem> {
-    let items = list_items(node);
-    Some(KicadTextItem {
-        text: list_value(node, 1)?,
-        at: child(items, "at").and_then(parse_at),
-        uuid: child_value(items, "uuid"),
-        effects: child(items, "effects").map(parse_text_effects),
-    })
-}
-
-fn parse_text_box(node: &Sexp) -> Option<KicadTextBox> {
-    let items = list_items(node);
-    Some(KicadTextBox {
-        text: list_value(node, 1)?,
-        at: child(items, "at").and_then(parse_at),
-        size: child(items, "size").and_then(parse_size),
-        margins: child(items, "margins").and_then(parse_margins),
-        stroke: child(items, "stroke").map(parse_stroke),
-        fill: child(items, "fill").map(parse_fill),
-        exclude_from_sim: child_value(items, "exclude_from_sim").and_then(parse_kicad_bool_value),
-        uuid: child_value(items, "uuid"),
-        locked: parse_optional_bool_child(items, "locked"),
         effects: child(items, "effects").map(parse_text_effects),
     })
 }

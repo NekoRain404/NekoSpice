@@ -30,6 +30,13 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
   helpers for marker geometry metadata.
 - `table.rs` owns schematic table/table-cell IR, border/separator metadata,
   rotated cell bounds, and table parse/write helpers.
+- `property.rs` owns reusable KiCad property IR and property parse/write helpers
+  shared by symbols, sheets, labels, and library definitions.
+- `labels.rs` owns schematic local/global/hierarchical labels and directive
+  labels, label-kind formatting, and label parse/write helpers.
+- `text.rs` owns schematic text/text-box IR, rotated text-box bounds, and
+  text-item parse/write helpers.
+- `group.rs` owns schematic group IR and group parse/write helpers.
 - `project.rs` owns `.kicad_pro` project JSON parsing, project summary DTOs, and
   schematic stem candidate discovery used by KiCad project import paths.
 - `symbol_library.rs` owns `.kicad_sym` library containers, `sym-lib-table`
