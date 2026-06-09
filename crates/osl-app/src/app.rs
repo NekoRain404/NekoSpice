@@ -1,42 +1,20 @@
-use crate::canvas;
 use crate::document::KicadGuiDocument;
 use crate::library::KicadGuiLibrary;
 use crate::viewport::CanvasViewport;
 use crate::{DEFAULT_SCHEMATIC, DEFAULT_SYMBOL_LIBRARY_TABLE};
-use eframe::egui::{self, Color32, Sense, Vec2};
-use osl_kicad::{
-    KicadCanvasHit, KicadCanvasScene, KicadPoint, read_kicad_schematic_with_libraries,
-};
-use std::path::{Path, PathBuf};
+use osl_kicad::{KicadCanvasHit, KicadCanvasScene, KicadPoint};
+use std::path::PathBuf;
 
+mod canvas_panel;
 mod panels;
+mod placement;
+mod runtime;
+
+pub use canvas_panel::load_canvas_scene;
+use placement::SymbolPlacementState;
+pub use runtime::run_native;
 
 const EDIT_NUDGE_MM: f64 = 2.54;
-
-pub fn run_native() -> eframe::Result {
-    let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("NekoSpice")
-            .with_inner_size([1440.0, 920.0])
-            .with_min_inner_size([960.0, 640.0])
-            .with_app_id("nekospice"),
-        renderer: eframe::Renderer::Wgpu,
-        ..Default::default()
-    };
-
-    eframe::run_native(
-        "NekoSpice",
-        native_options,
-        Box::new(|cc| {
-            cc.egui_ctx.set_visuals(egui::Visuals::light());
-            let mut style = (*cc.egui_ctx.global_style()).clone();
-            style.spacing.item_spacing = Vec2::new(8.0, 6.0);
-            style.spacing.button_padding = Vec2::new(10.0, 4.0);
-            cc.egui_ctx.set_global_style(style);
-            Ok(Box::new(NekoSpiceApp::default()))
-        }),
-    )
-}
 
 #[derive(Debug)]
 pub struct NekoSpiceApp {
@@ -47,6 +25,7 @@ pub struct NekoSpiceApp {
     pub(super) scene: Option<KicadCanvasScene>,
     pub(super) selected_hit: Option<KicadCanvasHit>,
     pub(super) selected_symbol_id: Option<String>,
+    pub(crate) placement: Option<SymbolPlacementState>,
     pub(super) symbol_search: String,
     pub(super) load_error: Option<String>,
     pub(super) library_error: Option<String>,
@@ -95,6 +74,7 @@ impl Default for NekoSpiceApp {
             scene: None,
             selected_hit: None,
             selected_symbol_id: None,
+            placement: None,
             symbol_search: String::new(),
             load_error: None,
             library_error: None,
@@ -133,12 +113,14 @@ impl NekoSpiceApp {
                 self.library_table_path = path.display().to_string();
                 self.library = Some(library);
                 self.selected_symbol_id = None;
+                self.placement = None;
                 self.library_error = None;
                 self.status_message = Some("Loaded symbol library".to_string());
             }
             Err(error) => {
                 self.library = None;
                 self.selected_symbol_id = None;
+                self.placement = None;
                 self.library_error = Some(error.to_string());
             }
         }
@@ -214,98 +196,5 @@ impl NekoSpiceApp {
                 self.status_message = Some(error.to_string());
             }
         }
-    }
-
-    fn draw_canvas(&mut self, ui: &mut egui::Ui) {
-        let available = ui.available_size_before_wrap();
-        let desired_size = Vec2::new(available.x.max(240.0), available.y.max(240.0));
-        let (rect, response) = ui.allocate_exact_size(desired_size, Sense::click_and_drag());
-
-        if response.dragged_by(egui::PointerButton::Middle) {
-            self.viewport.pan += response.drag_delta();
-        }
-
-        let pointer_over_canvas = ui
-            .input(|input| input.pointer.hover_pos())
-            .is_some_and(|position| rect.contains(position));
-        if pointer_over_canvas {
-            let zoom_delta = ui.input(|input| input.zoom_delta());
-            if (zoom_delta - 1.0).abs() > f32::EPSILON
-                && let Some(pointer) = ui.input(|input| input.pointer.hover_pos())
-            {
-                self.viewport.zoom_around(rect, pointer, zoom_delta);
-            }
-
-            let scroll = ui.input(|input| input.smooth_scroll_delta);
-            if scroll != Vec2::ZERO {
-                self.viewport.pan += scroll;
-            }
-        }
-
-        if response.clicked()
-            && let (Some(scene), Some(pointer)) = (&self.scene, response.interact_pointer_pos())
-        {
-            let schematic_point = self.viewport.screen_to_world(rect, pointer);
-            self.selected_hit = scene.hit_test(schematic_point).hits.into_iter().next();
-        }
-
-        if !ui.ctx().text_edit_focused() {
-            if ui.input(|input| input.key_pressed(egui::Key::Delete)) {
-                self.delete_selected();
-            }
-            if ui.input(|input| input.key_pressed(egui::Key::ArrowLeft)) {
-                self.nudge_selected(EditNudgeDirection::Left);
-            }
-            if ui.input(|input| input.key_pressed(egui::Key::ArrowRight)) {
-                self.nudge_selected(EditNudgeDirection::Right);
-            }
-            if ui.input(|input| input.key_pressed(egui::Key::ArrowUp)) {
-                self.nudge_selected(EditNudgeDirection::Up);
-            }
-            if ui.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
-                self.nudge_selected(EditNudgeDirection::Down);
-            }
-        }
-
-        let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(248, 249, 250));
-        canvas::draw_grid(&painter, rect, self.viewport);
-
-        if let Some(scene) = &self.scene {
-            let visible_bounds = self.viewport.visible_world_bounds(rect);
-            canvas::draw_scene(&painter, rect, scene, self.viewport, visible_bounds);
-            if let Some(hit) = &self.selected_hit {
-                canvas::draw_bounds(
-                    &painter,
-                    rect,
-                    self.viewport,
-                    hit.bounds,
-                    Color32::from_rgb(20, 120, 220),
-                    2.0,
-                );
-            }
-        }
-    }
-}
-
-pub fn load_canvas_scene(path: &Path) -> Result<KicadCanvasScene, String> {
-    read_kicad_schematic_with_libraries(path)
-        .map(|schematic| schematic.canvas_scene())
-        .map_err(|error| error.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn loads_default_canvas_scene_for_gui() {
-        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(Path::parent)
-            .unwrap();
-        let scene = load_canvas_scene(&workspace_root.join(DEFAULT_SCHEMATIC)).unwrap();
-        assert!(!scene.symbols.is_empty());
-        assert!(scene.bounds.is_some());
     }
 }

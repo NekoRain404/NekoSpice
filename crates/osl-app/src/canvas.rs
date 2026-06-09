@@ -1,41 +1,10 @@
 use crate::viewport::{CanvasViewport, item_visible};
-use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke, StrokeKind, Vec2};
-use osl_kicad::{
-    KicadBoundingBox, KicadCanvasBusEntry, KicadCanvasGraphic, KicadCanvasScene, KicadCanvasSheet,
-    KicadPoint,
-};
+use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke};
+use osl_kicad::{KicadBoundingBox, KicadCanvasScene, KicadPoint};
 
-pub(crate) fn draw_grid(painter: &egui::Painter, rect: Rect, viewport: CanvasViewport) {
-    let major = (10.0 * viewport.zoom).max(16.0);
-    let origin = rect.center() + viewport.pan;
-    let stroke = Stroke::new(1.0, Color32::from_rgb(224, 229, 234));
+mod primitives;
 
-    let mut x = origin.x % major;
-    while x < rect.width() {
-        let screen_x = rect.left() + x;
-        painter.line_segment(
-            [
-                Pos2::new(screen_x, rect.top()),
-                Pos2::new(screen_x, rect.bottom()),
-            ],
-            stroke,
-        );
-        x += major;
-    }
-
-    let mut y = origin.y % major;
-    while y < rect.height() {
-        let screen_y = rect.top() + y;
-        painter.line_segment(
-            [
-                Pos2::new(rect.left(), screen_y),
-                Pos2::new(rect.right(), screen_y),
-            ],
-            stroke,
-        );
-        y += major;
-    }
-}
+pub(crate) use primitives::{draw_bounds, draw_grid};
 
 pub(crate) fn draw_scene(
     painter: &egui::Painter,
@@ -48,13 +17,13 @@ pub(crate) fn draw_scene(
         if !item_visible(sheet.bounds, visible_bounds) {
             continue;
         }
-        draw_sheet(painter, rect, viewport, sheet);
+        primitives::draw_sheet(painter, rect, viewport, sheet);
     }
     for rule_area in &scene.rule_areas {
         if !item_visible(rule_area.bounds, visible_bounds) {
             continue;
         }
-        draw_polyline(
+        primitives::draw_polyline(
             painter,
             rect,
             viewport,
@@ -68,7 +37,7 @@ pub(crate) fn draw_scene(
         if !item_visible(graphic.bounds(), visible_bounds) {
             continue;
         }
-        draw_graphic(
+        primitives::draw_graphic(
             painter,
             rect,
             viewport,
@@ -81,7 +50,7 @@ pub(crate) fn draw_scene(
             continue;
         }
         for graphic in &symbol.graphics {
-            draw_graphic(
+            primitives::draw_graphic(
                 painter,
                 rect,
                 viewport,
@@ -90,7 +59,7 @@ pub(crate) fn draw_scene(
             );
         }
         for pin in &symbol.pins {
-            draw_line(
+            primitives::draw_line(
                 painter,
                 rect,
                 viewport,
@@ -115,7 +84,7 @@ pub(crate) fn draw_scene(
         if !item_visible(wire.bounds, visible_bounds) {
             continue;
         }
-        draw_polyline(
+        primitives::draw_polyline(
             painter,
             rect,
             viewport,
@@ -129,7 +98,7 @@ pub(crate) fn draw_scene(
         if !item_visible(bus.bounds, visible_bounds) {
             continue;
         }
-        draw_polyline(
+        primitives::draw_polyline(
             painter,
             rect,
             viewport,
@@ -143,14 +112,14 @@ pub(crate) fn draw_scene(
         if !item_visible(entry.bounds, visible_bounds) {
             continue;
         }
-        draw_bus_entry(painter, rect, viewport, entry);
+        primitives::draw_bus_entry(painter, rect, viewport, entry);
     }
     for label in &scene.directive_labels {
         if !item_visible(label.bounds, visible_bounds) {
             continue;
         }
         if let Some(bounds) = label.bounds {
-            draw_bounds(
+            primitives::draw_bounds(
                 painter,
                 rect,
                 viewport,
@@ -207,7 +176,7 @@ pub(crate) fn draw_scene(
             continue;
         }
         if let Some(bounds) = text_box.bounds {
-            draw_bounds(
+            primitives::draw_bounds(
                 painter,
                 rect,
                 viewport,
@@ -245,168 +214,4 @@ pub(crate) fn draw_scene(
             Stroke::new(1.5, Color32::from_rgb(55, 55, 55)),
         );
     }
-}
-
-fn draw_sheet(
-    painter: &egui::Painter,
-    rect: Rect,
-    viewport: CanvasViewport,
-    sheet: &KicadCanvasSheet,
-) {
-    let Some(at) = sheet.at else {
-        return;
-    };
-    let Some(size) = sheet.size else {
-        return;
-    };
-    let start = viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y });
-    let end = viewport.world_to_screen(
-        rect,
-        KicadPoint {
-            x: at.x + size.width,
-            y: at.y + size.height,
-        },
-    );
-    let sheet_rect = Rect::from_two_pos(start, end);
-    painter.rect_filled(sheet_rect, 0.0, Color32::from_rgb(245, 248, 255));
-    painter.rect_stroke(
-        sheet_rect,
-        0.0,
-        Stroke::new(1.5, Color32::from_rgb(90, 120, 190)),
-        StrokeKind::Inside,
-    );
-    painter.text(
-        sheet_rect.left_top() + Vec2::new(4.0, 4.0),
-        Align2::LEFT_TOP,
-        &sheet.name,
-        FontId::monospace(12.0),
-        Color32::from_rgb(50, 80, 150),
-    );
-}
-
-fn draw_graphic(
-    painter: &egui::Painter,
-    rect: Rect,
-    viewport: CanvasViewport,
-    graphic: &KicadCanvasGraphic,
-    color: Color32,
-) {
-    match graphic {
-        KicadCanvasGraphic::Polyline { points, .. } | KicadCanvasGraphic::Bezier { points, .. } => {
-            draw_polyline(painter, rect, viewport, points, false, color, 1.5);
-        }
-        KicadCanvasGraphic::Rectangle { start, end, .. } => {
-            let start = viewport.world_to_screen(rect, *start);
-            let end = viewport.world_to_screen(rect, *end);
-            painter.rect_stroke(
-                Rect::from_two_pos(start, end),
-                0.0,
-                Stroke::new(1.5, color),
-                StrokeKind::Inside,
-            );
-        }
-        KicadCanvasGraphic::Circle { center, radius, .. } => {
-            painter.circle_stroke(
-                viewport.world_to_screen(rect, *center),
-                (*radius as f32 * viewport.zoom).abs(),
-                Stroke::new(1.5, color),
-            );
-        }
-        KicadCanvasGraphic::Arc {
-            start, mid, end, ..
-        } => {
-            let mut points = vec![*start];
-            if let Some(mid) = mid {
-                points.push(*mid);
-            }
-            points.push(*end);
-            draw_polyline(painter, rect, viewport, &points, false, color, 1.5);
-        }
-        KicadCanvasGraphic::Text { text, at, .. } => {
-            if let Some(at) = at {
-                painter.text(
-                    viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
-                    Align2::LEFT_TOP,
-                    text,
-                    FontId::monospace(12.0),
-                    color,
-                );
-            }
-        }
-    }
-}
-
-fn draw_polyline(
-    painter: &egui::Painter,
-    rect: Rect,
-    viewport: CanvasViewport,
-    points: &[KicadPoint],
-    closed: bool,
-    color: Color32,
-    width: f32,
-) {
-    for segment in points.windows(2) {
-        draw_line(
-            painter, rect, viewport, segment[0], segment[1], color, width,
-        );
-    }
-    if closed
-        && points.len() > 2
-        && let Some(last) = points.last()
-    {
-        draw_line(painter, rect, viewport, *last, points[0], color, width);
-    }
-}
-
-fn draw_line(
-    painter: &egui::Painter,
-    rect: Rect,
-    viewport: CanvasViewport,
-    start: KicadPoint,
-    end: KicadPoint,
-    color: Color32,
-    width: f32,
-) {
-    painter.line_segment(
-        [
-            viewport.world_to_screen(rect, start),
-            viewport.world_to_screen(rect, end),
-        ],
-        Stroke::new(width, color),
-    );
-}
-
-fn draw_bus_entry(
-    painter: &egui::Painter,
-    rect: Rect,
-    viewport: CanvasViewport,
-    entry: &KicadCanvasBusEntry,
-) {
-    draw_line(
-        painter,
-        rect,
-        viewport,
-        entry.at,
-        entry.end(),
-        Color32::from_rgb(70, 95, 220),
-        2.0,
-    );
-}
-
-pub(crate) fn draw_bounds(
-    painter: &egui::Painter,
-    rect: Rect,
-    viewport: CanvasViewport,
-    bounds: KicadBoundingBox,
-    color: Color32,
-    width: f32,
-) {
-    let min = viewport.world_to_screen(rect, bounds.min);
-    let max = viewport.world_to_screen(rect, bounds.max);
-    painter.rect_stroke(
-        Rect::from_two_pos(min, max),
-        0.0,
-        Stroke::new(width, color),
-        StrokeKind::Inside,
-    );
 }

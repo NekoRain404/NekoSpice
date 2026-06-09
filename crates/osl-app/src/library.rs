@@ -1,6 +1,6 @@
 use osl_kicad::{
-    KicadIndexedSymbol, KicadSymbolLibraryIndex, KicadSymbolLibraryIndexQuery,
-    read_kicad_symbol_library_index,
+    KicadIndexedSymbol, KicadSymbolDef, KicadSymbolLibraryIndex, KicadSymbolLibraryIndexQuery,
+    read_kicad_symbol_library, read_kicad_symbol_library_index,
 };
 use std::path::{Path, PathBuf};
 
@@ -8,6 +8,12 @@ use std::path::{Path, PathBuf};
 pub(crate) struct KicadGuiLibrary {
     path: PathBuf,
     index: KicadSymbolLibraryIndex,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct KicadGuiSymbolDefinition {
+    pub(crate) id: String,
+    pub(crate) definition: KicadSymbolDef,
 }
 
 impl KicadGuiLibrary {
@@ -42,6 +48,31 @@ impl KicadGuiLibrary {
     pub(crate) fn symbol(&self, lib_id: &str) -> Option<&KicadIndexedSymbol> {
         self.index.symbol(lib_id)
     }
+
+    pub(crate) fn symbol_definition(
+        &self,
+        lib_id: &str,
+    ) -> Result<KicadGuiSymbolDefinition, String> {
+        let symbol = self
+            .symbol(lib_id)
+            .ok_or_else(|| format!("KiCad symbol '{lib_id}' is not loaded in the library index"))?;
+        let library = read_kicad_symbol_library(Path::new(&symbol.source))
+            .map_err(|error| error.to_string())?;
+        let definition = library
+            .symbol(&symbol.id)
+            .or_else(|| library.symbol_by_name_or_local_name(&symbol.name))
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "KiCad symbol definition '{}' was not found in {}",
+                    symbol.id, symbol.source
+                )
+            })?;
+        Ok(KicadGuiSymbolDefinition {
+            id: symbol.id.clone(),
+            definition,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -51,12 +82,10 @@ mod tests {
 
     #[test]
     fn loads_symbol_library_index_for_gui_browser() {
-        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(Path::parent)
-            .unwrap();
-        let library =
-            KicadGuiLibrary::load(workspace_root.join(DEFAULT_SYMBOL_LIBRARY_TABLE)).unwrap();
+        let library = KicadGuiLibrary::load(
+            crate::test_support::workspace_root().join(DEFAULT_SYMBOL_LIBRARY_TABLE),
+        )
+        .unwrap();
 
         assert_eq!(library.index().libraries.len(), 1);
         assert_eq!(library.index().symbols.len(), 3);
@@ -65,5 +94,19 @@ mod tests {
         let filtered = library.filtered_index("NekoSpice:C");
         assert_eq!(filtered.symbols.len(), 1);
         assert_eq!(filtered.symbols[0].id, "NekoSpice:C");
+    }
+
+    #[test]
+    fn loads_symbol_definition_for_gui_placement() {
+        let library = KicadGuiLibrary::load(
+            crate::test_support::workspace_root().join(DEFAULT_SYMBOL_LIBRARY_TABLE),
+        )
+        .unwrap();
+
+        let symbol = library.symbol_definition("NekoSpice:R").unwrap();
+
+        assert_eq!(symbol.id, "NekoSpice:R");
+        assert_eq!(symbol.definition.name, "NekoSpice:R");
+        assert_eq!(symbol.definition.property("Reference"), Some("R"));
     }
 }

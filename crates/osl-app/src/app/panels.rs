@@ -164,6 +164,7 @@ impl NekoSpiceApp {
                         .clicked()
                     {
                         self.selected_symbol_id = Some(symbol.id.clone());
+                        self.placement = None;
                     }
                     ui.label(format!(
                         "{} pins, {} units, {} graphics",
@@ -203,9 +204,26 @@ impl NekoSpiceApp {
                     ));
                 }
                 ui.label(format!("Pins: {}", symbol.pin_count));
+                if ui.button("Place").clicked() {
+                    self.start_symbol_placement();
+                }
             }
         } else {
             ui.label("Select a symbol");
+        }
+
+        if let Some(placement) = &self.placement {
+            ui.separator();
+            ui.label(format!("Placing: {}", placement.symbol_id));
+            let mut keep_active = placement.keep_active;
+            if ui.checkbox(&mut keep_active, "Repeat").changed()
+                && let Some(placement) = &mut self.placement
+            {
+                placement.keep_active = keep_active;
+            }
+            if ui.button("Cancel").clicked() {
+                self.cancel_symbol_placement();
+            }
         }
     }
 }

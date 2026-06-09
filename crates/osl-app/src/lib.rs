@@ -8,6 +8,8 @@ mod app;
 mod canvas;
 mod document;
 mod library;
+#[cfg(test)]
+mod test_support;
 mod viewport;
 
 pub use app::{NekoSpiceApp, load_canvas_scene, run_native};
