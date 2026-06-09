@@ -35,6 +35,10 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
   rotated cell bounds, and table parse/write helpers.
 - `property.rs` owns reusable KiCad property IR and property parse/write helpers
   shared by symbols, sheets, labels, and library definitions.
+- `pins.rs` owns symbol pin definitions, placed-symbol pin references, pin
+  display metadata, pin alternates, pin parse/write helpers, pin JSON
+  projection helpers, and pin ordering helpers used by library browser,
+  canvas, and SPICE export paths.
 - `labels.rs` owns schematic local/global/hierarchical labels and directive
   labels, label-kind formatting, and label parse/write helpers.
 - `text.rs` owns schematic text/text-box IR, rotated text-box bounds, and
