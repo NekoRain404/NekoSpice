@@ -3,6 +3,7 @@ use crate::sexpr::{
     Sexp, child, child_value, direct_children, expect_root_list, list_items, sexpr_atom_or_string,
     sexpr_string,
 };
+use crate::symbols::parse_symbol_def;
 use crate::{KicadGraphic, KicadSymbolDef, parse_sexpr};
 use osl_core::{OslResult, json_escape};
 
@@ -301,7 +302,7 @@ pub fn parse_kicad_symbol_library(input: &str, source: &str) -> OslResult<KicadS
         generator: child_value(root_list, "generator"),
         generator_version: child_value(root_list, "generator_version"),
         symbols: direct_children(root_list, "symbol")
-            .filter_map(crate::parse_symbol_def)
+            .filter_map(parse_symbol_def)
             .collect(),
     })
 }
