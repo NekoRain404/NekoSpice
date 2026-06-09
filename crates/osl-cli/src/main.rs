@@ -4,8 +4,8 @@ use osl_core::{
 };
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
-    KicadSize, KicadSymbolDef, KicadSymbolLibraryIndexQuery, read_kicad_project,
-    read_kicad_schematic_with_libraries, read_kicad_symbol_library,
+    KicadSize, KicadSymbolDef, KicadSymbolLibraryIndexQuery, normalize_symbol_mirror,
+    read_kicad_project, read_kicad_schematic_with_libraries, read_kicad_symbol_library,
     read_kicad_symbol_library_index, read_kicad_symbol_library_table, write_kicad_schematic,
     write_kicad_symbol_library,
 };
@@ -87,6 +87,9 @@ Usage:
   osl kicad-check <file.kicad_sch> [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
+      configure-symbol:<reference>[:unit=<n>][:body-style=<n|none>][:mirror=<x|y|xy|none>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]
+      move-symbol:<reference>:<x,y>[:rotation]
+      set-property:<reference>:<name>=<value>[:x,y[,rotation]]
       place-symbol:<lib_id>:<reference>:<value>:<x,y[,rotation]>[:unit=<n>][:body-style=<n>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]
   osl kicad-render <file.kicad_sch-or-file.kicad_sym> [--symbol <name>] [--unit <n>] [--body-style <n>] --output <file.svg>
   osl waveform <waveform.raw> --signal <name> [--from <time>] [--to <time>] [--points <n>] [--output <file>]
@@ -1751,6 +1754,14 @@ fn parse_positive_u32(value: &str, flag: &str) -> OslResult<u32> {
     Ok(parsed)
 }
 
+fn parse_optional_positive_u32(value: &str, flag: &str) -> OslResult<Option<u32>> {
+    if value.eq_ignore_ascii_case("none") || value.eq_ignore_ascii_case("default") {
+        Ok(None)
+    } else {
+        parse_positive_u32(value, flag).map(Some)
+    }
+}
+
 fn parse_kicad_edit_ops(
     args: &[String],
     symbol_definitions: &[KicadSymbolDef],
@@ -1772,6 +1783,7 @@ fn parse_kicad_edit_op(
     })?;
     match name {
         "move-symbol" => parse_kicad_move_symbol_edit(payload),
+        "configure-symbol" => parse_kicad_configure_symbol_edit(payload),
         "set-property" => parse_kicad_set_property_edit(payload),
         "place-symbol" => parse_kicad_place_symbol_edit(payload, symbol_definitions),
         "add-wire" => parse_kicad_add_wire_edit(payload),
@@ -1790,6 +1802,35 @@ fn parse_kicad_edit_op(
             "unsupported kicad-edit op '{name}'"
         ))),
     }
+}
+
+fn parse_kicad_configure_symbol_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let options = split_kicad_configure_symbol_options(payload)?;
+    let reference = options.payload.trim();
+    if reference.is_empty() {
+        return Err(OslError::InvalidInput(
+            "configure-symbol expects configure-symbol:<reference>[:unit=<n>][:body-style=<n|none>][:mirror=<x|y|xy|none>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]"
+                .to_string(),
+        ));
+    }
+    if options.unit.is_none()
+        && options.body_style.is_none()
+        && options.mirror.is_none()
+        && options.pin_alternates.is_none()
+    {
+        return Err(OslError::InvalidInput(
+            "configure-symbol requires at least one unit, body-style, mirror, or alt option"
+                .to_string(),
+        ));
+    }
+
+    Ok(KicadSchematicEdit::ConfigureSymbol {
+        reference: reference.to_string(),
+        unit: options.unit,
+        body_style: options.body_style,
+        mirror: options.mirror,
+        pin_alternates: options.pin_alternates,
+    })
 }
 
 fn parse_kicad_move_symbol_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
@@ -2048,6 +2089,14 @@ struct KicadPlaceSymbolOptions<'a> {
     pin_alternates: BTreeMap<String, String>,
 }
 
+struct KicadConfigureSymbolOptions<'a> {
+    payload: &'a str,
+    unit: Option<u32>,
+    body_style: Option<Option<u32>>,
+    mirror: Option<Option<String>>,
+    pin_alternates: Option<BTreeMap<String, String>>,
+}
+
 fn split_kicad_place_symbol_options(mut payload: &str) -> OslResult<KicadPlaceSymbolOptions<'_>> {
     let mut unit = None;
     let mut body_style = None;
@@ -2087,6 +2136,61 @@ fn split_kicad_place_symbol_options(mut payload: &str) -> OslResult<KicadPlaceSy
         payload,
         unit,
         body_style,
+        pin_alternates,
+    })
+}
+
+fn split_kicad_configure_symbol_options(
+    mut payload: &str,
+) -> OslResult<KicadConfigureSymbolOptions<'_>> {
+    let mut unit = None;
+    let mut body_style = None;
+    let mut mirror = None;
+    let mut pin_alternates = None;
+
+    while let Some((rest, suffix)) = payload.rsplit_once(':') {
+        if let Some(value) = suffix.strip_prefix("unit=") {
+            if unit.is_some() {
+                return Err(OslError::InvalidInput(
+                    "configure-symbol unit option was provided more than once".to_string(),
+                ));
+            }
+            unit = Some(parse_positive_u32(value, "symbol unit")?);
+            payload = rest;
+        } else if let Some(value) = suffix.strip_prefix("body-style=") {
+            if body_style.is_some() {
+                return Err(OslError::InvalidInput(
+                    "configure-symbol body-style option was provided more than once".to_string(),
+                ));
+            }
+            body_style = Some(parse_optional_positive_u32(value, "symbol body style")?);
+            payload = rest;
+        } else if let Some(value) = suffix.strip_prefix("mirror=") {
+            if mirror.is_some() {
+                return Err(OslError::InvalidInput(
+                    "configure-symbol mirror option was provided more than once".to_string(),
+                ));
+            }
+            mirror = Some(normalize_symbol_mirror(value)?);
+            payload = rest;
+        } else if let Some(value) = suffix.strip_prefix("alt=") {
+            if pin_alternates.is_some() {
+                return Err(OslError::InvalidInput(
+                    "configure-symbol alt option was provided more than once".to_string(),
+                ));
+            }
+            pin_alternates = Some(parse_kicad_pin_alternates(value)?);
+            payload = rest;
+        } else {
+            break;
+        }
+    }
+
+    Ok(KicadConfigureSymbolOptions {
+        payload,
+        unit,
+        body_style,
+        mirror,
         pin_alternates,
     })
 }
@@ -2651,6 +2755,57 @@ mod tests {
                 assert_eq!(pin_alternates.get("6").map(String::as_str), Some("SDA"));
             }
             edit => panic!("expected place-symbol edit, got {edit:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_kicad_configure_symbol_edit() {
+        let args = [
+            "input.kicad_sch",
+            "--output",
+            "configured.kicad_sch",
+            "configure-symbol:U2:unit=2:body-style=1:mirror=xy:alt=4=ALT4",
+            "configure-symbol:U2:body-style=none:mirror=none",
+        ]
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>();
+
+        let edits = parse_kicad_edit_ops(&args, &[]).unwrap();
+        assert_eq!(edits.len(), 2);
+        match &edits[0] {
+            KicadSchematicEdit::ConfigureSymbol {
+                reference,
+                unit,
+                body_style,
+                mirror,
+                pin_alternates,
+            } => {
+                assert_eq!(reference, "U2");
+                assert_eq!(*unit, Some(2));
+                assert_eq!(*body_style, Some(Some(1)));
+                assert_eq!(
+                    mirror.as_ref().and_then(|mirror| mirror.as_deref()),
+                    Some("x y")
+                );
+                assert_eq!(
+                    pin_alternates
+                        .as_ref()
+                        .and_then(|alternates| alternates.get("4"))
+                        .map(String::as_str),
+                    Some("ALT4")
+                );
+            }
+            edit => panic!("expected configure-symbol edit, got {edit:?}"),
+        }
+        match &edits[1] {
+            KicadSchematicEdit::ConfigureSymbol {
+                body_style, mirror, ..
+            } => {
+                assert_eq!(*body_style, Some(None));
+                assert_eq!(*mirror, Some(None));
+            }
+            edit => panic!("expected configure-symbol edit, got {edit:?}"),
         }
     }
 

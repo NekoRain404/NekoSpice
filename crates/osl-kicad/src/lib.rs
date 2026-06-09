@@ -330,6 +330,13 @@ pub enum KicadSchematicEdit {
         to: KicadPoint,
         rotation: Option<f64>,
     },
+    ConfigureSymbol {
+        reference: String,
+        unit: Option<u32>,
+        body_style: Option<Option<u32>>,
+        mirror: Option<Option<String>>,
+        pin_alternates: Option<BTreeMap<String, String>>,
+    },
     SetSymbolProperty {
         reference: String,
         name: String,
@@ -514,6 +521,13 @@ impl KicadSchematic {
                 to,
                 rotation,
             } => self.move_symbol(&reference, to, rotation),
+            KicadSchematicEdit::ConfigureSymbol {
+                reference,
+                unit,
+                body_style,
+                mirror,
+                pin_alternates,
+            } => self.configure_symbol(&reference, unit, body_style, mirror, pin_alternates),
             KicadSchematicEdit::SetSymbolProperty {
                 reference,
                 name,
@@ -595,6 +609,75 @@ impl KicadSchematic {
 
         Ok(KicadEditSummary {
             operation: "move-symbol".to_string(),
+            target: reference.to_string(),
+        })
+    }
+
+    pub fn configure_symbol(
+        &mut self,
+        reference: &str,
+        unit: Option<u32>,
+        body_style: Option<Option<u32>>,
+        mirror: Option<Option<String>>,
+        pin_alternates: Option<BTreeMap<String, String>>,
+    ) -> OslResult<KicadEditSummary> {
+        if unit == Some(0) {
+            return Err(OslError::InvalidInput(
+                "KiCad symbol unit must be positive".to_string(),
+            ));
+        }
+        if body_style == Some(Some(0)) {
+            return Err(OslError::InvalidInput(
+                "KiCad symbol body style must be positive".to_string(),
+            ));
+        }
+        let normalized_mirror = match mirror {
+            Some(Some(mirror)) => Some(normalize_symbol_mirror(&mirror)?),
+            Some(None) => Some(None),
+            None => None,
+        };
+
+        let index = self.symbol_index_by_reference(reference)?;
+        let current_symbol = self.symbols[index].clone();
+        let definition = self
+            .resolved_symbol_definition(&current_symbol.lib_id)
+            .ok_or_else(|| {
+                OslError::InvalidInput(format!(
+                    "KiCad symbol reference '{reference}' uses missing library symbol '{}'",
+                    current_symbol.lib_id
+                ))
+            })?;
+        let selected_unit = unit.or(current_symbol.unit).unwrap_or(1);
+        let selected_body_style = body_style.unwrap_or(current_symbol.body_style);
+        let selected_alternates = pin_alternates.unwrap_or_else(|| {
+            current_symbol
+                .pins
+                .iter()
+                .filter_map(|pin| Some((pin.number.clone()?, pin.alternate.clone()?)))
+                .collect()
+        });
+        let pins = self.configured_symbol_pin_refs(
+            &current_symbol,
+            &definition,
+            selected_unit,
+            selected_body_style,
+            &selected_alternates,
+        )?;
+
+        let symbol = &mut self.symbols[index];
+        if unit.is_some() {
+            symbol.unit = Some(selected_unit);
+        }
+        if body_style.is_some() {
+            symbol.body_style = selected_body_style;
+        }
+        if let Some(mirror) = normalized_mirror {
+            symbol.mirror = mirror;
+        }
+        symbol.pins = pins;
+
+        Ok(KicadEditSummary {
+            operation: "configure-symbol".to_string(),
             target: reference.to_string(),
         })
     }
@@ -1092,6 +1175,78 @@ impl KicadSchematic {
         })
     }
 
+    fn configured_symbol_pin_refs(
+        &self,
+        current_symbol: &KicadSymbolInstance,
+        definition: &KicadResolvedSymbolDef,
+        unit: u32,
+        body_style: Option<u32>,
+        pin_alternates: &BTreeMap<String, String>,
+    ) -> OslResult<Vec<KicadSymbolPinRef>> {
+        let mut sorted_pins = definition
+            .scoped_pins(Some(unit), body_style)
+            .collect::<Vec<_>>();
+        sorted_pins.sort_by(compare_pin_numbers);
+        for pin_number in pin_alternates.keys() {
+            let Some(pin) = sorted_pins
+                .iter()
+                .find(|pin| pin.number() == pin_number.as_str())
+            else {
+                return Err(OslError::InvalidInput(format!(
+                    "KiCad symbol pin '{pin_number}' is not present in selected unit/body style"
+                )));
+            };
+            let alternate = pin_alternates
+                .get(pin_number)
+                .expect("pin alternate was just looked up");
+            if !pin
+                .alternates
+                .iter()
+                .any(|candidate| candidate.name == *alternate)
+            {
+                return Err(OslError::InvalidInput(format!(
+                    "KiCad symbol pin '{pin_number}' has no alternate '{alternate}'"
+                )));
+            }
+        }
+
+        let mut existing_by_number = current_symbol
+            .pins
+            .iter()
+            .filter_map(|pin| Some((pin.number.clone()?, pin.uuid.clone())))
+            .collect::<BTreeMap<_, _>>();
+        let instance_uuid = current_symbol
+            .uuid
+            .as_deref()
+            .unwrap_or(current_symbol.lib_id.as_str());
+        let mut generated_pin_uuids = BTreeSet::new();
+        let mut pins = Vec::new();
+        for (index, pin) in sorted_pins.into_iter().enumerate() {
+            let pin_number = pin.number().to_string();
+            let pin_uuid = existing_by_number.remove(&pin_number).flatten();
+            let pin_uuid = match pin_uuid {
+                Some(pin_uuid) if generated_pin_uuids.insert(pin_uuid.clone()) => pin_uuid,
+                _ => {
+                    let pin_uuid = self.edit_uuid_excluding(
+                        None,
+                        "symbol-pin",
+                        &format!("{instance_uuid}:{pin_number}:{index}"),
+                        &generated_pin_uuids,
+                    )?;
+                    generated_pin_uuids.insert(pin_uuid.clone());
+                    pin_uuid
+                }
+            };
+            pins.push(KicadSymbolPinRef {
+                number: Some(pin_number.clone()),
+                uuid: Some(pin_uuid),
+                alternate: pin_alternates.get(&pin_number).cloned(),
+            });
+        }
+
+        Ok(pins)
+    }
+
     pub fn connectivity_graph(&self) -> KicadNetGraph {
         KicadNetGraph::build(self)
     }
@@ -1529,7 +1684,9 @@ impl KicadSchematic {
             pins.into_iter()
                 .map(|pin| {
                     pin.at
-                        .map(|pin_at| transform_symbol_point(pin_at, symbol_at))
+                        .map(|pin_at| {
+                            transform_symbol_point(pin_at, symbol_at, symbol.mirror.as_deref())
+                        })
                         .and_then(|point| graph.net_at(point).map(str::to_string))
                         .unwrap_or_else(|| "unconnected".to_string())
                 })
@@ -1821,7 +1978,7 @@ impl KicadSchematic {
                     ));
                     continue;
                 };
-                let point = transform_symbol_point(pin_at, symbol_at);
+                let point = transform_symbol_point(pin_at, symbol_at, symbol.mirror.as_deref());
                 if self.has_no_connect_at(point) {
                     continue;
                 }
@@ -2199,7 +2356,9 @@ impl KicadSchematic {
                             .pins
                             .iter()
                             .filter_map(|pin| pin.at)
-                            .map(|pin_at| transform_symbol_point(pin_at, symbol_at))
+                            .map(|pin_at| {
+                                transform_symbol_point(pin_at, symbol_at, symbol.mirror.as_deref())
+                            })
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default()
@@ -3069,11 +3228,11 @@ impl KicadCanvasScene {
         };
         let graphics = definition
             .scoped_graphics(unit, body_style)
-            .map(|graphic| graphic.transformed(at))
+            .map(|graphic| graphic.transformed(at, None))
             .collect::<Vec<_>>();
         let pins = definition
             .scoped_pins(unit, body_style)
-            .filter_map(|pin| KicadCanvasPin::from_pin_def(pin, at))
+            .filter_map(|pin| KicadCanvasPin::from_pin_def(pin, at, None))
             .collect::<Vec<_>>();
         let symbol_bounds = canvas_symbol_bounds(&graphics, &pins);
         let mut bounds = KicadBoundingBoxBuilder::default();
@@ -3137,11 +3296,13 @@ impl KicadCanvasScene {
                 });
                 let graphics = definition
                     .scoped_graphics(symbol.unit, symbol.body_style)
-                    .map(|graphic| graphic.transformed(at))
+                    .map(|graphic| graphic.transformed(at, symbol.mirror.as_deref()))
                     .collect::<Vec<_>>();
                 let pins = definition
                     .scoped_pins(symbol.unit, symbol.body_style)
-                    .filter_map(|pin| KicadCanvasPin::from_pin_def(pin, at))
+                    .filter_map(|pin| {
+                        KicadCanvasPin::from_pin_def(pin, at, symbol.mirror.as_deref())
+                    })
                     .collect::<Vec<_>>();
                 let symbol_bounds = canvas_symbol_bounds(&graphics, &pins);
                 if let Some(symbol_bounds) = symbol_bounds {
@@ -3992,7 +4153,7 @@ impl KicadCanvasPin {
         })
     }
 
-    fn from_pin_def(pin: &KicadPinDef, symbol_at: KicadAt) -> Option<Self> {
+    fn from_pin_def(pin: &KicadPinDef, symbol_at: KicadAt, mirror: Option<&str>) -> Option<Self> {
         let pin_at = pin.at?;
         let local_start = pin_at.point();
         let local_end = pin_body_end(pin_at, pin.length.unwrap_or(0.0));
@@ -4001,8 +4162,8 @@ impl KicadCanvasPin {
             number: pin.number().to_string(),
             name: pin.name().to_string(),
             electrical_type: pin.electrical_type.clone(),
-            start: transform_local_point(local_start, symbol_at),
-            end: transform_local_point(local_end, symbol_at),
+            start: transform_local_point(local_start, symbol_at, mirror),
+            end: transform_local_point(local_end, symbol_at, mirror),
             alternates: pin.alternates.clone(),
             name_effects: pin.name_effects().cloned(),
             number_effects: pin.number_effects().cloned(),
@@ -5165,11 +5326,12 @@ impl KicadSymbolInstance {
             ));
         }
         if let Some(mirror) = &self.mirror {
-            output.push_str(&format!(
-                "{}  (mirror {})\n",
-                pad,
-                sexpr_atom_or_string(mirror)
-            ));
+            output.push_str(&format!("{}  (mirror", pad));
+            for axis in mirror.split_whitespace() {
+                output.push(' ');
+                output.push_str(&sexpr_atom_or_string(axis));
+            }
+            output.push_str(")\n");
         }
         if let Some(unit) = self.unit {
             output.push_str(&format!("{}  (unit {})\n", pad, unit));
@@ -5832,9 +5994,9 @@ impl KicadSymbolGraphic {
         self.graphic.include_in_bounds(bounds);
     }
 
-    fn transformed(&self, symbol_at: KicadAt) -> KicadCanvasGraphic {
+    fn transformed(&self, symbol_at: KicadAt, mirror: Option<&str>) -> KicadCanvasGraphic {
         self.graphic
-            .transformed(symbol_at)
+            .transformed(symbol_at, mirror)
             .with_style(self.stroke.clone(), self.fill.clone())
     }
 
@@ -5932,12 +6094,12 @@ impl KicadGraphic {
         }
     }
 
-    fn transformed(&self, symbol_at: KicadAt) -> KicadCanvasGraphic {
+    fn transformed(&self, symbol_at: KicadAt, mirror: Option<&str>) -> KicadCanvasGraphic {
         match self {
             Self::Polyline { points } => KicadCanvasGraphic::Polyline {
                 points: points
                     .iter()
-                    .map(|point| transform_local_point(*point, symbol_at))
+                    .map(|point| transform_local_point(*point, symbol_at, mirror))
                     .collect(),
                 stroke: None,
                 fill: None,
@@ -5945,33 +6107,33 @@ impl KicadGraphic {
             Self::Bezier { points } => KicadCanvasGraphic::Bezier {
                 points: points
                     .iter()
-                    .map(|point| transform_local_point(*point, symbol_at))
+                    .map(|point| transform_local_point(*point, symbol_at, mirror))
                     .collect(),
                 stroke: None,
                 fill: None,
             },
             Self::Rectangle { start, end } => KicadCanvasGraphic::Rectangle {
-                start: transform_local_point(*start, symbol_at),
-                end: transform_local_point(*end, symbol_at),
+                start: transform_local_point(*start, symbol_at, mirror),
+                end: transform_local_point(*end, symbol_at, mirror),
                 stroke: None,
                 fill: None,
             },
             Self::Circle { center, radius } => KicadCanvasGraphic::Circle {
-                center: transform_local_point(*center, symbol_at),
+                center: transform_local_point(*center, symbol_at, mirror),
                 radius: *radius,
                 stroke: None,
                 fill: None,
             },
             Self::Arc { start, mid, end } => KicadCanvasGraphic::Arc {
-                start: transform_local_point(*start, symbol_at),
-                mid: mid.map(|point| transform_local_point(point, symbol_at)),
-                end: transform_local_point(*end, symbol_at),
+                start: transform_local_point(*start, symbol_at, mirror),
+                mid: mid.map(|point| transform_local_point(point, symbol_at, mirror)),
+                end: transform_local_point(*end, symbol_at, mirror),
                 stroke: None,
                 fill: None,
             },
             Self::Text { text, at, effects } => KicadCanvasGraphic::Text {
                 text: text.clone(),
-                at: at.map(|at| transform_local_at(at, symbol_at)),
+                at: at.map(|at| transform_local_at(at, symbol_at, mirror)),
                 effects: effects.clone(),
                 stroke: None,
                 fill: None,
@@ -7758,7 +7920,7 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
     Some(KicadSymbolInstance {
         lib_id: child_value(items, "lib_id")?,
         at: child(items, "at").and_then(parse_at),
-        mirror: child_value(items, "mirror"),
+        mirror: child(items, "mirror").and_then(parse_symbol_mirror),
         unit: child_value(items, "unit").and_then(|value| value.parse().ok()),
         body_style: child_value(items, "body_style")
             .or_else(|| child_value(items, "convert"))
@@ -7779,6 +7941,19 @@ fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
             .map(parse_project_instances)
             .unwrap_or_default(),
     })
+}
+
+fn parse_symbol_mirror(node: &Sexp) -> Option<String> {
+    let mut axes = BTreeSet::new();
+    for axis in list_items(node).iter().skip(1).filter_map(atom_text) {
+        match axis {
+            "x" | "y" => {
+                axes.insert(axis);
+            }
+            _ => return None,
+        }
+    }
+    symbol_mirror_from_axes(axes)
 }
 
 fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
@@ -9471,25 +9646,104 @@ fn expand_kicad_uri(uri: &str, base_dir: &Path) -> String {
     expanded
 }
 
-fn transform_symbol_point(pin_at: KicadAt, symbol_at: KicadAt) -> KicadPoint {
-    transform_local_point(pin_at.point(), symbol_at)
+fn transform_symbol_point(pin_at: KicadAt, symbol_at: KicadAt, mirror: Option<&str>) -> KicadPoint {
+    transform_local_point(pin_at.point(), symbol_at, mirror)
 }
 
-fn transform_local_point(local: KicadPoint, symbol_at: KicadAt) -> KicadPoint {
-    let rotated = rotate_point(local, symbol_at.rotation);
+fn transform_local_point(
+    local: KicadPoint,
+    symbol_at: KicadAt,
+    mirror: Option<&str>,
+) -> KicadPoint {
+    let rotated = rotate_point(mirror_point(local, mirror), symbol_at.rotation);
     KicadPoint {
         x: symbol_at.x + rotated.x,
         y: symbol_at.y + rotated.y,
     }
 }
 
-fn transform_local_at(local_at: KicadAt, symbol_at: KicadAt) -> KicadAt {
-    let point = transform_local_point(local_at.point(), symbol_at);
+fn transform_local_at(local_at: KicadAt, symbol_at: KicadAt, mirror: Option<&str>) -> KicadAt {
+    let point = transform_local_point(local_at.point(), symbol_at, mirror);
     KicadAt {
         x: point.x,
         y: point.y,
-        rotation: normalized_rotation(local_at.rotation + symbol_at.rotation),
+        rotation: normalized_rotation(
+            mirror_rotation(local_at.rotation, mirror) + symbol_at.rotation,
+        ),
     }
+}
+
+fn mirror_point(point: KicadPoint, mirror: Option<&str>) -> KicadPoint {
+    let mut mirrored = point;
+    if mirror_has_axis(mirror, "x") {
+        mirrored.y = -mirrored.y;
+    }
+    if mirror_has_axis(mirror, "y") {
+        mirrored.x = -mirrored.x;
+    }
+    mirrored
+}
+
+fn mirror_rotation(rotation: f64, mirror: Option<&str>) -> f64 {
+    let mut mirrored = rotation;
+    if mirror_has_axis(mirror, "x") {
+        mirrored = -mirrored;
+    }
+    if mirror_has_axis(mirror, "y") {
+        mirrored = 180.0 - mirrored;
+    }
+    normalized_rotation(mirrored)
+}
+
+fn mirror_has_axis(mirror: Option<&str>, axis: &str) -> bool {
+    mirror
+        .into_iter()
+        .flat_map(str::split_whitespace)
+        .any(|candidate| candidate == axis)
+}
+
+pub fn normalize_symbol_mirror(value: &str) -> OslResult<Option<String>> {
+    let trimmed = value.trim();
+    if trimmed.eq_ignore_ascii_case("none") || trimmed.eq_ignore_ascii_case("normal") {
+        return Ok(None);
+    }
+    let axes = mirror_axes(trimmed)?;
+    symbol_mirror_from_axes(axes).map(Some).ok_or_else(|| {
+        OslError::InvalidInput("KiCad symbol mirror must be x, y, xy, or none".to_string())
+    })
+}
+
+fn mirror_axes(value: &str) -> OslResult<BTreeSet<&str>> {
+    let mut axes = BTreeSet::new();
+    if value.contains(char::is_whitespace) {
+        for axis in value.split_whitespace() {
+            insert_mirror_axis(&mut axes, axis)?;
+        }
+    } else {
+        for axis in value.split("") {
+            if !axis.is_empty() {
+                insert_mirror_axis(&mut axes, axis)?;
+            }
+        }
+    }
+    Ok(axes)
+}
+
+fn insert_mirror_axis<'a>(axes: &mut BTreeSet<&'a str>, axis: &'a str) -> OslResult<()> {
+    match axis {
+        "x" | "y" => {
+            axes.insert(axis);
+            Ok(())
+        }
+        _ => Err(OslError::InvalidInput(format!(
+            "unsupported KiCad symbol mirror axis '{axis}'"
+        ))),
+    }
+}
+
+fn symbol_mirror_from_axes(axes: BTreeSet<&str>) -> Option<String> {
+    let mirror = axes.into_iter().collect::<Vec<_>>().join(" ");
+    (!mirror.is_empty()).then_some(mirror)
 }
 
 fn pin_body_end(at: KicadAt, length: f64) -> KicadPoint {
@@ -9955,7 +10209,7 @@ fn symbol_instance_properties(
             id: property.id,
             at: property
                 .at
-                .map(|property_at| transform_local_at(property_at, symbol_at)),
+                .map(|property_at| transform_local_at(property_at, symbol_at, None)),
             hide: property.hide,
             show_name: property.show_name,
             do_not_autoplace: property.do_not_autoplace,
@@ -11656,7 +11910,7 @@ mod tests {
   (symbol
     (lib_id "Device:R")
     (at 10 20 0)
-    (mirror x)
+    (mirror x y)
     (unit 1)
     (exclude_from_sim no)
     (in_bom no)
@@ -11685,7 +11939,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(schematic.symbols[0].mirror.as_deref(), Some("x"));
+        assert_eq!(schematic.symbols[0].mirror.as_deref(), Some("x y"));
         assert_eq!(schematic.symbols[0].in_bom, Some(false));
         assert_eq!(schematic.symbols[0].on_board, Some(true));
         assert_eq!(schematic.symbols[0].dnp, Some(true));
@@ -11721,7 +11975,7 @@ mod tests {
         );
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
-        assert!(roundtrip.contains("(mirror x)"));
+        assert!(roundtrip.contains("(mirror x y)"));
         assert!(roundtrip.contains("(in_bom no)"));
         assert!(roundtrip.contains("(on_board yes)"));
         assert!(roundtrip.contains("(dnp yes)"));
@@ -11729,7 +11983,7 @@ mod tests {
         assert!(roundtrip.contains("(on_board no)"));
         let reparsed =
             parse_kicad_schematic(&roundtrip, "assembly_flags_roundtrip.kicad_sch").unwrap();
-        assert_eq!(reparsed.symbols[0].mirror.as_deref(), Some("x"));
+        assert_eq!(reparsed.symbols[0].mirror.as_deref(), Some("x y"));
         assert_eq!(reparsed.symbols[0].dnp, Some(true));
         assert_eq!(reparsed.sheets[0].on_board, Some(false));
         assert_eq!(reparsed.sheets[0].fields_autoplaced, Some(true));
@@ -13389,6 +13643,126 @@ mod tests {
                 body_style: Some(2),
                 pin_alternates: BTreeMap::from([("4".to_string(), "MISSING".to_string())]),
                 uuid: None,
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("has no alternate 'MISSING'"));
+    }
+
+    #[test]
+    fn configures_existing_symbol_scope_mirror_and_pin_alternates() {
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:Scoped"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "Scoped" (at 0 -2.54 0))
+      (symbol "Scoped_1_1"
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "A1") (number "1"))
+        (pin passive line (at 2.54 0 180) (length 2.54) (name "B1") (number "2"))
+      )
+      (symbol "Scoped_2_2"
+        (unit_name "Analog")
+        (pin passive line (at -2.54 0 0) (length 2.54) (name "A2") (number "3"))
+        (pin passive line
+          (at 2.54 0 180)
+          (length 2.54)
+          (name "B2")
+          (number "4")
+          (alternate "ALT4" output line)
+        )
+      )
+    )
+  )
+  (symbol
+    (lib_id "NekoSpice:Scoped")
+    (at 20 10 0)
+    (unit 1)
+    (uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    (property "Reference" "U2" (at 20 7.46 0))
+    (property "Value" "Scoped" (at 20 12.54 0))
+    (pin "1" (uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1"))
+    (pin "2" (uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"))
+  )
+)"#,
+            "configure_symbol.kicad_sch",
+        )
+        .unwrap();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::ConfigureSymbol {
+                reference: "U2".to_string(),
+                unit: Some(2),
+                body_style: Some(Some(2)),
+                mirror: Some(Some("x y".to_string())),
+                pin_alternates: Some(BTreeMap::from([("4".to_string(), "ALT4".to_string())])),
+            })
+            .unwrap();
+
+        let symbol = schematic.symbols[0].clone();
+        assert_eq!(symbol.unit, Some(2));
+        assert_eq!(symbol.body_style, Some(2));
+        assert_eq!(symbol.mirror.as_deref(), Some("x y"));
+        assert_eq!(
+            symbol
+                .pins
+                .iter()
+                .filter_map(|pin| pin.number.as_deref())
+                .collect::<Vec<_>>(),
+            vec!["3", "4"]
+        );
+        assert_eq!(symbol.pins[1].alternate.as_deref(), Some("ALT4"));
+
+        let scene = schematic.canvas_scene();
+        assert_eq!(scene.symbols[0].unit_name.as_deref(), Some("Analog"));
+        let pin3 = scene.symbols[0]
+            .pins
+            .iter()
+            .find(|pin| pin.number == "3")
+            .unwrap();
+        assert_close(pin3.start.x, 22.54);
+        assert_close(pin3.end.x, 20.0);
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(mirror x y)"));
+        assert!(exported.contains("(unit 2)"));
+        assert!(exported.contains("(body_style 2)"));
+        assert!(exported.contains("(alternate \"ALT4\")"));
+        let reparsed =
+            parse_kicad_schematic(&exported, "configure_symbol_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.symbols[0].mirror.as_deref(), Some("x y"));
+        assert_eq!(
+            reparsed.symbols[0].pins[1].alternate.as_deref(),
+            Some("ALT4")
+        );
+
+        schematic
+            .apply_edit(KicadSchematicEdit::ConfigureSymbol {
+                reference: "U2".to_string(),
+                unit: None,
+                body_style: Some(None),
+                mirror: Some(None),
+                pin_alternates: Some(BTreeMap::new()),
+            })
+            .unwrap();
+        assert_eq!(schematic.symbols[0].body_style, None);
+        assert_eq!(schematic.symbols[0].mirror, None);
+        assert!(
+            schematic.symbols[0]
+                .pins
+                .iter()
+                .all(|pin| pin.alternate.is_none())
+        );
+
+        let error = schematic
+            .apply_edit(KicadSchematicEdit::ConfigureSymbol {
+                reference: "U2".to_string(),
+                unit: Some(2),
+                body_style: Some(Some(2)),
+                mirror: None,
+                pin_alternates: Some(BTreeMap::from([("4".to_string(), "MISSING".to_string())])),
             })
             .unwrap_err();
         assert!(error.to_string().contains("has no alternate 'MISSING'"));
