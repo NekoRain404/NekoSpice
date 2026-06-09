@@ -1,6 +1,8 @@
 mod geometry;
+mod sexpr;
 
 pub use geometry::{KicadBoundingBox, sample_kicad_arc_points};
+pub use sexpr::{Sexp, parse_sexpr};
 
 use geometry::{
     KICAD_CANVAS_LINE_BOUNDS_PADDING, KICAD_CANVAS_POINT_BOUNDS_RADIUS,
@@ -13,31 +15,15 @@ use geometry::{
     kicad_sheet_pin_bounds, kicad_text_bounds, pin_body_end, rotate_point,
 };
 use osl_core::{OslError, OslResult, json_escape, read_text, write_text};
+use sexpr::{
+    atom_text, child, child_value, direct_children, expect_root_list, format_number, head,
+    list_items, list_value, sexpr_atom_or_string, sexpr_string, write_sexpr_inline,
+};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Sexp {
-    Atom(String),
-    List(Vec<Sexp>),
-}
-
-pub fn parse_sexpr(input: &str) -> OslResult<Sexp> {
-    let mut parser = SexpParser { input, offset: 0 };
-    let expr = parser.parse_expr()?;
-    parser.skip_ws_and_comments();
-    if parser.offset != input.len() {
-        return Err(OslError::InvalidInput(format!(
-            "unexpected trailing KiCad S-expression data at byte {}",
-            parser.offset
-        )));
-    }
-    Ok(expr)
-}
-
 pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
     let content = read_text(path)?;
     parse_kicad_schematic(&content, &path.display().to_string())
@@ -9329,139 +9315,6 @@ impl DisjointSet {
         }
     }
 }
-
-struct SexpParser<'a> {
-    input: &'a str,
-    offset: usize,
-}
-
-impl SexpParser<'_> {
-    fn parse_expr(&mut self) -> OslResult<Sexp> {
-        self.skip_ws_and_comments();
-        match self.peek_byte() {
-            Some(b'(') => self.parse_list(),
-            Some(b'"') => self.parse_string().map(Sexp::Atom),
-            Some(_) => self.parse_atom().map(Sexp::Atom),
-            None => Err(OslError::InvalidInput(
-                "expected KiCad S-expression, found end of input".to_string(),
-            )),
-        }
-    }
-
-    fn parse_list(&mut self) -> OslResult<Sexp> {
-        self.bump_byte();
-        let mut items = Vec::new();
-        loop {
-            self.skip_ws_and_comments();
-            match self.peek_byte() {
-                Some(b')') => {
-                    self.bump_byte();
-                    return Ok(Sexp::List(items));
-                }
-                Some(_) => items.push(self.parse_expr()?),
-                None => {
-                    return Err(OslError::InvalidInput(
-                        "unterminated KiCad S-expression list".to_string(),
-                    ));
-                }
-            }
-        }
-    }
-
-    fn parse_atom(&mut self) -> OslResult<String> {
-        let start = self.offset;
-        while let Some(byte) = self.peek_byte() {
-            if byte.is_ascii_whitespace() || matches!(byte, b'(' | b')' | b';') {
-                break;
-            }
-            self.bump_byte();
-        }
-        if self.offset == start {
-            Err(OslError::InvalidInput(format!(
-                "expected KiCad atom at byte {}",
-                self.offset
-            )))
-        } else {
-            Ok(self.input[start..self.offset].to_string())
-        }
-    }
-
-    fn parse_string(&mut self) -> OslResult<String> {
-        self.bump_byte();
-        let mut value = String::new();
-        while let Some(character) = self.bump_char() {
-            match character {
-                '"' => return Ok(value),
-                '\\' => match self.bump_char() {
-                    Some('"') => value.push('"'),
-                    Some('\\') => value.push('\\'),
-                    Some('n') => value.push('\n'),
-                    Some('r') => value.push('\r'),
-                    Some('t') => value.push('\t'),
-                    Some(other) => value.push(other),
-                    None => {
-                        return Err(OslError::InvalidInput(
-                            "unterminated KiCad string escape".to_string(),
-                        ));
-                    }
-                },
-                other => value.push(other),
-            }
-        }
-        Err(OslError::InvalidInput(
-            "unterminated KiCad quoted string".to_string(),
-        ))
-    }
-
-    fn skip_ws_and_comments(&mut self) {
-        loop {
-            while self
-                .peek_byte()
-                .is_some_and(|byte| byte.is_ascii_whitespace())
-            {
-                self.bump_byte();
-            }
-            if self.peek_byte() == Some(b';') {
-                while let Some(byte) = self.peek_byte() {
-                    self.bump_byte();
-                    if byte == b'\n' {
-                        break;
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-    }
-
-    fn peek_byte(&self) -> Option<u8> {
-        self.input.as_bytes().get(self.offset).copied()
-    }
-
-    fn bump_byte(&mut self) -> Option<u8> {
-        let byte = self.peek_byte()?;
-        self.offset += 1;
-        Some(byte)
-    }
-
-    fn bump_char(&mut self) -> Option<char> {
-        let character = self.input[self.offset..].chars().next()?;
-        self.offset += character.len_utf8();
-        Some(character)
-    }
-}
-
-fn expect_root_list<'a>(root: &'a Sexp, expected: &str) -> OslResult<&'a [Sexp]> {
-    let items = list_items(root);
-    if head(root) == Some(expected) {
-        Ok(items)
-    } else {
-        Err(OslError::InvalidInput(format!(
-            "expected KiCad root ({expected} ...)"
-        )))
-    }
-}
-
 fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
     let items = list_items(node);
     Some(KicadSymbolInstance {
@@ -10618,22 +10471,6 @@ fn parse_graphic(node: &Sexp) -> Option<KicadGraphic> {
         _ => None,
     }
 }
-
-fn direct_children<'a>(items: &'a [Sexp], name: &str) -> impl Iterator<Item = &'a Sexp> + 'a {
-    let name = name.to_string();
-    items
-        .iter()
-        .filter(move |item| matches!(item, Sexp::List(_)) && head(item) == Some(name.as_str()))
-}
-
-fn child<'a>(items: &'a [Sexp], name: &str) -> Option<&'a Sexp> {
-    direct_children(items, name).next()
-}
-
-fn child_value(items: &[Sexp], name: &str) -> Option<String> {
-    child(items, name).and_then(|node| list_value(node, 1))
-}
-
 fn parse_kicad_footprint_filters(value: &str) -> Vec<String> {
     value
         .split_whitespace()
@@ -10751,32 +10588,6 @@ fn parse_number_list(node: &Sexp) -> Vec<f64> {
         .filter_map(|value| value.parse().ok())
         .collect()
 }
-
-fn list_value(node: &Sexp, index: usize) -> Option<String> {
-    list_items(node)
-        .get(index)
-        .and_then(atom_text)
-        .map(str::to_string)
-}
-
-fn list_items(node: &Sexp) -> &[Sexp] {
-    match node {
-        Sexp::List(items) => items,
-        Sexp::Atom(_) => &[],
-    }
-}
-
-fn head(node: &Sexp) -> Option<&str> {
-    list_items(node).first().and_then(atom_text)
-}
-
-fn atom_text(node: &Sexp) -> Option<&str> {
-    match node {
-        Sexp::Atom(value) => Some(value),
-        Sexp::List(_) => None,
-    }
-}
-
 fn json_option(value: Option<&str>) -> String {
     match value {
         Some(value) => format!("\"{}\"", json_escape(value)),
@@ -10853,54 +10664,6 @@ fn push_unique_nonempty(values: &mut Vec<String>, value: Option<&str>) {
         values.push(value.to_string());
     }
 }
-
-fn sexpr_string(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len() + 2);
-    escaped.push('"');
-    for character in value.chars() {
-        match character {
-            '"' => escaped.push_str("\\\""),
-            '\\' => escaped.push_str("\\\\"),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            character => escaped.push(character),
-        }
-    }
-    escaped.push('"');
-    escaped
-}
-
-fn sexpr_atom_or_string(value: &str) -> String {
-    if is_plain_sexpr_atom(value) {
-        value.to_string()
-    } else {
-        sexpr_string(value)
-    }
-}
-
-fn write_sexpr_inline(output: &mut String, node: &Sexp) {
-    match node {
-        Sexp::Atom(value) => output.push_str(&sexpr_string(value)),
-        Sexp::List(items) => {
-            output.push('(');
-            for (index, item) in items.iter().enumerate() {
-                if index > 0 {
-                    output.push(' ');
-                }
-                match item {
-                    Sexp::Atom(value) if index == 0 => {
-                        output.push_str(&sexpr_atom_or_string(value));
-                    }
-                    Sexp::Atom(value) => output.push_str(&sexpr_string(value)),
-                    Sexp::List(_) => write_sexpr_inline(output, item),
-                }
-            }
-            output.push(')');
-        }
-    }
-}
-
 fn write_points_sexpr(output: &mut String, points: &[KicadPoint]) {
     let points = points
         .iter()
@@ -10928,26 +10691,6 @@ fn write_base64_data_sexpr(output: &mut String, data: &str, indent: usize) {
     }
     output.push_str(")\n");
 }
-
-fn is_plain_sexpr_atom(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| !byte.is_ascii_whitespace() && !matches!(byte, b'(' | b')' | b'"' | b';'))
-}
-
-fn format_number(value: f64) -> String {
-    let normalized = if value == -0.0 { 0.0 } else { value };
-    let mut formatted = format!("{normalized:.12}");
-    while formatted.contains('.') && formatted.ends_with('0') {
-        formatted.pop();
-    }
-    if formatted.ends_with('.') {
-        formatted.pop();
-    }
-    formatted
-}
-
 fn png_size_from_base64(data: &str) -> Option<(u32, u32)> {
     let header = decode_base64_prefix(data, 24)?;
     if header.len() < 24 || &header[0..8] != b"\x89PNG\r\n\x1a\n" || &header[12..16] != b"IHDR" {
