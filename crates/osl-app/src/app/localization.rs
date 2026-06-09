@@ -43,6 +43,7 @@ pub(super) enum UiText {
     AiAssistant,
     AnalysisSetup,
     Appearance,
+    Artifacts,
     AskCircuit,
     AssistantPrompt,
     Average,
@@ -65,6 +66,7 @@ pub(super) enum UiText {
     DesignChecklist,
     Edit,
     ExplainWaveform,
+    ExportReport,
     Fit,
     FitHint,
     FindOptimization,
@@ -94,6 +96,7 @@ pub(super) enum UiText {
     LoopStability,
     Matches,
     MeasurementNoise,
+    Measurements,
     Missing,
     ModelUpdateAvailable,
     ModelLibrary,
@@ -133,6 +136,7 @@ pub(super) enum UiText {
     RecommendedForYou,
     Renderer,
     ReportsCaption,
+    ReportPreview,
     ReportsResults,
     Run,
     RunHint,
@@ -200,6 +204,7 @@ pub(super) enum UiText {
     Validation,
     RunOutput,
     SetDirective,
+    TotalMeasurements,
 }
 
 impl UiText {
@@ -209,6 +214,7 @@ impl UiText {
             Self::AiAssistant => "AI Assistant",
             Self::AnalysisSetup => "Analysis Setup",
             Self::Appearance => "Appearance",
+            Self::Artifacts => "Artifacts",
             Self::AskCircuit => "Ask anything about your circuit",
             Self::AssistantPrompt => "How can I help with the active schematic?",
             Self::Average => "Average",
@@ -231,6 +237,7 @@ impl UiText {
             Self::DesignChecklist => "Op Amp Design Checklist",
             Self::Edit => "Edit",
             Self::ExplainWaveform => "Explain this waveform",
+            Self::ExportReport => "Export Report",
             Self::Fit => "Fit",
             Self::FitHint => "Fit the schematic to the canvas",
             Self::FindOptimization => "Find optimization opportunities",
@@ -260,6 +267,7 @@ impl UiText {
             Self::LoopStability => "Loop Stability",
             Self::Matches => "Matches",
             Self::MeasurementNoise => "Measurement Noise",
+            Self::Measurements => "Measurements",
             Self::Missing => "missing",
             Self::ModelUpdateAvailable => "Model Update Available",
             Self::ModelLibrary => "Model Library",
@@ -302,6 +310,7 @@ impl UiText {
             Self::ReportsCaption => {
                 "Latest run artifacts, generated HTML reports, and waveform previews."
             }
+            Self::ReportPreview => "Report Preview",
             Self::ReportsResults => "Reports & Results",
             Self::Run => "Run",
             Self::RunHint => "Run ngspice for the active schematic",
@@ -374,6 +383,7 @@ impl UiText {
             Self::Validation => "Validation",
             Self::RunOutput => "Run Output",
             Self::SetDirective => "Set Directive",
+            Self::TotalMeasurements => "Total Measurements",
         }
     }
 
@@ -383,6 +393,7 @@ impl UiText {
             Self::AiAssistant => "AI 助手",
             Self::AnalysisSetup => "分析设置",
             Self::Appearance => "外观",
+            Self::Artifacts => "产物",
             Self::AskCircuit => "询问当前电路问题",
             Self::AssistantPrompt => "我可以怎样协助当前原理图？",
             Self::Average => "平均值",
@@ -405,6 +416,7 @@ impl UiText {
             Self::DesignChecklist => "运放设计检查清单",
             Self::Edit => "编辑",
             Self::ExplainWaveform => "解释这个波形",
+            Self::ExportReport => "导出报告",
             Self::Fit => "适配",
             Self::FitHint => "将原理图适配到画布",
             Self::FindOptimization => "查找优化机会",
@@ -434,6 +446,7 @@ impl UiText {
             Self::LoopStability => "环路稳定性",
             Self::Matches => "匹配",
             Self::MeasurementNoise => "测量噪声",
+            Self::Measurements => "测量",
             Self::Missing => "缺失",
             Self::ModelUpdateAvailable => "模型更新可用",
             Self::ModelLibrary => "模型库",
@@ -472,6 +485,7 @@ impl UiText {
             Self::RecommendedForYou => "推荐操作",
             Self::Renderer => "渲染器",
             Self::ReportsCaption => "最近运行产物、HTML 报告和波形预览。",
+            Self::ReportPreview => "报告预览",
             Self::ReportsResults => "报告与结果",
             Self::Run => "运行",
             Self::RunHint => "使用 ngspice 运行当前原理图",
@@ -540,6 +554,7 @@ impl UiText {
             Self::Validation => "验证",
             Self::RunOutput => "运行输出",
             Self::SetDirective => "设置指令",
+            Self::TotalMeasurements => "测量总数",
         }
     }
 }

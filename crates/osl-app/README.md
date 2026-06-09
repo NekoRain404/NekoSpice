@@ -42,6 +42,12 @@ search stay in `osl-kicad`.
   solver system summary.
 - `app/project_panel.rs`: active schematic path, project health, selection, and
   edit command sidebar.
+- `app/reports_workspace.rs`: Reports center workspace layout, run summary
+  metrics, report run button, and high-level section routing.
+- `app/reports_workspace_sections.rs`: Reports measurements, artifacts, report
+  preview, and export shell sections backed by GUI run DTOs.
+- `app/reports_workspace_widgets.rs`: Reports-only metric cards, metadata rows,
+  and artifact rows.
 - `app/workspace_panel.rs`: left/right workspace context routers for home,
   schematic tools, library, simulation, reports, and settings contexts.
 - `app/diagnostics_panel.rs`: reusable document diagnostic summary and scroll
