@@ -4807,14 +4807,7 @@ impl KicadCanvasGraphic {
                 end,
                 stroke,
                 ..
-            } => {
-                let mut points = vec![*start];
-                if let Some(mid) = mid {
-                    points.push(*mid);
-                }
-                points.push(*end);
-                kicad_polyline_hits_point(&points, stroke.as_ref(), point)
-            }
+            } => kicad_arc_hits_point(*start, *mid, *end, stroke.as_ref(), point),
             Self::Text { at, .. } => kicad_at_bounds(*at, KICAD_CANVAS_POINT_BOUNDS_RADIUS)
                 .is_some_and(|bounds| bounds.contains(point)),
         }
@@ -4849,11 +4842,9 @@ impl KicadCanvasGraphic {
             Self::Arc {
                 start, mid, end, ..
             } => {
-                bounds.include(*start);
-                if let Some(mid) = mid {
-                    bounds.include(*mid);
+                for point in sample_kicad_arc_points(*start, *mid, *end) {
+                    bounds.include(point);
                 }
-                bounds.include(*end);
             }
             Self::Text { at, .. } => {
                 if let Some(at) = at {
@@ -4883,13 +4874,10 @@ impl KicadCanvasGraphic {
             }),
             Self::Arc {
                 start, mid, end, ..
-            } => {
-                let mut points = vec![*start, *end];
-                if let Some(mid) = mid {
-                    points.push(*mid);
-                }
-                kicad_points_bounds(&points, KICAD_CANVAS_LINE_BOUNDS_PADDING)
-            }
+            } => kicad_points_bounds(
+                &sample_kicad_arc_points(*start, *mid, *end),
+                KICAD_CANVAS_LINE_BOUNDS_PADDING,
+            ),
             Self::Text { at, .. } => kicad_at_bounds(*at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
         }
     }
@@ -7984,6 +7972,88 @@ fn kicad_cubic_bezier_samples(
         });
     }
     points
+}
+
+pub fn sample_kicad_arc_points(
+    start: KicadPoint,
+    mid: Option<KicadPoint>,
+    end: KicadPoint,
+) -> Vec<KicadPoint> {
+    let Some(mid) = mid else {
+        return vec![start, end];
+    };
+    let Some((center, radius)) = kicad_circle_from_three_points(start, mid, end) else {
+        return vec![start, mid, end];
+    };
+
+    let start_angle = kicad_angle(center, start);
+    let mid_angle = kicad_angle(center, mid);
+    let end_angle = kicad_angle(center, end);
+    let ccw_sweep = kicad_positive_angle_delta(start_angle, end_angle);
+    let mid_on_ccw = kicad_positive_angle_delta(start_angle, mid_angle) <= ccw_sweep;
+    let sweep = if mid_on_ccw {
+        ccw_sweep
+    } else {
+        ccw_sweep - std::f64::consts::TAU
+    };
+    let segments = ((sweep.abs() / (std::f64::consts::PI / 32.0)).ceil() as usize).clamp(8, 96);
+    let mut points = Vec::with_capacity(segments + 1);
+    for index in 0..=segments {
+        let angle = start_angle + sweep * index as f64 / segments as f64;
+        points.push(KicadPoint {
+            x: center.x + radius * angle.cos(),
+            y: center.y + radius * angle.sin(),
+        });
+    }
+    points
+}
+
+fn kicad_arc_hits_point(
+    start: KicadPoint,
+    mid: Option<KicadPoint>,
+    end: KicadPoint,
+    stroke: Option<&KicadStroke>,
+    point: KicadPoint,
+) -> bool {
+    let sampled = sample_kicad_arc_points(start, mid, end);
+    kicad_polyline_hits_point(&sampled, stroke, point)
+}
+
+fn kicad_circle_from_three_points(
+    first: KicadPoint,
+    second: KicadPoint,
+    third: KicadPoint,
+) -> Option<(KicadPoint, f64)> {
+    let determinant = 2.0
+        * (first.x * (second.y - third.y)
+            + second.x * (third.y - first.y)
+            + third.x * (first.y - second.y));
+    if determinant.abs() <= f64::EPSILON {
+        return None;
+    }
+
+    let first_len = first.x * first.x + first.y * first.y;
+    let second_len = second.x * second.x + second.y * second.y;
+    let third_len = third.x * third.x + third.y * third.y;
+    let center = KicadPoint {
+        x: (first_len * (second.y - third.y)
+            + second_len * (third.y - first.y)
+            + third_len * (first.y - second.y))
+            / determinant,
+        y: (first_len * (third.x - second.x)
+            + second_len * (first.x - third.x)
+            + third_len * (second.x - first.x))
+            / determinant,
+    };
+    Some((center, kicad_point_distance(center, first)))
+}
+
+fn kicad_angle(center: KicadPoint, point: KicadPoint) -> f64 {
+    (point.y - center.y).atan2(point.x - center.x)
+}
+
+fn kicad_positive_angle_delta(start: f64, end: f64) -> f64 {
+    (end - start).rem_euclid(std::f64::consts::TAU)
 }
 
 fn kicad_polygon_contains_point(points: &[KicadPoint], point: KicadPoint) -> bool {
@@ -15434,6 +15504,38 @@ mod tests {
                 .any(|hit| hit.kind == "graphic"
                     && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222"))
         );
+    }
+
+    #[test]
+    fn hit_tests_arc_graphics_by_sampled_curve() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-1111-1111-111111111111")
+  (paper "A4")
+  (arc
+    (start 10 20)
+    (mid 20 10)
+    (end 30 20)
+    (stroke (width 0) (type default))
+    (fill (type none))
+    (uuid "22222222-2222-2222-2222-222222222222")
+  )
+)"#,
+            "arc_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+
+        let curve_hit = scene.hit_test(KicadPoint { x: 20.0, y: 10.0 });
+        assert!(curve_hit.hits.iter().any(|hit| hit.kind == "graphic"
+            && hit.label == "arc"
+            && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222")));
+
+        let chord_miss = scene.hit_test(KicadPoint { x: 15.0, y: 15.0 });
+        assert!(!chord_miss.hits.iter().any(|hit| hit.kind == "graphic"
+            && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222")));
     }
 
     #[test]

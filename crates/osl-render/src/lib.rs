@@ -3,7 +3,7 @@ use osl_kicad::{
     KicadAt, KicadBoundingBox, KicadCanvasDirectiveLabel, KicadCanvasGraphic, KicadCanvasImage,
     KicadCanvasRuleArea, KicadCanvasScene, KicadCanvasSheet, KicadCanvasSymbol, KicadCanvasTable,
     KicadCanvasTextBox, KicadColor, KicadFill, KicadLabelKind, KicadPoint, KicadStroke,
-    KicadTextEffects,
+    KicadTextEffects, sample_kicad_arc_points,
 };
 
 const DEFAULT_PADDING_MM: f64 = 6.0;
@@ -779,18 +779,18 @@ fn render_graphic(
             stroke: graphic_stroke,
             ..
         } => {
-            let mut points = vec![*start];
-            if let Some(mid) = mid {
-                points.push(*mid);
-            }
-            points.push(*end);
-            render_stroked_polyline(
+            let points = sample_kicad_arc_points(*start, *mid, *end);
+            let color = svg_stroke_color(graphic_stroke.as_ref(), stroke);
+            let stroke_width = svg_stroke_width(graphic_stroke.as_ref(), viewport, 1.8);
+            let dash_array = svg_stroke_dasharray(graphic_stroke.as_ref());
+            render_polyline_with_dash_and_attrs(
                 output,
                 viewport,
                 &points,
-                graphic_stroke.as_ref(),
-                stroke,
-                1.8,
+                &color,
+                stroke_width,
+                &dash_array,
+                " data-arc=\"true\"",
             );
         }
         KicadCanvasGraphic::Text {
@@ -892,6 +892,26 @@ fn render_polyline_with_dash(
     stroke_width: f64,
     dash_array: &str,
 ) {
+    render_polyline_with_dash_and_attrs(
+        output,
+        viewport,
+        points,
+        color,
+        stroke_width,
+        dash_array,
+        "",
+    );
+}
+
+fn render_polyline_with_dash_and_attrs(
+    output: &mut String,
+    viewport: &SvgViewport,
+    points: &[KicadPoint],
+    color: &str,
+    stroke_width: f64,
+    dash_array: &str,
+    attrs: &str,
+) {
     if points.len() < 2 {
         return;
     }
@@ -904,7 +924,8 @@ fn render_polyline_with_dash(
         .collect::<Vec<_>>()
         .join(" ");
     output.push_str(&format!(
-        "      <polyline points=\"{}\" stroke=\"{}\" stroke-width=\"{}\"{}/>\n",
+        "      <polyline{} points=\"{}\" stroke=\"{}\" stroke-width=\"{}\"{}/>\n",
+        attrs,
         points,
         color,
         fmt(stroke_width),
@@ -1189,6 +1210,7 @@ mod tests {
   (bezier (pts (xy 12 20) (xy 16 12) (xy 24 12) (xy 28 20)) (uuid "44444444-4444-4444-8444-444444444444"))
   (rectangle (start 25 10) (end 35 20) (uuid "22222222-2222-4222-8222-222222222222"))
   (circle (center 45 15) (radius 5) (uuid "33333333-3333-4333-8333-333333333333"))
+  (arc (start 50 20) (mid 60 10) (end 70 20) (uuid "55555555-5555-4555-8555-555555555555"))
 )"#,
             "graphics.kicad_sch",
         )
@@ -1201,6 +1223,13 @@ mod tests {
         assert!(svg.contains(" C "));
         assert!(svg.contains("<rect"));
         assert!(svg.contains("<circle"));
+        assert!(svg.contains("data-arc=\"true\""));
+        let arc_points = svg
+            .split("data-arc=\"true\" points=\"")
+            .nth(1)
+            .and_then(|tail| tail.split('"').next())
+            .unwrap();
+        assert!(arc_points.split_whitespace().count() > 3);
         assert!(svg.contains("stroke=\"#64748b\""));
     }
 
