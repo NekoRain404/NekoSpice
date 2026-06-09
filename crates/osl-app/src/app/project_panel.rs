@@ -1,3 +1,4 @@
+use super::localization::UiText;
 use super::widgets::metric_row;
 use super::{EditNudgeDirection, NekoSpiceApp, theme::StudioTheme};
 use eframe::egui;
@@ -5,9 +6,15 @@ use std::path::PathBuf;
 
 impl NekoSpiceApp {
     pub(super) fn draw_project_sidebar(&mut self, ui: &mut egui::Ui) {
-        ui.label(StudioTheme::section_title("Active Project"));
+        let mode = self.theme_mode();
+        let palette = self.theme_palette();
+
+        ui.label(StudioTheme::section_title_for(
+            mode,
+            self.text(UiText::ActiveProject),
+        ));
         let path_response = ui.text_edit_singleline(&mut self.schematic_path);
-        let load_requested = ui.button("Open Schematic").clicked()
+        let load_requested = ui.button(self.text(UiText::OpenSchematic)).clicked()
             || (path_response.lost_focus()
                 && ui.input(|input| input.key_pressed(egui::Key::Enter)));
         if load_requested {
@@ -16,44 +23,91 @@ impl NekoSpiceApp {
         ui.add_space(8.0);
 
         if let Some(error) = &self.load_error {
-            ui.colored_label(StudioTheme::DANGER, error);
+            ui.colored_label(palette.danger, error);
             return;
         }
 
         let Some(scene) = &self.scene else {
-            ui.label("No schematic loaded");
+            ui.label(self.text(UiText::NoSchematicLoaded));
             return;
         };
 
-        StudioTheme::panel_frame().show(ui, |ui| {
-            ui.label(StudioTheme::section_title("Schematic Health"));
-            metric_row(ui, "Symbols", &scene.symbols.len().to_string());
-            metric_row(ui, "Wires", &scene.wires.len().to_string());
-            metric_row(ui, "Buses", &scene.buses.len().to_string());
-            metric_row(ui, "Labels", &scene.labels.len().to_string());
-            metric_row(ui, "Sheets", &scene.sheets.len().to_string());
-            metric_row(ui, "Graphics", &scene.graphics.len().to_string());
-            metric_row(ui, "Zoom", &format!("{:.1} px/mm", self.viewport.zoom));
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::SchematicHealth),
+            ));
+            metric_row(
+                ui,
+                mode,
+                self.text(UiText::Symbols),
+                &scene.symbols.len().to_string(),
+            );
+            metric_row(
+                ui,
+                mode,
+                self.text(UiText::Wires),
+                &scene.wires.len().to_string(),
+            );
+            metric_row(
+                ui,
+                mode,
+                self.text(UiText::Buses),
+                &scene.buses.len().to_string(),
+            );
+            metric_row(
+                ui,
+                mode,
+                self.text(UiText::Labels),
+                &scene.labels.len().to_string(),
+            );
+            metric_row(
+                ui,
+                mode,
+                self.text(UiText::Sheets),
+                &scene.sheets.len().to_string(),
+            );
+            metric_row(
+                ui,
+                mode,
+                self.text(UiText::Graphics),
+                &scene.graphics.len().to_string(),
+            );
+            metric_row(
+                ui,
+                mode,
+                self.text(UiText::Zoom),
+                &format!("{:.1} px/mm", self.viewport.zoom),
+            );
         });
 
         ui.add_space(8.0);
-        StudioTheme::panel_frame().show(ui, |ui| {
-            ui.label(StudioTheme::section_title("Selection"));
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::Selection),
+            ));
             if let Some(hit) = &self.selected_hit {
-                metric_row(ui, "Kind", &hit.kind);
+                metric_row(ui, mode, self.text(UiText::Kind), &hit.kind);
                 ui.label(&hit.label);
                 if let Some(uuid) = &hit.uuid {
                     ui.monospace(uuid);
                 }
             } else {
-                ui.label(StudioTheme::muted("No selected item"));
+                ui.label(StudioTheme::muted_for(
+                    mode,
+                    self.text(UiText::NoSelectedItem),
+                ));
             }
             self.draw_selection_property_editor(ui);
         });
 
         ui.add_space(8.0);
-        StudioTheme::panel_frame().show(ui, |ui| {
-            ui.label(StudioTheme::section_title("Edit Commands"));
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::EditCommands),
+            ));
             let can_edit = self.document.is_some();
             let can_delete = self
                 .selected_hit
@@ -61,7 +115,10 @@ impl NekoSpiceApp {
                 .and_then(|hit| hit.uuid.as_ref())
                 .is_some();
             if ui
-                .add_enabled(can_edit && can_delete, egui::Button::new("Delete Selected"))
+                .add_enabled(
+                    can_edit && can_delete,
+                    egui::Button::new(self.text(UiText::DeleteSelected)),
+                )
                 .clicked()
             {
                 self.delete_selected();

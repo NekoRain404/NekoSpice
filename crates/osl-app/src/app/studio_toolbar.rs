@@ -1,38 +1,73 @@
+use super::localization::UiText;
 use super::navigation::StudioWorkspace;
 use super::{NekoSpiceApp, theme::StudioTheme};
 use eframe::egui;
 
 impl NekoSpiceApp {
     pub(super) fn draw_studio_top_bar(&mut self, ui: &mut egui::Ui) {
-        self.draw_top_status_strip(ui);
-        ui.separator();
-        if ui
-            .add_enabled(self.document.is_some(), egui::Button::new("Save"))
-            .on_hover_text("Save the active KiCad schematic")
-            .clicked()
-        {
-            self.save_document();
-        }
-        if ui
-            .button("Fit")
-            .on_hover_text("Fit the schematic to the canvas")
-            .clicked()
-        {
-            self.viewport
-                .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
-        }
-        if ui
-            .add_enabled(self.document.is_some(), egui::Button::new("Run"))
-            .on_hover_text("Run ngspice for the active schematic")
-            .clicked()
-        {
-            self.run_simulation_from_panel();
-            self.active_workspace = StudioWorkspace::Simulation;
-        }
+        let mode = self.theme_mode();
+        ui.horizontal(|ui| {
+            self.draw_top_status_strip(ui);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(StudioTheme::muted_for(mode, "wgpu"));
+                ui.separator();
+                if ui
+                    .button(self.text(UiText::Settings))
+                    .on_hover_text(self.text(UiText::Settings))
+                    .clicked()
+                {
+                    self.active_workspace = StudioWorkspace::Settings;
+                }
+                if ui
+                    .button(self.locale().short_code())
+                    .on_hover_text(self.text(UiText::Language))
+                    .clicked()
+                {
+                    self.toggle_locale();
+                }
+                if ui
+                    .button(self.theme_mode_label(self.theme_mode()))
+                    .on_hover_text(self.text(UiText::Theme))
+                    .clicked()
+                {
+                    self.toggle_theme_mode();
+                }
+                ui.separator();
+                if ui
+                    .add_enabled(
+                        self.document.is_some(),
+                        egui::Button::new(self.text(UiText::Run)),
+                    )
+                    .on_hover_text(self.text(UiText::RunHint))
+                    .clicked()
+                {
+                    self.run_simulation_from_panel();
+                    self.active_workspace = StudioWorkspace::Simulation;
+                }
+                if ui
+                    .button(self.text(UiText::Fit))
+                    .on_hover_text(self.text(UiText::FitHint))
+                    .clicked()
+                {
+                    self.viewport
+                        .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
+                }
+                if ui
+                    .add_enabled(
+                        self.document.is_some(),
+                        egui::Button::new(self.text(UiText::Save)),
+                    )
+                    .on_hover_text(self.text(UiText::SaveHint))
+                    .clicked()
+                {
+                    self.save_document();
+                }
+            });
+        });
     }
 
     pub(super) fn draw_studio_canvas_frame(&mut self, ui: &mut egui::Ui) {
-        StudioTheme::panel_frame().show(ui, |ui| {
+        StudioTheme::panel_frame_for(self.theme_mode()).show(ui, |ui| {
             self.draw_canvas(ui);
         });
     }

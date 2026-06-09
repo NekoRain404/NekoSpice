@@ -1,5 +1,4 @@
 use super::{EditNudgeDirection, NekoSpiceApp};
-use crate::app::theme::StudioTheme;
 use crate::canvas;
 use eframe::egui::{self, Color32, Sense, Vec2};
 use osl_kicad::{KicadAt, KicadCanvasScene, read_kicad_schematic_with_libraries};
@@ -48,7 +47,7 @@ impl NekoSpiceApp {
         self.handle_canvas_shortcuts(ui);
 
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, StudioTheme::CANVAS);
+        painter.rect_filled(rect, 0.0, self.theme_palette().canvas);
         canvas::draw_grid(&painter, rect, self.viewport);
 
         if let Some(scene) = &self.scene {

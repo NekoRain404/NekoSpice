@@ -10,7 +10,7 @@ search stay in `osl-kicad`.
 - `app.rs`: application state, document/library loading, and edit commands.
 - `app/canvas_panel.rs`: canvas widget input, shortcuts, painter routing, and scene loading helper.
 - `app/navigation.rs`: Studio workspace tabs and labels for schematic, library,
-  simulation, and report contexts.
+  simulation, report, and settings contexts.
 - `app/panels.rs`: Studio shell layout compositor only. It mounts the chrome
   regions and delegates all panel content to focused modules.
 - `app/navigation_panel.rs`: left Studio workspace navigation and renderer /
@@ -23,6 +23,10 @@ search stay in `osl-kicad`.
   list for schematic-focused surfaces.
 - `app/studio_toolbar.rs`: top action buttons and the framed canvas mounting
   helper used by the shell.
+- `app/localization.rs`: Studio UI text keys and locale tables. New user-facing
+  shell text should be added here instead of scattering string literals.
+- `app/preferences.rs`: GUI preferences such as theme mode and locale, plus the
+  app-facing helpers that expose text and palette data to panels.
 - `app/placement.rs`: symbol placement mode state, repeat placement, and post-edit selection refresh.
 - `app/runtime.rs`: native window options, wgpu renderer selection, and initial egui style.
 - `app/selection_properties.rs`: selected symbol property editor state sync and `KicadSchematicEdit::{SetSymbolProperty, ConfigureSymbol}` routing.
@@ -47,8 +51,9 @@ search stay in `osl-kicad`.
 - `app/schematic_tools/preview.rs`: transient canvas previews for active schematic drawing tools.
 - `app/symbol_browser.rs`: symbol library browser, metadata details, and preview canvas.
 - `app/symbol_placement_controls.rs`: unit, body-style, and pin-alternate controls for KiCad-compatible symbol placement.
-- `app/theme.rs`: Studio visual tokens and frame helpers. Shared UI color and
-  spacing decisions live here instead of being duplicated across panels.
+- `app/theme.rs`: Studio theme modes, palette tokens, style application, and
+  frame/text helpers. Shared UI color and spacing decisions live here instead of
+  being duplicated across panels.
 - `app/widgets.rs`: small shared egui widgets that are visual only and carry no
   document or library behavior.
 - `document.rs`: editable KiCad schematic adapter around `KicadSchematicEdit`,
@@ -72,8 +77,14 @@ search stay in `osl-kicad`.
 
 - UI code may call document/library adapters, but should not parse KiCad files directly.
 - `app/panels.rs` should stay a layout compositor; new business behavior belongs
-  in focused panels/adapters, shared visual tokens belong in `app/theme.rs`, and
-  small reusable display widgets belong in `app/widgets.rs`.
+  in focused panels/adapters, shared visual tokens belong in `app/theme.rs`,
+  user-facing shell text belongs in `app/localization.rs`, and small reusable
+  display widgets belong in `app/widgets.rs`.
+- Theme changes should flow through `StudioThemeMode` / `StudioPalette`; panels
+  should not duplicate color constants for Studio chrome.
+- New shell text should use `NekoSpiceApp::text(UiText::...)`; deeper feature
+  panels can migrate incrementally, but new Studio chrome should not add
+  hard-coded English labels.
 - KiCad geometry, hit testing, and edit semantics belong in `osl-kicad`; GUI code consumes those APIs.
 - Canvas input handling belongs in `app/canvas_panel.rs`; drawing primitives belong in `canvas/primitives.rs`.
 - Selection property editing reads selected canvas metadata from `KicadCanvasScene` and writes only through `document.rs`.
@@ -90,3 +101,12 @@ search stay in `osl-kicad`.
   directory scanning and fallback report generation should stay in `osl-report`.
 - Waveform panels should consume precomputed GUI DTOs from `waveform_summary.rs`
   so drawing code does not parse raw files or scan full waveform arrays.
+
+## GUI Verification
+
+- GUI changes should run `cargo fmt --check`, `cargo check --workspace`,
+  `cargo clippy --workspace --all-targets -- -D warnings`, and
+  `cargo test --workspace`.
+- For visual changes, capture a smoke screenshot when the local desktop/session
+  allows it. Store temporary screenshots under `target/ui-smoke/` so they stay
+  outside source control.

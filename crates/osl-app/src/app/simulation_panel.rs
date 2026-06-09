@@ -3,7 +3,6 @@ use super::simulation_artifacts_panel::draw_simulation_artifacts_panel;
 use super::simulation_report_panel::draw_simulation_report_panel;
 use super::simulation_waveform_panel::draw_simulation_waveform_panel;
 use super::status_strip::severity_color;
-use super::theme::StudioTheme;
 use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
 use crate::waveform_summary::GuiWaveformSummaryState;
 use eframe::egui;
@@ -99,7 +98,10 @@ impl NekoSpiceApp {
                         });
                 }
                 Err(error) => {
-                    ui.colored_label(severity_color(KicadDiagnosticSeverity::Error), error);
+                    ui.colored_label(
+                        severity_color(self.theme_mode(), KicadDiagnosticSeverity::Error),
+                        error,
+                    );
                 }
             }
         }
@@ -200,12 +202,17 @@ impl NekoSpiceApp {
             ui.label("Background simulation is running");
         }
         if let Some(error) = &self.simulation_panel.last_error {
-            ui.colored_label(severity_color(KicadDiagnosticSeverity::Error), error);
+            ui.colored_label(
+                severity_color(self.theme_mode(), KicadDiagnosticSeverity::Error),
+                error,
+            );
         }
         if let Some(run) = &self.simulation_panel.last_run {
             let color = match run.metadata.status {
-                RunStatus::Passed => StudioTheme::SUCCESS,
-                RunStatus::Failed => severity_color(KicadDiagnosticSeverity::Error),
+                RunStatus::Passed => self.theme_palette().success,
+                RunStatus::Failed => {
+                    severity_color(self.theme_mode(), KicadDiagnosticSeverity::Error)
+                }
             };
             ui.colored_label(
                 color,

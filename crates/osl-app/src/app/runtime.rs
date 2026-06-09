@@ -1,5 +1,5 @@
 use super::NekoSpiceApp;
-use super::theme::StudioTheme;
+use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self};
 
 pub fn run_native() -> eframe::Result {
@@ -17,7 +17,7 @@ pub fn run_native() -> eframe::Result {
         "NekoSpice",
         native_options,
         Box::new(|cc| {
-            StudioTheme::apply(&cc.egui_ctx);
+            StudioTheme::apply(&cc.egui_ctx, StudioThemeMode::default());
             Ok(Box::new(NekoSpiceApp::default()))
         }),
     )

@@ -1,5 +1,6 @@
 use super::NekoSpiceApp;
-use super::theme::StudioTheme;
+use super::localization::UiText;
+use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 use osl_core::RunStatus;
 use osl_kicad::KicadDiagnosticSeverity;
@@ -35,7 +36,7 @@ impl NekoSpiceApp {
             .as_ref()
             .and_then(|document| document.path().file_stem())
             .and_then(|stem| stem.to_str())
-            .unwrap_or("No project")
+            .unwrap_or(self.text(UiText::NoProject))
             .to_string();
         let source_path = self
             .document
@@ -47,12 +48,12 @@ impl NekoSpiceApp {
             .as_ref()
             .map(|document| {
                 if document.is_dirty() {
-                    "Unsaved changes"
+                    self.text(UiText::UnsavedChanges)
                 } else {
-                    "Saved"
+                    self.text(UiText::Saved)
                 }
             })
-            .unwrap_or("No document")
+            .unwrap_or(self.text(UiText::NoDocument))
             .to_string();
         let diagnostics = self
             .document
@@ -70,7 +71,7 @@ impl NekoSpiceApp {
             .selected_hit
             .as_ref()
             .map(|hit| format!("{}: {}", hit.kind, hit.label))
-            .unwrap_or_else(|| "No selection".to_string());
+            .unwrap_or_else(|| self.text(UiText::NoSelection).to_string());
 
         StudioStatusSnapshot {
             project_name,
@@ -85,41 +86,43 @@ impl NekoSpiceApp {
 
     pub(super) fn draw_top_status_strip(&self, ui: &mut egui::Ui) {
         let snapshot = self.studio_status_snapshot();
+        let mode = self.theme_mode();
+        let palette = self.theme_palette();
         ui.horizontal(|ui| {
-            ui.heading("NekoSpice Studio");
+            ui.label(
+                RichText::new(self.text(UiText::StudioTitle))
+                    .heading()
+                    .color(palette.text),
+            );
             ui.separator();
-            status_block(ui, "Project", &snapshot.project_name);
-            status_block(ui, "Solver", &snapshot.solver_status);
+            status_block(ui, mode, self.text(UiText::Project), &snapshot.project_name);
+            status_block(ui, mode, self.text(UiText::Solver), &snapshot.solver_status);
             ui.label(StudioTheme::status_dot(
                 if self.simulation_panel.active_task.is_some() {
-                    StudioTheme::WARNING
+                    palette.warning
                 } else {
-                    StudioTheme::SUCCESS
+                    palette.success
                 },
             ));
-            ui.label(StudioTheme::muted(&snapshot.document_state));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(StudioTheme::muted("wgpu"));
-                ui.separator();
-                ui.label(StudioTheme::muted(&snapshot.waveform_status));
-            });
+            ui.label(StudioTheme::muted_for(mode, &snapshot.document_state));
         });
     }
 
     pub(super) fn draw_bottom_status_strip(&self, ui: &mut egui::Ui) {
         let snapshot = self.studio_status_snapshot();
+        let mode = self.theme_mode();
         ui.horizontal(|ui| {
-            ui.label(StudioTheme::muted(format!(
-                "Workspace: {}",
-                snapshot.source_path
-            )));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                format!("{}: {}", self.text(UiText::Workspace), snapshot.source_path),
+            ));
             ui.separator();
-            ui.label(diagnostic_text(snapshot.diagnostics));
+            ui.label(diagnostic_text(mode, snapshot.diagnostics));
             ui.separator();
-            ui.label(StudioTheme::muted(snapshot.selected_item));
+            ui.label(StudioTheme::muted_for(mode, snapshot.selected_item));
             if let Some(message) = &self.status_message {
                 ui.separator();
-                ui.label(StudioTheme::accent(message));
+                ui.label(StudioTheme::accent_for(mode, message));
             }
         });
     }
@@ -143,7 +146,7 @@ impl NekoSpiceApp {
 
     fn waveform_status_text(&self) -> String {
         let Some(run) = &self.simulation_panel.last_run else {
-            return "No waveform".to_string();
+            return self.text(UiText::NoWaveform).to_string();
         };
         match &run.waveform {
             crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) => {
@@ -153,26 +156,28 @@ impl NekoSpiceApp {
                 "No waveform.raw".to_string()
             }
             crate::waveform_summary::GuiWaveformSummaryState::Error { .. } => {
-                "Waveform error".to_string()
+                self.text(UiText::WaveformError).to_string()
             }
         }
     }
 }
 
-fn status_block(ui: &mut egui::Ui, label: &str, value: &str) {
+fn status_block(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
+    let palette = StudioTheme::palette(mode);
     ui.vertical(|ui| {
-        ui.label(RichText::new(label).small().color(StudioTheme::TEXT_MUTED));
-        ui.label(RichText::new(value).strong().color(StudioTheme::TEXT));
+        ui.label(RichText::new(label).small().color(palette.text_muted));
+        ui.label(RichText::new(value).strong().color(palette.text));
     });
 }
 
-fn diagnostic_text(counts: DiagnosticCounts) -> RichText {
+fn diagnostic_text(mode: StudioThemeMode, counts: DiagnosticCounts) -> RichText {
+    let palette = StudioTheme::palette(mode);
     let color = if counts.errors > 0 {
-        StudioTheme::DANGER
+        palette.danger
     } else if counts.warnings > 0 {
-        StudioTheme::WARNING
+        palette.warning
     } else {
-        StudioTheme::SUCCESS
+        palette.success
     };
     RichText::new(format!(
         "{} diagnostics ({} errors, {} warnings, {} info)",
@@ -184,25 +189,33 @@ fn diagnostic_text(counts: DiagnosticCounts) -> RichText {
     .color(color)
 }
 
-pub(super) fn severity_color(severity: KicadDiagnosticSeverity) -> eframe::egui::Color32 {
+pub(super) fn severity_color(
+    mode: StudioThemeMode,
+    severity: KicadDiagnosticSeverity,
+) -> eframe::egui::Color32 {
+    let palette = StudioTheme::palette(mode);
     match severity {
-        KicadDiagnosticSeverity::Info => StudioTheme::ACCENT,
-        KicadDiagnosticSeverity::Warning => StudioTheme::WARNING,
-        KicadDiagnosticSeverity::Error => StudioTheme::DANGER,
+        KicadDiagnosticSeverity::Info => palette.accent,
+        KicadDiagnosticSeverity::Warning => palette.warning,
+        KicadDiagnosticSeverity::Error => palette.danger,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{DiagnosticCounts, diagnostic_text};
+    use crate::app::theme::StudioThemeMode;
 
     #[test]
     fn diagnostic_summary_counts_all_severities() {
-        let text = diagnostic_text(DiagnosticCounts {
-            errors: 1,
-            warnings: 2,
-            info: 3,
-        })
+        let text = diagnostic_text(
+            StudioThemeMode::Midnight,
+            DiagnosticCounts {
+                errors: 1,
+                warnings: 2,
+                info: 3,
+            },
+        )
         .text()
         .to_string();
 

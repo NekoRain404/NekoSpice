@@ -8,10 +8,12 @@ use std::path::PathBuf;
 
 mod canvas_panel;
 mod diagnostics_panel;
+mod localization;
 mod navigation;
 mod navigation_panel;
 mod panels;
 mod placement;
+mod preferences;
 mod project_panel;
 mod runtime;
 mod schematic_tools;
@@ -31,6 +33,7 @@ mod workspace_panel;
 pub use canvas_panel::load_canvas_scene;
 use navigation::StudioWorkspace;
 use placement::SymbolPlacementState;
+use preferences::StudioPreferences;
 pub use runtime::run_native;
 use schematic_tools::SchematicToolState;
 use selection_properties::SelectionPropertyEditorState;
@@ -53,6 +56,7 @@ pub struct NekoSpiceApp {
     pub(super) schematic_tools: SchematicToolState,
     pub(super) simulation_panel: SimulationPanelState,
     active_workspace: StudioWorkspace,
+    preferences: StudioPreferences,
     pub(super) symbol_search: String,
     pub(super) load_error: Option<String>,
     pub(super) library_error: Option<String>,
@@ -107,6 +111,7 @@ impl Default for NekoSpiceApp {
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
             active_workspace: StudioWorkspace::default(),
+            preferences: StudioPreferences::default(),
             symbol_search: String::new(),
             load_error: None,
             library_error: None,
