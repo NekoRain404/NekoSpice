@@ -4219,23 +4219,9 @@ impl KicadCanvasScene {
             );
         }
         for table in &self.tables {
-            push_canvas_hit(
-                &mut hits,
-                "table",
-                table.uuid.clone(),
-                "table".to_string(),
-                table.bounds,
-                point,
-            );
+            push_canvas_table_hit(&mut hits, table, point);
             for cell in &table.cells {
-                push_canvas_hit(
-                    &mut hits,
-                    "table-cell",
-                    cell.uuid.clone(),
-                    cell.text.clone(),
-                    cell.bounds,
-                    point,
-                );
+                push_canvas_table_cell_hit(&mut hits, cell, point);
             }
         }
         for rule_area in &self.rule_areas {
@@ -4314,14 +4300,7 @@ impl KicadCanvasScene {
             );
         }
         for text_box in &self.text_boxes {
-            push_canvas_hit(
-                &mut hits,
-                "text-box",
-                text_box.uuid.clone(),
-                text_box.text.clone(),
-                text_box.bounds,
-                point,
-            );
+            push_canvas_text_box_hit(&mut hits, text_box, point);
         }
         for junction in &self.junctions {
             push_canvas_hit(
@@ -5289,6 +5268,76 @@ fn push_canvas_rule_area_hit(
             kind: "rule-area".to_string(),
             uuid: rule_area.uuid.clone(),
             label: "rule-area".to_string(),
+            bounds,
+        });
+    }
+}
+
+fn push_canvas_table_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    table: &KicadCanvasTable,
+    point: KicadPoint,
+) {
+    let Some(bounds) = table.bounds else {
+        return;
+    };
+    if bounds.contains(point)
+        && table
+            .cells
+            .iter()
+            .any(|cell| kicad_table_cell_hits_point(cell, point))
+    {
+        hits.push(KicadCanvasHit {
+            kind: "table".to_string(),
+            uuid: table.uuid.clone(),
+            label: "table".to_string(),
+            bounds,
+        });
+    }
+}
+
+fn push_canvas_table_cell_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    cell: &KicadCanvasTableCell,
+    point: KicadPoint,
+) {
+    let Some(bounds) = cell.bounds else {
+        return;
+    };
+    if bounds.contains(point) && kicad_table_cell_hits_point(cell, point) {
+        hits.push(KicadCanvasHit {
+            kind: "table-cell".to_string(),
+            uuid: cell.uuid.clone(),
+            label: cell.text.clone(),
+            bounds,
+        });
+    }
+}
+
+fn kicad_table_cell_hits_point(cell: &KicadCanvasTableCell, point: KicadPoint) -> bool {
+    match (cell.at, cell.size) {
+        (Some(at), Some(size)) => kicad_rotated_rect_contains_point(at, size, point),
+        _ => cell.bounds.is_some_and(|bounds| bounds.contains(point)),
+    }
+}
+
+fn push_canvas_text_box_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    text_box: &KicadCanvasTextBox,
+    point: KicadPoint,
+) {
+    let Some(bounds) = text_box.bounds else {
+        return;
+    };
+    let hit = match (text_box.at, text_box.size) {
+        (Some(at), Some(size)) => kicad_rotated_rect_contains_point(at, size, point),
+        _ => bounds.contains(point),
+    };
+    if hit {
+        hits.push(KicadCanvasHit {
+            kind: "text-box".to_string(),
+            uuid: text_box.uuid.clone(),
+            label: text_box.text.clone(),
             bounds,
         });
     }
@@ -7733,15 +7782,7 @@ pub struct KicadTableCell {
 
 impl KicadTableCell {
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
-        let at = self.at?;
-        let size = self.size?;
-        Some(KicadBoundingBox {
-            min: at.point(),
-            max: KicadPoint {
-                x: at.x + size.width,
-                y: at.y + size.height,
-            },
-        })
+        kicad_rotated_rect_bounds(self.at?, self.size?)
     }
 
     fn write_table_cell_sexpr(&self, output: &mut String, indent: usize) {
@@ -7937,6 +7978,46 @@ fn kicad_points_bounds(points: &[KicadPoint], padding: f64) -> Option<KicadBound
         bounds.include(*point);
     }
     bounds.finish().map(|bounds| bounds.padded(padding))
+}
+
+fn kicad_rotated_rect_corners(at: KicadAt, size: KicadSize) -> [KicadPoint; 4] {
+    let width = size.width.abs();
+    let height = size.height.abs();
+    let local_corners = [
+        KicadPoint { x: 0.0, y: 0.0 },
+        KicadPoint { x: width, y: 0.0 },
+        KicadPoint {
+            x: width,
+            y: height,
+        },
+        KicadPoint { x: 0.0, y: height },
+    ];
+    local_corners.map(|corner| {
+        let rotated = rotate_point(corner, at.rotation);
+        KicadPoint {
+            x: at.x + rotated.x,
+            y: at.y + rotated.y,
+        }
+    })
+}
+
+fn kicad_rotated_rect_bounds(at: KicadAt, size: KicadSize) -> Option<KicadBoundingBox> {
+    let mut bounds = KicadBoundingBoxBuilder::default();
+    for corner in kicad_rotated_rect_corners(at, size) {
+        bounds.include(corner);
+    }
+    bounds.finish()
+}
+
+fn kicad_rotated_rect_contains_point(at: KicadAt, size: KicadSize, point: KicadPoint) -> bool {
+    let local = rotate_point(
+        KicadPoint {
+            x: point.x - at.x,
+            y: point.y - at.y,
+        },
+        -at.rotation,
+    );
+    local.x >= 0.0 && local.x <= size.width.abs() && local.y >= 0.0 && local.y <= size.height.abs()
 }
 
 fn kicad_text_bounds(
@@ -9085,15 +9166,7 @@ pub struct KicadTextBox {
 
 impl KicadTextBox {
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
-        let at = self.at?;
-        let size = self.size?;
-        Some(KicadBoundingBox {
-            min: at.point(),
-            max: KicadPoint {
-                x: at.x + size.width,
-                y: at.y + size.height,
-            },
-        })
+        kicad_rotated_rect_bounds(self.at?, self.size?)
     }
 
     fn write_text_box_sexpr(&self, output: &mut String, indent: usize) {
@@ -12859,6 +12932,42 @@ mod tests {
     }
 
     #[test]
+    fn hit_tests_rotated_text_boxes_by_shape() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (text_box "Rotated note"
+    (at 20 10 45)
+    (size 10 4)
+    (uuid "45454545-4545-4545-8545-454545454545")
+  )
+)"#,
+            "rotated_text_box_hit.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+        let text_box = &scene.text_boxes[0];
+        assert!(text_box.bounds.unwrap().width() > 9.0);
+        assert!(text_box.bounds.unwrap().height() > 9.0);
+
+        let hit = scene.hit_test(KicadPoint { x: 22.12, y: 14.95 });
+        assert!(hit.hits.iter().any(|hit| hit.kind == "text-box"
+            && hit.uuid.as_deref() == Some("45454545-4545-4545-8545-454545454545")));
+
+        let aabb_corner_miss = scene.hit_test(KicadPoint { x: 26.8, y: 10.3 });
+        assert!(
+            !aabb_corner_miss
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "text-box"
+                    && hit.uuid.as_deref() == Some("45454545-4545-4545-8545-454545454545"))
+        );
+    }
+
+    #[test]
     fn parses_schematic_images_and_roundtrips() {
         let schematic = parse_kicad_schematic(
             r#"(kicad_sch
@@ -13126,6 +13235,54 @@ mod tests {
             })
         );
         assert_eq!(reparsed.canvas_scene().tables.len(), 1);
+    }
+
+    #[test]
+    fn hit_tests_rotated_table_cells_by_shape() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (table
+    (column_count 1)
+    (column_widths 10)
+    (row_heights 4)
+    (uuid "67676767-6767-4767-8767-676767676767")
+    (cells
+      (table_cell "Rotated cell"
+        (at 40 10 45)
+        (size 10 4)
+        (uuid "68686868-6868-4868-8868-686868686868")
+      )
+    )
+  )
+)"#,
+            "rotated_table_hit.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+        let cell = &scene.tables[0].cells[0];
+        assert!(cell.bounds.unwrap().width() > 9.0);
+        assert!(cell.bounds.unwrap().height() > 9.0);
+
+        let hit = scene.hit_test(KicadPoint { x: 42.12, y: 14.95 });
+        assert!(hit.hits.iter().any(|hit| hit.kind == "table-cell"
+            && hit.uuid.as_deref() == Some("68686868-6868-4868-8868-686868686868")));
+        assert!(hit.hits.iter().any(|hit| hit.kind == "table"
+            && hit.uuid.as_deref() == Some("67676767-6767-4767-8767-676767676767")));
+
+        let aabb_corner_miss = scene.hit_test(KicadPoint { x: 46.8, y: 10.3 });
+        assert!(
+            !aabb_corner_miss
+                .hits
+                .iter()
+                .any(|hit| (hit.kind == "table-cell"
+                    && hit.uuid.as_deref() == Some("68686868-6868-4868-8868-686868686868"))
+                    || (hit.kind == "table"
+                        && hit.uuid.as_deref() == Some("67676767-6767-4767-8767-676767676767")))
+        );
     }
 
     #[test]
