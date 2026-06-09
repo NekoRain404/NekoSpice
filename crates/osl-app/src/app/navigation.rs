@@ -81,6 +81,18 @@ impl StudioWorkspace {
             },
         }
     }
+
+    pub(super) fn from_slug(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "home" => Some(Self::Home),
+            "schematic" | "sch" => Some(Self::Schematic),
+            "library" | "lib" => Some(Self::Library),
+            "simulation" | "sim" => Some(Self::Simulation),
+            "reports" | "report" | "rpt" => Some(Self::Reports),
+            "settings" | "set" => Some(Self::Settings),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -98,5 +110,10 @@ mod tests {
             "原理图"
         );
         assert!(!StudioWorkspace::Simulation.caption().is_empty());
+        assert_eq!(
+            StudioWorkspace::from_slug("sch"),
+            Some(StudioWorkspace::Schematic)
+        );
+        assert_eq!(StudioWorkspace::from_slug("unknown"), None);
     }
 }

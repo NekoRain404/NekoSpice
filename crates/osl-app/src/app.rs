@@ -23,6 +23,8 @@ mod preferences;
 mod project_panel;
 mod runtime;
 mod schematic_tools;
+mod schematic_workspace;
+mod schematic_workspace_widgets;
 mod selection_properties;
 mod simulation_artifacts_panel;
 mod simulation_panel;
@@ -116,7 +118,7 @@ impl Default for NekoSpiceApp {
             selection_properties: SelectionPropertyEditorState::default(),
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
-            active_workspace: StudioWorkspace::default(),
+            active_workspace: initial_workspace(),
             preferences: StudioPreferences::default(),
             symbol_search: String::new(),
             load_error: None,
@@ -128,6 +130,13 @@ impl Default for NekoSpiceApp {
         app.load_symbol_library(PathBuf::from(DEFAULT_SYMBOL_LIBRARY_TABLE));
         app
     }
+}
+
+fn initial_workspace() -> StudioWorkspace {
+    std::env::var("NEKOSPICE_INITIAL_WORKSPACE")
+        .ok()
+        .and_then(|value| StudioWorkspace::from_slug(&value))
+        .unwrap_or_default()
 }
 
 impl NekoSpiceApp {

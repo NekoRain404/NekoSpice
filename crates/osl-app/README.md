@@ -62,6 +62,10 @@ search stay in `osl-kicad`.
   document adapter.
 - `app/schematic_tools/state.rs`: active tool state, pending wire/bus starts, sheet options, and other tool-local inputs.
 - `app/schematic_tools/preview.rs`: transient canvas previews for active schematic drawing tools.
+- `app/schematic_workspace.rs`: Schematic center workspace chrome: document
+  tabs, canvas toolbar, framed canvas mounting, and bottom waveform/console dock.
+- `app/schematic_workspace_widgets.rs`: Schematic-only display widgets for tabs,
+  toolbar buttons, signal rows, and console lines.
 - `app/symbol_browser.rs`: symbol library browser, metadata details, and preview canvas.
 - `app/symbol_placement_controls.rs`: unit, body-style, and pin-alternate controls for KiCad-compatible symbol placement.
 - `app/theme.rs`: Studio theme modes, palette tokens, style application, and
@@ -123,3 +127,5 @@ search stay in `osl-kicad`.
 - For visual changes, capture a smoke screenshot when the local desktop/session
   allows it. Store temporary screenshots under `target/ui-smoke/` so they stay
   outside source control.
+- `NEKOSPICE_INITIAL_WORKSPACE=schematic` can be used by GUI smoke scripts to
+  open a non-default workspace deterministically before capturing screenshots.
