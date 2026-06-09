@@ -22,6 +22,27 @@ pub fn write_bench_report_bundle(
     write_report_bundle(output_dir, "bench.json", report)
 }
 
+pub fn write_json_html_report_bundle(
+    output_dir: &Path,
+    json_name: &'static str,
+    json: &str,
+    html: &str,
+) -> OslResult<Vec<ReportBundleFile>> {
+    write_text(&output_dir.join(json_name), json)?;
+    write_text(&output_dir.join("report.html"), html)?;
+
+    Ok(vec![
+        ReportBundleFile {
+            path: json_name,
+            kind: "json",
+        },
+        ReportBundleFile {
+            path: "report.html",
+            kind: "html",
+        },
+    ])
+}
+
 fn write_report_bundle(
     output_dir: &Path,
     json_name: &'static str,

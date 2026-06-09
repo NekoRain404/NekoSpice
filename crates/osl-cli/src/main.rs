@@ -14,7 +14,7 @@ use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
 use osl_render::render_kicad_scene_svg;
 use osl_report::{
     CheckResult, VerifyReport, VerifyRunResult, report_css, write_bench_report_bundle,
-    write_report_directory_html, write_verify_report_bundle,
+    write_json_html_report_bundle, write_report_directory_html, write_verify_report_bundle,
 };
 use osl_sim::{NgspiceCliBackend, SimulatorBackend, finalize_run_artifacts};
 use osl_waveform::{
@@ -257,9 +257,10 @@ fn model_check_command(args: &[String]) -> OslResult<i32> {
 
     let options = ModelCheckOptions { symbol_path };
     let report = ModelCheckReport::scan_with_options(Path::new(input), &options)?;
-    write_text(&output_dir.join("model-check.json"), &report.to_json())?;
-    write_text(
-        &output_dir.join("report.html"),
+    write_json_html_report_bundle(
+        &output_dir,
+        "model-check.json",
+        &report.to_json(),
         &report.to_html(report_css()),
     )?;
 
@@ -291,9 +292,10 @@ fn import_command(args: &[String]) -> OslResult<i32> {
     let source_netlist = import.source_netlist;
     let source_path = import.source_path;
     let report = import.report;
-    write_text(&output_dir.join("import.json"), &report.to_json())?;
-    write_text(
-        &output_dir.join("report.html"),
+    write_json_html_report_bundle(
+        &output_dir,
+        "import.json",
+        &report.to_json(),
         &report.to_html(report_css()),
     )?;
     let project_dir = output_dir.join("project");

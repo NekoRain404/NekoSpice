@@ -6,7 +6,10 @@ mod json;
 mod junit;
 mod markdown;
 
-pub use bundle::{ReportBundleFile, write_bench_report_bundle, write_verify_report_bundle};
+pub use bundle::{
+    ReportBundleFile, write_bench_report_bundle, write_json_html_report_bundle,
+    write_verify_report_bundle,
+};
 pub use directory::write_report_directory_html;
 pub use html::report_css;
 
@@ -130,7 +133,7 @@ impl VerifyReport {
 mod tests {
     use super::{
         CheckResult, VerifyReport, VerifyRunResult, write_bench_report_bundle,
-        write_verify_report_bundle,
+        write_json_html_report_bundle, write_verify_report_bundle,
     };
     use osl_core::{ParameterOverride, RunMetadata, RunStatus};
     use osl_waveform::WaveformSummary;
@@ -267,6 +270,19 @@ mod tests {
         assert!(bench_dir.join("report.html").is_file());
         assert!(bench_dir.join("report.md").is_file());
         assert!(bench_dir.join("junit.xml").is_file());
+
+        let import_dir = output_dir.join("import");
+        let import_files = write_json_html_report_bundle(
+            &import_dir,
+            "import.json",
+            "{\"kind\":\"import\"}",
+            "<html>import</html>",
+        )
+        .unwrap();
+        assert_eq!(import_files[0].path, "import.json");
+        assert_eq!(import_files[1].path, "report.html");
+        assert!(import_dir.join("import.json").is_file());
+        assert!(import_dir.join("report.html").is_file());
 
         let _ = std::fs::remove_dir_all(output_dir);
     }
