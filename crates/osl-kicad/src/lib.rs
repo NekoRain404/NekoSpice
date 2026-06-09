@@ -4781,8 +4781,11 @@ impl KicadCanvasGraphic {
 
     fn hits_point(&self, point: KicadPoint) -> bool {
         match self {
-            Self::Polyline { points, stroke, .. } | Self::Bezier { points, stroke, .. } => {
+            Self::Polyline { points, stroke, .. } => {
                 kicad_polyline_hits_point(points, stroke.as_ref(), point)
+            }
+            Self::Bezier { points, stroke, .. } => {
+                kicad_bezier_hits_point(points, stroke.as_ref(), point)
             }
             Self::Rectangle {
                 start,
@@ -7939,6 +7942,48 @@ fn kicad_closed_polyline_hits_point(
     }
     kicad_point_segment_distance(point, *points.last().unwrap(), points[0])
         <= kicad_stroke_hit_tolerance(stroke)
+}
+
+fn kicad_bezier_hits_point(
+    points: &[KicadPoint],
+    stroke: Option<&KicadStroke>,
+    point: KicadPoint,
+) -> bool {
+    if points.len() != 4 {
+        return kicad_polyline_hits_point(points, stroke, point);
+    }
+
+    let sampled = kicad_cubic_bezier_samples(points[0], points[1], points[2], points[3]);
+    kicad_polyline_hits_point(&sampled, stroke, point)
+}
+
+fn kicad_cubic_bezier_samples(
+    start: KicadPoint,
+    control_1: KicadPoint,
+    control_2: KicadPoint,
+    end: KicadPoint,
+) -> Vec<KicadPoint> {
+    const KICAD_BEZIER_HIT_SEGMENTS: usize = 32;
+    let mut points = Vec::with_capacity(KICAD_BEZIER_HIT_SEGMENTS + 1);
+    for index in 0..=KICAD_BEZIER_HIT_SEGMENTS {
+        let t = index as f64 / KICAD_BEZIER_HIT_SEGMENTS as f64;
+        let one_minus_t = 1.0 - t;
+        let start_weight = one_minus_t * one_minus_t * one_minus_t;
+        let control_1_weight = 3.0 * one_minus_t * one_minus_t * t;
+        let control_2_weight = 3.0 * one_minus_t * t * t;
+        let end_weight = t * t * t;
+        points.push(KicadPoint {
+            x: start.x * start_weight
+                + control_1.x * control_1_weight
+                + control_2.x * control_2_weight
+                + end.x * end_weight,
+            y: start.y * start_weight
+                + control_1.y * control_1_weight
+                + control_2.y * control_2_weight
+                + end.y * end_weight,
+        });
+    }
+    points
 }
 
 fn kicad_polygon_contains_point(points: &[KicadPoint], point: KicadPoint) -> bool {
@@ -15354,6 +15399,41 @@ mod tests {
         assert!(polyline_hit.hits.iter().any(|hit| hit.kind == "graphic"
             && hit.label == "polyline"
             && hit.uuid.as_deref() == Some("55555555-5555-5555-5555-555555555555")));
+    }
+
+    #[test]
+    fn hit_tests_bezier_graphics_by_sampled_curve() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-1111-1111-111111111111")
+  (paper "A4")
+  (bezier
+    (pts (xy 10 20) (xy 10 10) (xy 30 10) (xy 30 20))
+    (stroke (width 0) (type default))
+    (fill (type none))
+    (uuid "22222222-2222-2222-2222-222222222222")
+  )
+)"#,
+            "bezier_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+
+        let curve_hit = scene.hit_test(KicadPoint { x: 20.0, y: 12.5 });
+        assert!(curve_hit.hits.iter().any(|hit| hit.kind == "graphic"
+            && hit.label == "bezier"
+            && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222")));
+
+        let control_polygon_miss = scene.hit_test(KicadPoint { x: 20.0, y: 10.0 });
+        assert!(
+            !control_polygon_miss
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "graphic"
+                    && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222"))
+        );
     }
 
     #[test]
