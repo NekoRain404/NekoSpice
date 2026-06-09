@@ -4058,13 +4058,7 @@ impl KicadCanvasScene {
                     at: junction.at,
                     diameter: junction.diameter,
                     color: junction.color,
-                    bounds: kicad_point_bounds(
-                        junction.at,
-                        junction
-                            .diameter
-                            .map(|diameter| diameter.max(0.0) / 2.0)
-                            .unwrap_or(KICAD_CANVAS_POINT_BOUNDS_RADIUS),
-                    ),
+                    bounds: kicad_junction_bounds(junction.at, junction.diameter),
                 }
             })
             .collect::<Vec<_>>();
@@ -4077,7 +4071,7 @@ impl KicadCanvasScene {
                 KicadCanvasNoConnect {
                     uuid: marker.uuid.clone(),
                     at: marker.at,
-                    bounds: kicad_point_bounds(marker.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
+                    bounds: kicad_no_connect_bounds(marker.at),
                 }
             })
             .collect::<Vec<_>>();
@@ -4347,24 +4341,10 @@ impl KicadCanvasScene {
             push_canvas_text_box_hit(&mut hits, text_box, point);
         }
         for junction in &self.junctions {
-            push_canvas_hit(
-                &mut hits,
-                "junction",
-                junction.uuid.clone(),
-                "junction".to_string(),
-                Some(junction.bounds),
-                point,
-            );
+            push_canvas_junction_hit(&mut hits, junction, point);
         }
         for marker in &self.no_connects {
-            push_canvas_hit(
-                &mut hits,
-                "no-connect",
-                marker.uuid.clone(),
-                "no-connect".to_string(),
-                Some(marker.bounds),
-                point,
-            );
+            push_canvas_no_connect_hit(&mut hits, marker, point);
         }
         for group in &self.groups {
             push_canvas_hit(
@@ -5424,6 +5404,43 @@ fn push_canvas_text_box_hit(
             uuid: text_box.uuid.clone(),
             label: text_box.text.clone(),
             bounds,
+        });
+    }
+}
+
+fn push_canvas_junction_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    junction: &KicadCanvasJunction,
+    point: KicadPoint,
+) {
+    if junction.bounds.contains(point)
+        && kicad_point_distance(junction.at, point) <= kicad_junction_radius(junction.diameter)
+    {
+        hits.push(KicadCanvasHit {
+            kind: "junction".to_string(),
+            uuid: junction.uuid.clone(),
+            label: "junction".to_string(),
+            bounds: junction.bounds,
+        });
+    }
+}
+
+fn push_canvas_no_connect_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    marker: &KicadCanvasNoConnect,
+    point: KicadPoint,
+) {
+    let arms = kicad_no_connect_arms(marker.at);
+    if marker.bounds.contains(point)
+        && arms
+            .iter()
+            .any(|arm| kicad_polyline_hits_point(arm, None, point))
+    {
+        hits.push(KicadCanvasHit {
+            kind: "no-connect".to_string(),
+            uuid: marker.uuid.clone(),
+            label: "no-connect".to_string(),
+            bounds: marker.bounds,
         });
     }
 }
@@ -8012,6 +8029,8 @@ impl KicadBoundingBox {
 const KICAD_CANVAS_POINT_BOUNDS_RADIUS: f64 = 1.27;
 const KICAD_CANVAS_LINE_BOUNDS_PADDING: f64 = 0.635;
 const KICAD_SHEET_PIN_STUB_LENGTH: f64 = 2.54;
+const KICAD_DEFAULT_JUNCTION_RADIUS: f64 = KICAD_CANVAS_POINT_BOUNDS_RADIUS;
+const KICAD_NO_CONNECT_ARM_LENGTH: f64 = KICAD_CANVAS_POINT_BOUNDS_RADIUS;
 
 #[derive(Debug, Default)]
 struct KicadBoundingBoxBuilder {
@@ -8069,6 +8088,50 @@ fn kicad_points_bounds(points: &[KicadPoint], padding: f64) -> Option<KicadBound
 fn kicad_sheet_pin_bounds(at: KicadAt) -> Option<KicadBoundingBox> {
     let points = [at.point(), pin_body_end(at, KICAD_SHEET_PIN_STUB_LENGTH)];
     kicad_points_bounds(&points, KICAD_CANVAS_LINE_BOUNDS_PADDING)
+}
+
+fn kicad_junction_radius(diameter: Option<f64>) -> f64 {
+    diameter
+        .filter(|diameter| diameter.is_finite() && *diameter > 0.0)
+        .map(|diameter| diameter / 2.0)
+        .unwrap_or(KICAD_DEFAULT_JUNCTION_RADIUS)
+}
+
+fn kicad_junction_bounds(at: KicadPoint, diameter: Option<f64>) -> KicadBoundingBox {
+    kicad_point_bounds(at, kicad_junction_radius(diameter))
+}
+
+fn kicad_no_connect_arms(at: KicadPoint) -> [[KicadPoint; 2]; 2] {
+    let arm = KICAD_NO_CONNECT_ARM_LENGTH;
+    [
+        [
+            KicadPoint {
+                x: at.x - arm,
+                y: at.y - arm,
+            },
+            KicadPoint {
+                x: at.x + arm,
+                y: at.y + arm,
+            },
+        ],
+        [
+            KicadPoint {
+                x: at.x - arm,
+                y: at.y + arm,
+            },
+            KicadPoint {
+                x: at.x + arm,
+                y: at.y - arm,
+            },
+        ],
+    ]
+}
+
+fn kicad_no_connect_bounds(at: KicadPoint) -> KicadBoundingBox {
+    let arms = kicad_no_connect_arms(at);
+    let points = [arms[0][0], arms[0][1], arms[1][0], arms[1][1]];
+    kicad_points_bounds(&points, KICAD_CANVAS_LINE_BOUNDS_PADDING)
+        .expect("KiCad no-connect marker bounds use four points")
 }
 
 fn kicad_sheet_box_bounds(
@@ -15916,6 +15979,57 @@ mod tests {
         let entry_hit = scene.hit_test(KicadPoint { x: 31.27, y: 18.73 });
         assert!(entry_hit.hits.iter().any(|hit| hit.kind == "bus-entry"
             && hit.uuid.as_deref() == Some("44444444-4444-4444-4444-444444444444")));
+    }
+
+    #[test]
+    fn hit_tests_junctions_and_no_connects_by_shape() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-4111-8111-111111111111")
+  (paper "A4")
+  (lib_symbols)
+  (junction (at 10 10) (diameter 2.54) (uuid "22222222-2222-4222-8222-222222222222"))
+  (no_connect (at 20 10) (uuid "33333333-3333-4333-8333-333333333333"))
+)"#,
+            "point_shape_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+        assert!(scene.junctions[0].bounds.width() > 2.5);
+        assert!(scene.no_connects[0].bounds.width() > super::KICAD_CANVAS_POINT_BOUNDS_RADIUS);
+
+        let junction_hit = scene.hit_test(KicadPoint { x: 11.0, y: 10.0 });
+        assert!(junction_hit.hits.iter().any(|hit| hit.kind == "junction"
+            && hit.uuid.as_deref() == Some("22222222-2222-4222-8222-222222222222")));
+
+        let junction_corner_miss = scene.hit_test(KicadPoint { x: 10.95, y: 10.95 });
+        assert!(
+            !junction_corner_miss
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "junction"
+                    && hit.uuid.as_deref() == Some("22222222-2222-4222-8222-222222222222"))
+        );
+
+        let no_connect_hit = scene.hit_test(KicadPoint { x: 20.9, y: 10.9 });
+        assert!(
+            no_connect_hit
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "no-connect"
+                    && hit.uuid.as_deref() == Some("33333333-3333-4333-8333-333333333333"))
+        );
+
+        let no_connect_corner_miss = scene.hit_test(KicadPoint { x: 20.95, y: 10.0 });
+        assert!(
+            !no_connect_corner_miss
+                .hits
+                .iter()
+                .any(|hit| hit.kind == "no-connect"
+                    && hit.uuid.as_deref() == Some("33333333-3333-4333-8333-333333333333"))
+        );
     }
 
     #[test]
