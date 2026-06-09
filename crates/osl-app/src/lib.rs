@@ -1,13 +1,56 @@
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use osl_kicad::{
     KicadBoundingBox, KicadCanvasBusEntry, KicadCanvasGraphic, KicadCanvasHit, KicadCanvasScene,
-    KicadCanvasSheet, KicadPoint, read_kicad_schematic_with_libraries,
+    KicadCanvasSheet, KicadEditSummary, KicadPoint, KicadSchematic, KicadSchematicEdit,
+    read_kicad_schematic_with_libraries, write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
 
 const DEFAULT_SCHEMATIC: &str = "examples/kicad_schematic/rc.kicad_sch";
 const MIN_ZOOM: f32 = 1.0;
 const MAX_ZOOM: f32 = 180.0;
+
+#[derive(Debug)]
+struct KicadGuiDocument {
+    path: PathBuf,
+    schematic: KicadSchematic,
+    dirty: bool,
+}
+
+impl KicadGuiDocument {
+    fn load(path: PathBuf) -> Result<Self, String> {
+        read_kicad_schematic_with_libraries(&path)
+            .map(|schematic| Self {
+                path,
+                schematic,
+                dirty: false,
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    fn scene(&self) -> KicadCanvasScene {
+        self.schematic.canvas_scene()
+    }
+
+    fn delete_item(&mut self, uuid: &str) -> Result<KicadEditSummary, String> {
+        self.schematic
+            .apply_edit(KicadSchematicEdit::DeleteItem {
+                uuid: uuid.to_string(),
+            })
+            .inspect(|_| {
+                self.dirty = true;
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    fn save(&mut self) -> Result<(), String> {
+        write_kicad_schematic(&self.path, &self.schematic)
+            .inspect(|_| {
+                self.dirty = false;
+            })
+            .map_err(|error| error.to_string())
+    }
+}
 
 pub fn run_native() -> eframe::Result {
     let native_options = eframe::NativeOptions {
@@ -30,9 +73,11 @@ pub fn run_native() -> eframe::Result {
 #[derive(Debug)]
 pub struct NekoSpiceApp {
     schematic_path: String,
+    document: Option<KicadGuiDocument>,
     scene: Option<KicadCanvasScene>,
     selected_hit: Option<KicadCanvasHit>,
     load_error: Option<String>,
+    status_message: Option<String>,
     viewport: CanvasViewport,
 }
 
@@ -40,9 +85,11 @@ impl Default for NekoSpiceApp {
     fn default() -> Self {
         let mut app = Self {
             schematic_path: DEFAULT_SCHEMATIC.to_string(),
+            document: None,
             scene: None,
             selected_hit: None,
             load_error: None,
+            status_message: None,
             viewport: CanvasViewport::default(),
         };
         app.load_schematic(PathBuf::from(DEFAULT_SCHEMATIC));
@@ -52,17 +99,63 @@ impl Default for NekoSpiceApp {
 
 impl NekoSpiceApp {
     fn load_schematic(&mut self, path: PathBuf) {
-        match read_kicad_schematic_with_libraries(&path) {
-            Ok(schematic) => {
-                let scene = schematic.canvas_scene();
+        match KicadGuiDocument::load(path.clone()) {
+            Ok(document) => {
+                let scene = document.scene();
                 self.schematic_path = path.display().to_string();
+                self.viewport.fit_scene(scene.bounds);
+                self.document = Some(document);
+                self.scene = Some(scene);
+                self.selected_hit = None;
+                self.load_error = None;
+                self.status_message = Some("Loaded schematic".to_string());
+            }
+            Err(error) => {
+                self.load_error = Some(error.to_string());
+                self.status_message = None;
+            }
+        }
+    }
+
+    fn delete_selected(&mut self) {
+        let Some(uuid) = self.selected_hit.as_ref().and_then(|hit| hit.uuid.clone()) else {
+            self.status_message = Some("Selected item has no KiCad UUID".to_string());
+            return;
+        };
+        let Some(document) = &mut self.document else {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+
+        match document.delete_item(&uuid) {
+            Ok(summary) => {
+                let scene = document.scene();
                 self.viewport.fit_scene(scene.bounds);
                 self.scene = Some(scene);
                 self.selected_hit = None;
                 self.load_error = None;
+                self.status_message =
+                    Some(format!("Deleted {} {}", summary.operation, summary.target));
             }
             Err(error) => {
-                self.load_error = Some(error.to_string());
+                self.status_message = Some(error.to_string());
+            }
+        }
+    }
+
+    fn save_document(&mut self) {
+        let Some(document) = &mut self.document else {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+
+        match document.save() {
+            Ok(()) => {
+                self.status_message = Some(format!("Saved {}", document.path.display()));
+                self.load_error = None;
+            }
+            Err(error) => {
+                self.status_message = Some(error.to_string());
             }
         }
     }
@@ -80,6 +173,24 @@ impl NekoSpiceApp {
             if ui.button("Fit").clicked() {
                 self.viewport
                     .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
+            }
+            let can_edit = self.document.is_some();
+            if ui
+                .add_enabled(can_edit, egui::Button::new("Save"))
+                .clicked()
+            {
+                self.save_document();
+            }
+            let can_delete = self
+                .selected_hit
+                .as_ref()
+                .and_then(|hit| hit.uuid.as_ref())
+                .is_some();
+            if ui
+                .add_enabled(can_edit && can_delete, egui::Button::new("Delete Selected"))
+                .clicked()
+            {
+                self.delete_selected();
             }
         });
     }
@@ -107,6 +218,16 @@ impl NekoSpiceApp {
         ui.label(format!("Sheets: {}", scene.sheets.len()));
         ui.label(format!("Graphics: {}", scene.graphics.len()));
         ui.label(format!("Zoom: {:.1} px/mm", self.viewport.zoom));
+        if let Some(document) = &self.document {
+            ui.label(format!(
+                "Dirty: {}",
+                if document.dirty { "yes" } else { "no" }
+            ));
+        }
+        if let Some(message) = &self.status_message {
+            ui.separator();
+            ui.label(message);
+        }
 
         ui.separator();
         ui.heading("Selection");
@@ -152,6 +273,10 @@ impl NekoSpiceApp {
         {
             let schematic_point = self.viewport.screen_to_world(rect, pointer);
             self.selected_hit = scene.hit_test(schematic_point).hits.into_iter().next();
+        }
+
+        if ui.input(|input| input.key_pressed(egui::Key::Delete)) {
+            self.delete_selected();
         }
 
         let painter = ui.painter_at(rect);
@@ -649,6 +774,8 @@ fn item_visible(bounds: Option<KicadBoundingBox>, visible_bounds: KicadBoundingB
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn loads_default_canvas_scene_for_gui() {
@@ -702,5 +829,40 @@ mod tests {
             }),
             visible
         ));
+    }
+
+    #[test]
+    fn document_deletes_selected_uuid_and_saves_schematic() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let source = workspace_root.join(DEFAULT_SCHEMATIC);
+        let temp_path = std::env::temp_dir().join(format!(
+            "nekospice_gui_delete_{}.kicad_sch",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::copy(&source, &temp_path).unwrap();
+
+        let mut document = KicadGuiDocument::load(temp_path.clone()).unwrap();
+        assert!(!document.dirty);
+        assert_eq!(document.scene().wires.len(), 3);
+
+        let summary = document
+            .delete_item("22222222-2222-2222-2222-222222222222")
+            .unwrap();
+        assert_eq!(summary.operation, "delete-wire");
+        assert!(document.dirty);
+        assert_eq!(document.scene().wires.len(), 2);
+
+        document.save().unwrap();
+        assert!(!document.dirty);
+        let saved = fs::read_to_string(&temp_path).unwrap();
+        assert!(!saved.contains("22222222-2222-2222-2222-222222222222"));
+
+        fs::remove_file(temp_path).unwrap();
     }
 }
