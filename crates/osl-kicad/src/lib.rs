@@ -4219,14 +4219,7 @@ impl KicadCanvasScene {
             }
         }
         for rule_area in &self.rule_areas {
-            push_canvas_hit(
-                &mut hits,
-                "rule-area",
-                rule_area.uuid.clone(),
-                "rule-area".to_string(),
-                rule_area.bounds,
-                point,
-            );
+            push_canvas_rule_area_hit(&mut hits, rule_area, point);
         }
         for wire in &self.wires {
             push_canvas_polyline_hit(
@@ -4518,6 +4511,15 @@ impl KicadCanvasRuleArea {
             "fill": self.fill.as_ref().map(kicad_fill_value),
             "bounds": self.bounds.map(kicad_bounding_box_value),
         })
+    }
+
+    fn hits_point(&self, point: KicadPoint) -> bool {
+        if kicad_fill_is_solid(self.fill.as_ref())
+            && kicad_polygon_contains_point(&self.points, point)
+        {
+            return true;
+        }
+        kicad_closed_polyline_hits_point(&self.points, self.stroke.as_ref(), point)
     }
 }
 
@@ -5252,6 +5254,24 @@ fn push_canvas_graphic_hit(
             kind: "graphic".to_string(),
             uuid: graphic.uuid(),
             label: graphic.kind().to_string(),
+            bounds,
+        });
+    }
+}
+
+fn push_canvas_rule_area_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    rule_area: &KicadCanvasRuleArea,
+    point: KicadPoint,
+) {
+    let Some(bounds) = rule_area.bounds else {
+        return;
+    };
+    if bounds.contains(point) && rule_area.hits_point(point) {
+        hits.push(KicadCanvasHit {
+            kind: "rule-area".to_string(),
+            uuid: rule_area.uuid.clone(),
+            label: "rule-area".to_string(),
             bounds,
         });
     }
@@ -7904,6 +7924,46 @@ fn kicad_polyline_hits_point(
     points
         .windows(2)
         .any(|segment| kicad_point_segment_distance(point, segment[0], segment[1]) <= tolerance)
+}
+
+fn kicad_closed_polyline_hits_point(
+    points: &[KicadPoint],
+    stroke: Option<&KicadStroke>,
+    point: KicadPoint,
+) -> bool {
+    if kicad_polyline_hits_point(points, stroke, point) {
+        return true;
+    }
+    if points.len() < 3 {
+        return false;
+    }
+    kicad_point_segment_distance(point, *points.last().unwrap(), points[0])
+        <= kicad_stroke_hit_tolerance(stroke)
+}
+
+fn kicad_polygon_contains_point(points: &[KicadPoint], point: KicadPoint) -> bool {
+    if points.len() < 3 {
+        return false;
+    }
+    if kicad_closed_polyline_hits_point(points, None, point) {
+        return true;
+    }
+
+    let mut inside = false;
+    let mut previous = *points.last().unwrap();
+    for current in points {
+        let crosses_vertical_range = (current.y > point.y) != (previous.y > point.y);
+        if crosses_vertical_range {
+            let intersection_x = (previous.x - current.x) * (point.y - current.y)
+                / (previous.y - current.y)
+                + current.x;
+            if point.x < intersection_x {
+                inside = !inside;
+            }
+        }
+        previous = *current;
+    }
+    inside
 }
 
 fn kicad_rectangle_hits_point(
@@ -15294,6 +15354,49 @@ mod tests {
         assert!(polyline_hit.hits.iter().any(|hit| hit.kind == "graphic"
             && hit.label == "polyline"
             && hit.uuid.as_deref() == Some("55555555-5555-5555-5555-555555555555")));
+    }
+
+    #[test]
+    fn hit_tests_rule_areas_by_polygon_shape() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-1111-1111-111111111111")
+  (paper "A4")
+  (rule_area
+    (polyline
+      (pts (xy 10 10) (xy 20 10) (xy 20 20) (xy 10 20))
+      (stroke (width 0) (type default))
+      (fill (type none))
+      (uuid "22222222-2222-2222-2222-222222222222")
+    )
+  )
+  (rule_area
+    (polyline
+      (pts (xy 30 10) (xy 40 10) (xy 40 20) (xy 30 20))
+      (stroke (width 0) (type default))
+      (fill (type color) (color 20 200 170 0.25))
+      (uuid "33333333-3333-3333-3333-333333333333")
+    )
+  )
+)"#,
+            "rule_area_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+
+        let hollow_center = scene.hit_test(KicadPoint { x: 15.0, y: 15.0 });
+        assert!(!hollow_center.hits.iter().any(|hit| hit.kind == "rule-area"
+            && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222")));
+
+        let hollow_edge = scene.hit_test(KicadPoint { x: 15.0, y: 10.4 });
+        assert!(hollow_edge.hits.iter().any(|hit| hit.kind == "rule-area"
+            && hit.uuid.as_deref() == Some("22222222-2222-2222-2222-222222222222")));
+
+        let filled_center = scene.hit_test(KicadPoint { x: 35.0, y: 15.0 });
+        assert!(filled_center.hits.iter().any(|hit| hit.kind == "rule-area"
+            && hit.uuid.as_deref() == Some("33333333-3333-3333-3333-333333333333")));
     }
 
     #[test]
