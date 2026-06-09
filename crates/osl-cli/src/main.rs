@@ -12,7 +12,10 @@ use osl_kicad::{
 use osl_model::{ModelCheckOptions, ModelCheckReport};
 use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
 use osl_render::render_kicad_scene_svg;
-use osl_report::{CheckResult, VerifyReport, VerifyRunResult, report_css};
+use osl_report::{
+    CheckResult, VerifyReport, VerifyRunResult, report_css, write_bench_report_bundle,
+    write_verify_report_bundle,
+};
 use osl_sim::{NgspiceCliBackend, SimulatorBackend, finalize_run_artifacts};
 use osl_waveform::{
     MeasurementKind, WaveformSummary, WaveformViewportQuery, measure, read_ngspice_raw,
@@ -171,10 +174,7 @@ fn verify_command(args: &[String]) -> OslResult<i32> {
         project: config.project,
         results,
     };
-    write_text(&output_dir.join("verify.json"), &report.to_json())?;
-    write_text(&output_dir.join("report.html"), &report.to_html())?;
-    write_text(&output_dir.join("report.md"), &report.to_markdown())?;
-    write_text(&output_dir.join("junit.xml"), &report.to_junit_xml())?;
+    write_verify_report_bundle(&output_dir, &report)?;
 
     println!(
         "verify {}: {} passed, {} failed, jobs={} -> {}",
@@ -233,10 +233,7 @@ fn bench_command(args: &[String]) -> OslResult<i32> {
         project: "bench".to_string(),
         results,
     };
-    write_text(&output_dir.join("bench.json"), &report.to_json())?;
-    write_text(&output_dir.join("report.html"), &report.to_html())?;
-    write_text(&output_dir.join("report.md"), &report.to_markdown())?;
-    write_text(&output_dir.join("junit.xml"), &report.to_junit_xml())?;
+    write_bench_report_bundle(&output_dir, &report)?;
 
     println!(
         "bench: {} passed, {} failed -> {}",

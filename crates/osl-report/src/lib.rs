@@ -1,9 +1,11 @@
+mod bundle;
 mod format;
 mod html;
 mod json;
 mod junit;
 mod markdown;
 
+pub use bundle::{ReportBundleFile, write_bench_report_bundle, write_verify_report_bundle};
 pub use html::report_css;
 
 use osl_core::{ParameterOverride, RunMetadata, RunStatus};
@@ -124,7 +126,10 @@ impl VerifyReport {
 
 #[cfg(test)]
 mod tests {
-    use super::{CheckResult, VerifyReport, VerifyRunResult};
+    use super::{
+        CheckResult, VerifyReport, VerifyRunResult, write_bench_report_bundle,
+        write_verify_report_bundle,
+    };
     use osl_core::{ParameterOverride, RunMetadata, RunStatus};
     use osl_waveform::WaveformSummary;
 
@@ -232,6 +237,36 @@ mod tests {
         assert!(!html.contains("runs/rc/report.html"));
         assert!(markdown.contains("[report](rc/report.html)"));
         assert!(!markdown.contains("[report](runs/rc/report.html)"));
+    }
+
+    #[test]
+    fn writes_report_bundles() {
+        let output_dir = std::env::temp_dir().join(format!(
+            "nekospice_report_bundle_{}_{}",
+            std::process::id(),
+            osl_core::now_unix_ms()
+        ));
+        let report = VerifyReport {
+            project: "bundle".to_string(),
+            results: vec![sample_run("/tmp/bundle/runs/rc", true, None)],
+        };
+
+        let verify_files = write_verify_report_bundle(&output_dir, &report).unwrap();
+        assert_eq!(verify_files[0].path, "verify.json");
+        assert!(output_dir.join("verify.json").is_file());
+        assert!(output_dir.join("report.html").is_file());
+        assert!(output_dir.join("report.md").is_file());
+        assert!(output_dir.join("junit.xml").is_file());
+
+        let bench_dir = output_dir.join("bench");
+        let bench_files = write_bench_report_bundle(&bench_dir, &report).unwrap();
+        assert_eq!(bench_files[0].path, "bench.json");
+        assert!(bench_dir.join("bench.json").is_file());
+        assert!(bench_dir.join("report.html").is_file());
+        assert!(bench_dir.join("report.md").is_file());
+        assert!(bench_dir.join("junit.xml").is_file());
+
+        let _ = std::fs::remove_dir_all(output_dir);
     }
 
     fn sample_run(
