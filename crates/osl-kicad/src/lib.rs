@@ -330,6 +330,10 @@ pub enum KicadSchematicEdit {
         to: KicadPoint,
         rotation: Option<f64>,
     },
+    MoveItem {
+        uuid: String,
+        delta: KicadPoint,
+    },
     DeleteItem {
         uuid: String,
     },
@@ -524,6 +528,7 @@ impl KicadSchematic {
                 to,
                 rotation,
             } => self.move_symbol(&reference, to, rotation),
+            KicadSchematicEdit::MoveItem { uuid, delta } => self.move_item_by_uuid(&uuid, delta),
             KicadSchematicEdit::DeleteItem { uuid } => self.delete_item_by_uuid(&uuid),
             KicadSchematicEdit::ConfigureSymbol {
                 reference,
@@ -615,6 +620,171 @@ impl KicadSchematic {
             operation: "move-symbol".to_string(),
             target: reference.to_string(),
         })
+    }
+
+    pub fn move_item_by_uuid(
+        &mut self,
+        uuid: &str,
+        delta: KicadPoint,
+    ) -> OslResult<KicadEditSummary> {
+        let uuid = uuid.trim();
+        if uuid.is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad move-item UUID must not be empty".to_string(),
+            ));
+        }
+        validate_point(delta, "item move delta")?;
+
+        if let Some(symbol) = self
+            .symbols
+            .iter_mut()
+            .find(|symbol| symbol.uuid.as_deref() == Some(uuid))
+        {
+            if let Some(at) = &mut symbol.at {
+                translate_at(at, delta);
+            } else {
+                symbol.at = Some(KicadAt {
+                    x: delta.x,
+                    y: delta.y,
+                    rotation: 0.0,
+                });
+            }
+            translate_properties(&mut symbol.properties, delta);
+            return Ok(move_summary("symbol", uuid));
+        }
+        if let Some(wire) = self
+            .wires
+            .iter_mut()
+            .find(|wire| wire.uuid.as_deref() == Some(uuid))
+        {
+            translate_points(&mut wire.points, delta);
+            return Ok(move_summary("wire", uuid));
+        }
+        if let Some(bus) = self
+            .buses
+            .iter_mut()
+            .find(|bus| bus.uuid.as_deref() == Some(uuid))
+        {
+            translate_points(&mut bus.points, delta);
+            return Ok(move_summary("bus", uuid));
+        }
+        if let Some(entry) = self
+            .bus_entries
+            .iter_mut()
+            .find(|entry| entry.uuid.as_deref() == Some(uuid))
+        {
+            translate_point(&mut entry.at, delta);
+            return Ok(move_summary("bus-entry", uuid));
+        }
+        if let Some(junction) = self
+            .junctions
+            .iter_mut()
+            .find(|junction| junction.uuid.as_deref() == Some(uuid))
+        {
+            translate_point(&mut junction.at, delta);
+            return Ok(move_summary("junction", uuid));
+        }
+        if let Some(marker) = self
+            .no_connects
+            .iter_mut()
+            .find(|marker| marker.uuid.as_deref() == Some(uuid))
+        {
+            translate_point(&mut marker.at, delta);
+            return Ok(move_summary("no-connect", uuid));
+        }
+        if let Some(label) = self
+            .labels
+            .iter_mut()
+            .find(|label| label.uuid.as_deref() == Some(uuid))
+        {
+            translate_optional_at(&mut label.at, delta);
+            translate_properties(&mut label.properties, delta);
+            return Ok(move_summary("label", uuid));
+        }
+        if let Some(label) = self
+            .directive_labels
+            .iter_mut()
+            .find(|label| label.uuid.as_deref() == Some(uuid))
+        {
+            translate_optional_at(&mut label.at, delta);
+            translate_properties(&mut label.properties, delta);
+            return Ok(move_summary("directive-label", uuid));
+        }
+        if let Some(text) = self
+            .text_items
+            .iter_mut()
+            .find(|text| text.uuid.as_deref() == Some(uuid))
+        {
+            translate_optional_at(&mut text.at, delta);
+            return Ok(move_summary("text", uuid));
+        }
+        if let Some(text_box) = self
+            .text_boxes
+            .iter_mut()
+            .find(|text_box| text_box.uuid.as_deref() == Some(uuid))
+        {
+            translate_optional_at(&mut text_box.at, delta);
+            return Ok(move_summary("text-box", uuid));
+        }
+        if let Some(sheet) = self
+            .sheets
+            .iter_mut()
+            .find(|sheet| sheet.uuid.as_deref() == Some(uuid))
+        {
+            translate_optional_at(&mut sheet.at, delta);
+            translate_properties(&mut sheet.properties, delta);
+            for pin in &mut sheet.pins {
+                translate_optional_at(&mut pin.at, delta);
+            }
+            return Ok(move_summary("sheet", uuid));
+        }
+        if let Some(graphic) = self
+            .graphics
+            .iter_mut()
+            .find(|graphic| graphic.uuid.as_deref() == Some(uuid))
+        {
+            translate_graphic(&mut graphic.graphic, delta);
+            return Ok(move_summary("graphic", uuid));
+        }
+        if let Some(rule_area) = self
+            .rule_areas
+            .iter_mut()
+            .find(|rule_area| rule_area.uuid.as_deref() == Some(uuid))
+        {
+            translate_points(&mut rule_area.points, delta);
+            return Ok(move_summary("rule-area", uuid));
+        }
+        if let Some(image) = self
+            .images
+            .iter_mut()
+            .find(|image| image.uuid.as_deref() == Some(uuid))
+        {
+            translate_optional_point(&mut image.at, delta);
+            return Ok(move_summary("image", uuid));
+        }
+        if let Some(table) = self
+            .tables
+            .iter_mut()
+            .find(|table| table.uuid.as_deref() == Some(uuid))
+        {
+            for cell in &mut table.cells {
+                translate_optional_at(&mut cell.at, delta);
+            }
+            return Ok(move_summary("table", uuid));
+        }
+        if self
+            .groups
+            .iter()
+            .any(|group| group.uuid.as_deref() == Some(uuid))
+        {
+            return Err(OslError::InvalidInput(format!(
+                "KiCad schematic group UUID '{uuid}' has no geometry; move its member items instead"
+            )));
+        }
+
+        Err(OslError::InvalidInput(format!(
+            "KiCad schematic item UUID '{uuid}' was not found"
+        )))
     }
 
     pub fn delete_item_by_uuid(&mut self, uuid: &str) -> OslResult<KicadEditSummary> {
@@ -3138,6 +3308,66 @@ fn remove_by_uuid<T>(
         true
     } else {
         false
+    }
+}
+
+fn translate_point(point: &mut KicadPoint, delta: KicadPoint) {
+    point.x += delta.x;
+    point.y += delta.y;
+}
+
+fn translate_optional_point(point: &mut Option<KicadPoint>, delta: KicadPoint) {
+    if let Some(point) = point {
+        translate_point(point, delta);
+    }
+}
+
+fn translate_points(points: &mut [KicadPoint], delta: KicadPoint) {
+    for point in points {
+        translate_point(point, delta);
+    }
+}
+
+fn translate_at(at: &mut KicadAt, delta: KicadPoint) {
+    at.x += delta.x;
+    at.y += delta.y;
+}
+
+fn translate_optional_at(at: &mut Option<KicadAt>, delta: KicadPoint) {
+    if let Some(at) = at {
+        translate_at(at, delta);
+    }
+}
+
+fn translate_properties(properties: &mut [KicadProperty], delta: KicadPoint) {
+    for property in properties {
+        translate_optional_at(&mut property.at, delta);
+    }
+}
+
+fn translate_graphic(graphic: &mut KicadGraphic, delta: KicadPoint) {
+    match graphic {
+        KicadGraphic::Polyline { points } | KicadGraphic::Bezier { points } => {
+            translate_points(points, delta);
+        }
+        KicadGraphic::Rectangle { start, end } => {
+            translate_point(start, delta);
+            translate_point(end, delta);
+        }
+        KicadGraphic::Circle { center, .. } => translate_point(center, delta),
+        KicadGraphic::Arc { start, mid, end } => {
+            translate_point(start, delta);
+            translate_optional_point(mid, delta);
+            translate_point(end, delta);
+        }
+        KicadGraphic::Text { at, .. } => translate_optional_at(at, delta),
+    }
+}
+
+fn move_summary(kind: &str, uuid: &str) -> KicadEditSummary {
+    KicadEditSummary {
+        operation: format!("move-{kind}"),
+        target: uuid.to_string(),
     }
 }
 
@@ -13599,6 +13829,125 @@ mod tests {
         let error = schematic
             .apply_edit(KicadSchematicEdit::DeleteItem {
                 uuid: "00000000-0000-4000-8000-000000000000".to_string(),
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("was not found"));
+    }
+
+    #[test]
+    fn moves_kicad_schematic_items_by_uuid_and_roundtrips() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let mut schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::AddSheet {
+                name: "gain_stage".to_string(),
+                file: "gain_stage.kicad_sch".to_string(),
+                at: KicadAt {
+                    x: 101.6,
+                    y: 43.18,
+                    rotation: 0.0,
+                },
+                size: KicadSize {
+                    width: 25.4,
+                    height: 12.7,
+                },
+                pins: vec![KicadSheetPin {
+                    name: "in".to_string(),
+                    pin_type: "input".to_string(),
+                    at: Some(KicadAt {
+                        x: 101.6,
+                        y: 48.26,
+                        rotation: 180.0,
+                    }),
+                    uuid: None,
+                    effects: None,
+                }],
+                uuid: Some("cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd".to_string()),
+            })
+            .unwrap();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::MoveItem {
+                uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa".to_string(),
+                delta: KicadPoint { x: 2.54, y: -1.27 },
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::MoveItem {
+                uuid: "22222222-2222-2222-2222-222222222222".to_string(),
+                delta: KicadPoint { x: 1.27, y: 2.54 },
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::MoveItem {
+                uuid: "66666666-6666-6666-6666-666666666666".to_string(),
+                delta: KicadPoint { x: -2.54, y: 1.27 },
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::MoveItem {
+                uuid: "cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd".to_string(),
+                delta: KicadPoint { x: 5.08, y: 2.54 },
+            })
+            .unwrap();
+
+        let resistor = schematic
+            .symbols
+            .iter()
+            .find(|symbol| symbol.uuid.as_deref() == Some("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+            .unwrap();
+        assert_close(resistor.at.unwrap().x, 72.39);
+        assert_close(resistor.at.unwrap().y, 49.53);
+        assert_close(
+            resistor
+                .properties
+                .iter()
+                .find(|property| property.name == "Reference")
+                .unwrap()
+                .at
+                .unwrap()
+                .x,
+            72.39,
+        );
+        assert_close(schematic.wires[0].points[0].x, 52.07);
+        assert_close(schematic.wires[0].points[0].y, 53.34);
+        assert_close(
+            schematic
+                .labels
+                .iter()
+                .find(|label| label.uuid.as_deref() == Some("66666666-6666-6666-6666-666666666666"))
+                .unwrap()
+                .at
+                .unwrap()
+                .x,
+            86.36,
+        );
+        assert_close(schematic.sheets[0].at.unwrap().x, 106.68);
+        assert_close(schematic.sheets[0].pins[0].at.unwrap().x, 106.68);
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(at 72.39 49.53 0)"));
+        assert!(exported.contains("(xy 52.07 53.34)"));
+        assert!(exported.contains("(at 86.36 52.07 0)"));
+        assert!(exported.contains("(at 106.68 45.72)"));
+        let reparsed = parse_kicad_schematic(&exported, "moved_items.kicad_sch").unwrap();
+        let scene = reparsed.canvas_scene();
+        assert_close(scene.symbols[1].at.x, 72.39);
+        assert_close(scene.wires[0].points[0].x, 52.07);
+        assert_close(scene.labels[1].at.unwrap().x, 86.36);
+        assert_close(scene.sheets[0].at.unwrap().x, 106.68);
+        assert_close(scene.sheets[0].pins[0].at.unwrap().x, 106.68);
+
+        let error = schematic
+            .apply_edit(KicadSchematicEdit::MoveItem {
+                uuid: "00000000-0000-4000-8000-000000000000".to_string(),
+                delta: KicadPoint { x: 1.0, y: 1.0 },
             })
             .unwrap_err();
         assert!(error.to_string().contains("was not found"));
