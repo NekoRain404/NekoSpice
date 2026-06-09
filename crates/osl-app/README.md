@@ -10,12 +10,13 @@ search stay in `osl-kicad`.
 - `app.rs`: application state, document/library loading, and edit commands.
 - `app/canvas_panel.rs`: canvas widget input, shortcuts, painter routing, and scene loading helper.
 - `app/panels.rs`: toolbar, project/selection side panel, and `eframe::App` layout.
-- `app/placement.rs`: symbol placement mode state, selected scope routing, repeat placement, and post-edit selection refresh.
+- `app/placement.rs`: symbol placement mode state, repeat placement, and post-edit selection refresh.
 - `app/runtime.rs`: native window options, wgpu renderer selection, and initial egui style.
-- `app/symbol_browser.rs`: symbol library browser, metadata details, preview canvas, and placement controls.
+- `app/symbol_browser.rs`: symbol library browser, metadata details, and preview canvas.
+- `app/symbol_placement_controls.rs`: unit, body-style, and pin-alternate controls for KiCad-compatible symbol placement.
 - `document.rs`: editable KiCad schematic adapter around `KicadSchematicEdit`.
 - `library.rs`: GUI-facing symbol-library table, definition, dependency, and preview adapter around `KicadSymbolLibraryIndex`.
-- `placement_config.rs`: GUI-neutral symbol placement scope (`unit` / `body_style`) shared by preview and document edits.
+- `placement_config.rs`: GUI-neutral symbol placement scope (`unit` / `body_style` / pin alternates) shared by preview and document edits.
 - `viewport.rs`: world/screen transforms, zoom, pan, fit-to-scene, and culling bounds.
 - `canvas.rs`: KiCad canvas scene traversal and draw-order routing.
 - `canvas/primitives.rs`: current egui painter prototype for grid, shapes, graphics, and bounds.

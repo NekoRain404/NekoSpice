@@ -90,7 +90,7 @@ impl NekoSpiceApp {
                 y: point.y,
                 rotation: 0.0,
             },
-            placement.config,
+            placement.config.clone(),
         ) else {
             return;
         };

@@ -3,7 +3,6 @@ use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadEditSummary, KicadPoint, KicadSchematic, KicadSchematicEdit,
     KicadSymbolDef, read_kicad_schematic_with_libraries, write_kicad_schematic,
 };
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -89,7 +88,7 @@ impl KicadGuiDocument {
                 at,
                 unit: config.unit_option(),
                 body_style: config.body_style,
-                pin_alternates: BTreeMap::new(),
+                pin_alternates: config.pin_alternates,
                 uuid: None,
             })
             .inspect(|_| {
@@ -148,6 +147,7 @@ fn reference_prefix(definition: &KicadSymbolDef) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use osl_kicad::parse_kicad_symbol_library;
     use std::fs;
 
     #[test]
@@ -254,6 +254,41 @@ mod tests {
     }
 
     #[test]
+    fn document_places_symbol_with_selected_pin_alternate() {
+        let temp = crate::test_support::temp_schematic_copy("gui_place_alt");
+        let temp_path = temp.path();
+
+        let mut document = KicadGuiDocument::load(temp_path.to_path_buf()).unwrap();
+        let definition = test_symbol_with_alternate("NekoSpice:Alt");
+        let mut config = SymbolPlacementConfig::default();
+        config
+            .pin_alternates
+            .insert("2".to_string(), "ALT2".to_string());
+
+        let placement = document
+            .place_symbol_from_definition(
+                definition,
+                Vec::new(),
+                KicadAt {
+                    x: 101.6,
+                    y: 50.8,
+                    rotation: 0.0,
+                },
+                config,
+            )
+            .unwrap();
+
+        assert_eq!(placement.reference, "U1");
+        let placed = document
+            .schematic
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference() == Some("U1"))
+            .unwrap();
+        assert_eq!(placed.pins[1].alternate.as_deref(), Some("ALT2"));
+    }
+
+    #[test]
     fn symbol_reference_prefix_ignores_kicad_placeholder_suffix() {
         let mut definition = test_symbol_definition("NekoSpice:R");
         definition.properties.push(osl_kicad::KicadProperty {
@@ -290,5 +325,28 @@ mod tests {
             graphics: Vec::new(),
             pins: Vec::new(),
         }
+    }
+
+    fn test_symbol_with_alternate(name: &str) -> KicadSymbolDef {
+        parse_kicad_symbol_library(
+            &format!(
+                r#"(kicad_symbol_lib
+  (version 20230121)
+  (symbol "{name}"
+    (property "Reference" "U" (at 0 0 0))
+    (property "Value" "Alt" (at 0 -2.54 0))
+    (symbol "Alt_0_1"
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "~") (number "1"))
+      (pin passive line (at 2.54 0 180) (length 2.54) (name "~") (number "2") (alternate "ALT2" output line))
+    )
+  )
+)"#
+            ),
+            "gui_alt_symbol.kicad_sym",
+        )
+        .unwrap()
+        .symbol(name)
+        .unwrap()
+        .clone()
     }
 }

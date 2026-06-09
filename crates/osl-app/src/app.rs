@@ -11,6 +11,7 @@ mod panels;
 mod placement;
 mod runtime;
 mod symbol_browser;
+mod symbol_placement_controls;
 
 pub use canvas_panel::load_canvas_scene;
 use placement::SymbolPlacementState;

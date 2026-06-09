@@ -1,5 +1,6 @@
 use super::NekoSpiceApp;
 use crate::placement_config::SymbolPlacementConfig;
+use eframe::egui;
 use osl_kicad::{KicadAt, KicadCanvasHit, KicadCanvasScene, KicadPoint};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,7 +18,7 @@ impl NekoSpiceApp {
         };
         self.placement = Some(SymbolPlacementState {
             symbol_id: symbol_id.clone(),
-            config: self.selected_symbol_placement,
+            config: self.selected_symbol_placement.clone(),
             keep_active: false,
         });
         self.status_message = Some(format!("Click canvas to place {symbol_id}"));
@@ -26,6 +27,22 @@ impl NekoSpiceApp {
     pub(super) fn cancel_symbol_placement(&mut self) {
         if self.placement.take().is_some() {
             self.status_message = Some("Canceled symbol placement".to_string());
+        }
+    }
+
+    pub(super) fn draw_symbol_placement_controls(&mut self, ui: &mut egui::Ui) {
+        if let Some(placement) = &self.placement {
+            ui.separator();
+            ui.label(format!("Placing: {}", placement.symbol_id));
+            let mut keep_active = placement.keep_active;
+            if ui.checkbox(&mut keep_active, "Repeat").changed()
+                && let Some(placement) = &mut self.placement
+            {
+                placement.keep_active = keep_active;
+            }
+            if ui.button("Cancel").clicked() {
+                self.cancel_symbol_placement();
+            }
         }
     }
 
@@ -40,8 +57,8 @@ impl NekoSpiceApp {
         let config = self
             .placement
             .as_ref()
-            .map(|placement| placement.config)
-            .unwrap_or(self.selected_symbol_placement);
+            .map(|placement| placement.config.clone())
+            .unwrap_or_else(|| self.selected_symbol_placement.clone());
         let Some(library) = &self.library else {
             self.status_message = Some("No symbol library loaded".to_string());
             return;
