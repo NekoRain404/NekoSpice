@@ -8,7 +8,8 @@ impl NekoSpiceApp {
             StudioWorkspace::Home => self.draw_home_dashboard(ui),
             StudioWorkspace::Schematic => self.draw_schematic_center_workspace(ui),
             StudioWorkspace::Library => self.draw_library_center_workspace(ui),
-            StudioWorkspace::Simulation | StudioWorkspace::Reports | StudioWorkspace::Settings => {
+            StudioWorkspace::Simulation => self.draw_simulation_center_workspace(ui),
+            StudioWorkspace::Reports | StudioWorkspace::Settings => {
                 self.draw_studio_canvas_frame(ui)
             }
         }

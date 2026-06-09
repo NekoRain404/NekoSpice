@@ -41,11 +41,13 @@ impl StudioLocale {
 pub(super) enum UiText {
     ActiveProject,
     AiAssistant,
+    AnalysisSetup,
     Appearance,
     AskCircuit,
     AssistantPrompt,
     Average,
     Backend,
+    Body,
     Bounds,
     Buses,
     ApplyProperties,
@@ -111,6 +113,7 @@ pub(super) enum UiText {
     NoSelection,
     NoWaveform,
     Netlist,
+    NetlistPreview,
     OpenSchematic,
     OpenProject,
     Optimization,
@@ -149,7 +152,10 @@ pub(super) enum UiText {
     Shortcuts,
     Simulator,
     SimulationQueue,
+    SimulationSolver,
+    SimulationSolverCaption,
     SimulationWorkspace,
+    SolverEngine,
     SolverHealth,
     Solver,
     StabilityRisk,
@@ -192,6 +198,8 @@ pub(super) enum UiText {
     Right,
     Up,
     Validation,
+    RunOutput,
+    SetDirective,
 }
 
 impl UiText {
@@ -199,11 +207,13 @@ impl UiText {
         match self {
             Self::ActiveProject => "Active Project",
             Self::AiAssistant => "AI Assistant",
+            Self::AnalysisSetup => "Analysis Setup",
             Self::Appearance => "Appearance",
             Self::AskCircuit => "Ask anything about your circuit",
             Self::AssistantPrompt => "How can I help with the active schematic?",
             Self::Average => "Average",
             Self::Backend => "Backend",
+            Self::Body => "Body",
             Self::Bounds => "Bounds",
             Self::Buses => "Buses",
             Self::ApplyProperties => "Apply Properties",
@@ -271,6 +281,7 @@ impl UiText {
             Self::NoSelection => "No selection",
             Self::NoWaveform => "No waveform",
             Self::Netlist => "Netlist",
+            Self::NetlistPreview => "Netlist Preview",
             Self::OpenSchematic => "Open Schematic",
             Self::OpenProject => "Open Project",
             Self::Optimization => "Optimization",
@@ -313,7 +324,12 @@ impl UiText {
             Self::Shortcuts => "Shortcuts",
             Self::Simulator => "Simulator",
             Self::SimulationQueue => "Simulation Queue",
+            Self::SimulationSolver => "Simulation & Solver",
+            Self::SimulationSolverCaption => {
+                "Configure analyses, launch ngspice, and inspect generated run outputs."
+            }
             Self::SimulationWorkspace => "Simulation Workspace",
+            Self::SolverEngine => "Solver Engine",
             Self::SolverHealth => "System & Solver Health",
             Self::Solver => "Solver",
             Self::StabilityRisk => "Stability Risk",
@@ -356,6 +372,8 @@ impl UiText {
             Self::Right => "Right",
             Self::Up => "Up",
             Self::Validation => "Validation",
+            Self::RunOutput => "Run Output",
+            Self::SetDirective => "Set Directive",
         }
     }
 
@@ -363,11 +381,13 @@ impl UiText {
         match self {
             Self::ActiveProject => "当前项目",
             Self::AiAssistant => "AI 助手",
+            Self::AnalysisSetup => "分析设置",
             Self::Appearance => "外观",
             Self::AskCircuit => "询问当前电路问题",
             Self::AssistantPrompt => "我可以怎样协助当前原理图？",
             Self::Average => "平均值",
             Self::Backend => "后端",
+            Self::Body => "正文",
             Self::Bounds => "边界",
             Self::Buses => "总线",
             Self::ApplyProperties => "应用属性",
@@ -433,6 +453,7 @@ impl UiText {
             Self::NoSelection => "未选择",
             Self::NoWaveform => "无波形",
             Self::Netlist => "网表",
+            Self::NetlistPreview => "网表预览",
             Self::OpenSchematic => "打开原理图",
             Self::OpenProject => "打开项目",
             Self::Optimization => "优化",
@@ -471,7 +492,10 @@ impl UiText {
             Self::Shortcuts => "快捷入口",
             Self::Simulator => "仿真器",
             Self::SimulationQueue => "仿真队列",
+            Self::SimulationSolver => "仿真与求解器",
+            Self::SimulationSolverCaption => "配置分析任务，启动 ngspice，并检查生成的运行输出。",
             Self::SimulationWorkspace => "仿真工作区",
+            Self::SolverEngine => "求解器引擎",
             Self::SolverHealth => "系统与求解器状态",
             Self::Solver => "求解器",
             Self::StabilityRisk => "稳定性风险",
@@ -514,6 +538,8 @@ impl UiText {
             Self::Right => "右",
             Self::Up => "上",
             Self::Validation => "验证",
+            Self::RunOutput => "运行输出",
+            Self::SetDirective => "设置指令",
         }
     }
 }

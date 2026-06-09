@@ -1,4 +1,5 @@
 use super::NekoSpiceApp;
+use super::localization::UiText;
 use super::simulation_artifacts_panel::draw_simulation_artifacts_panel;
 use super::simulation_report_panel::draw_simulation_report_panel;
 use super::simulation_waveform_panel::draw_simulation_waveform_panel;
@@ -41,7 +42,7 @@ impl Default for SimulationPanelState {
 impl NekoSpiceApp {
     pub(super) fn draw_simulation_panel(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
-        ui.heading("Simulation");
+        ui.heading(self.text(UiText::SimulationWorkspace));
         self.draw_simulation_directive_editor(ui);
 
         let is_running = self.simulation_panel.active_task.is_some();
@@ -52,20 +53,20 @@ impl NekoSpiceApp {
             if ui
                 .add_enabled(
                     self.document.is_some() && !is_running,
-                    egui::Button::new("Run ngspice"),
+                    egui::Button::new(self.text(UiText::RunSimulation)),
                 )
                 .clicked()
             {
                 self.run_simulation_from_panel();
             }
             if is_running {
-                ui.label("Running");
+                ui.label(self.text(UiText::Running));
             }
         });
         self.draw_simulation_run_status(ui);
 
         let Some(document) = &self.document else {
-            ui.label("No editable schematic loaded");
+            ui.label(self.text(UiText::NoEditableSchematicLoaded));
             return;
         };
 
@@ -107,7 +108,7 @@ impl NekoSpiceApp {
         }
     }
 
-    fn draw_simulation_directive_editor(&mut self, ui: &mut egui::Ui) {
+    pub(in crate::app) fn draw_simulation_directive_editor(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             for (kind, label) in [
                 (KicadSimulationDirectiveKind::Tran, ".tran"),
@@ -119,11 +120,14 @@ impl NekoSpiceApp {
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Body");
+            ui.label(self.text(UiText::Body));
             ui.text_edit_singleline(&mut self.simulation_panel.directive_body);
         });
         if ui
-            .add_enabled(self.document.is_some(), egui::Button::new("Set Directive"))
+            .add_enabled(
+                self.document.is_some(),
+                egui::Button::new(self.text(UiText::SetDirective)),
+            )
             .clicked()
         {
             self.apply_simulation_directive_edit();
@@ -197,9 +201,9 @@ impl NekoSpiceApp {
         }
     }
 
-    fn draw_simulation_run_status(&mut self, ui: &mut egui::Ui) {
+    pub(in crate::app) fn draw_simulation_run_status(&mut self, ui: &mut egui::Ui) {
         if self.simulation_panel.active_task.is_some() {
-            ui.label("Background simulation is running");
+            ui.label(self.text(UiText::Running));
         }
         if let Some(error) = &self.simulation_panel.last_error {
             ui.colored_label(

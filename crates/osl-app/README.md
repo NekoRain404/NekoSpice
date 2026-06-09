@@ -62,6 +62,12 @@ search stay in `osl-kicad`.
 - `app/simulation_panel.rs`: simulation directive editor, schematic diagnostics,
   SPICE netlist preview, and ngspice run controls routed through the document
   and simulation adapters.
+- `app/simulation_workspace.rs`: Simulation center workspace layout, solver
+  summary metrics, run button, and high-level analysis surface routing.
+- `app/simulation_workspace_sections.rs`: Simulation center analysis setup,
+  netlist preview, run-output, and diagnostics sections.
+- `app/simulation_workspace_widgets.rs`: Simulation-only analysis mode buttons,
+  solver metric cards, and code preview rows.
 - `app/simulation_waveform_panel.rs`: GUI-only waveform result panel for signal
   selection, compact measurement display, and preview-envelope drawing.
 - `app/status_strip.rs`: Studio project, solver, diagnostics, selection, and
