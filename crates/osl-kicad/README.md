@@ -6,7 +6,7 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 ## Boundaries
 
 - `lib.rs` currently exposes the public KiCad API and still owns top-level
-  root API assembly and schematic-to-SPICE export.
+  root API assembly.
 - `diagnostics.rs` owns schematic check report DTOs, hierarchy netlist report
   DTOs, diagnostic severity formatting, and shared diagnostic constructors.
 - `metadata.rs` owns schematic title block/comment IR plus title block
@@ -17,6 +17,9 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
   metadata/style/count aggregation helpers.
 - `schematic_io.rs` owns top-level `.kicad_sch` read/write entry points, root
   S-expression parsing, and schematic-level writer orchestration.
+- `spice_export.rs` owns schematic-to-SPICE export, hierarchy expansion,
+  SPICE directive/include collection, symbol-to-device mapping, and hierarchy
+  net alias scoping.
 - `style.rs` owns reusable KiCad stroke/fill/color/text-effects/margins IR,
   default text effects, style parse/write helpers, and style JSON projection
   helpers shared by schematic, symbol, canvas, and renderer paths.
