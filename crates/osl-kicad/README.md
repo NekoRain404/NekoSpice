@@ -19,6 +19,9 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 - `style.rs` owns reusable KiCad stroke/fill/color/text-effects/margins IR,
   default text effects, style parse/write helpers, and style JSON projection
   helpers shared by schematic, symbol, canvas, and renderer paths.
+- `coordinates.rs` owns reusable KiCad point/size/at IR, coordinate parse
+  helpers, point-list S-expression writer helpers, and coordinate JSON
+  projection helpers used across parser, canvas, edit, and geometry paths.
 - `project.rs` owns `.kicad_pro` project JSON parsing, project summary DTOs, and
   schematic stem candidate discovery used by KiCad project import paths.
 - `symbol_library.rs` owns `.kicad_sym` library containers, `sym-lib-table`

@@ -2,7 +2,7 @@ use crate::sexpr::{
     Sexp, atom_text, child, child_value, format_number, head, list_items, list_value,
     sexpr_atom_or_string, sexpr_string,
 };
-use crate::{KicadSize, parse_kicad_bool_value};
+use crate::{KicadSize, parse_kicad_bool_value, parse_size};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadStroke {
@@ -164,14 +164,6 @@ fn has_effect_flag(items: &[Sexp], name: &str) -> bool {
         .iter()
         .skip(1)
         .any(|item| atom_text(item) == Some(name) || head(item) == Some(name))
-}
-
-fn parse_size(node: &Sexp) -> Option<KicadSize> {
-    let items = list_items(node);
-    Some(KicadSize {
-        width: atom_text(items.get(1)?)?.parse().ok()?,
-        height: atom_text(items.get(2)?)?.parse().ok()?,
-    })
 }
 
 pub(crate) fn parse_color(node: &Sexp) -> Option<KicadColor> {

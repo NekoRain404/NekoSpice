@@ -1,6 +1,7 @@
 mod canvas;
 mod canvas_hit;
 mod connectivity;
+mod coordinates;
 mod diagnostics;
 mod edit;
 mod geometry;
@@ -24,6 +25,7 @@ pub use canvas::{
 };
 pub use canvas_hit::{KicadCanvasHit, KicadCanvasHitReport};
 pub use connectivity::{KicadNet, KicadNetGraph};
+pub use coordinates::{KicadAt, KicadPoint, KicadSize};
 pub use diagnostics::{
     KicadDiagnosticSeverity, KicadHierarchyNetlist, KicadSchematicCheckReport,
     KicadSchematicDiagnostic,
@@ -50,6 +52,10 @@ pub use symbol_library::{
 pub use transform::normalize_symbol_mirror;
 
 use connectivity::{coordinate_key, normalize_net_name, same_point, same_size};
+pub(crate) use coordinates::{
+    kicad_at_value, kicad_point_value, kicad_points_value, kicad_size_value, parse_at,
+    parse_image_at, parse_points, parse_size, parse_xy, write_points_sexpr,
+};
 use diagnostics::kicad_schematic_diagnostic;
 use edit::{
     delete_summary, fnv1a64, is_valid_bus_entry_size, move_sheet_pin_by_uuid, move_summary,
@@ -5015,34 +5021,6 @@ impl KicadNoConnect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct KicadPoint {
-    pub x: f64,
-    pub y: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct KicadSize {
-    pub width: f64,
-    pub height: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct KicadAt {
-    pub x: f64,
-    pub y: f64,
-    pub rotation: f64,
-}
-
-impl KicadAt {
-    fn point(self) -> KicadPoint {
-        KicadPoint {
-            x: self.x,
-            y: self.y,
-        }
-    }
-}
-
 fn parse_symbol_instance(node: &Sexp) -> Option<KicadSymbolInstance> {
     let items = list_items(node);
     Some(KicadSymbolInstance {
@@ -5605,36 +5583,6 @@ fn parse_no_connect(node: &Sexp) -> Option<KicadNoConnect> {
     })
 }
 
-fn parse_points(node: &Sexp) -> Vec<KicadPoint> {
-    direct_children(list_items(node), "xy")
-        .filter_map(parse_xy)
-        .collect()
-}
-
-fn parse_xy(node: &Sexp) -> Option<KicadPoint> {
-    let items = list_items(node);
-    Some(KicadPoint {
-        x: atom_text(items.get(1)?)?.parse().ok()?,
-        y: atom_text(items.get(2)?)?.parse().ok()?,
-    })
-}
-
-fn parse_image_at(node: &Sexp) -> Option<KicadPoint> {
-    let items = list_items(node);
-    Some(KicadPoint {
-        x: atom_text(items.get(1)?)?.parse().ok()?,
-        y: atom_text(items.get(2)?)?.parse().ok()?,
-    })
-}
-
-fn parse_size(node: &Sexp) -> Option<KicadSize> {
-    let items = list_items(node);
-    Some(KicadSize {
-        width: atom_text(items.get(1)?)?.parse().ok()?,
-        height: atom_text(items.get(2)?)?.parse().ok()?,
-    })
-}
-
 fn parse_span(node: &Sexp) -> (usize, usize) {
     let items = list_items(node);
     let columns = items
@@ -5648,19 +5596,6 @@ fn parse_span(node: &Sexp) -> (usize, usize) {
         .and_then(|value| value.parse().ok())
         .unwrap_or(1);
     (columns, rows)
-}
-
-fn parse_at(node: &Sexp) -> Option<KicadAt> {
-    let items = list_items(node);
-    Some(KicadAt {
-        x: atom_text(items.get(1)?)?.parse().ok()?,
-        y: atom_text(items.get(2)?)?.parse().ok()?,
-        rotation: items
-            .get(3)
-            .and_then(atom_text)
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(0.0),
-    })
 }
 
 fn collect_pin_defs(node: &Sexp) -> Vec<KicadPinDef> {
@@ -5914,15 +5849,6 @@ fn parse_number_list(node: &Sexp) -> Vec<f64> {
         .filter_map(|value| value.parse().ok())
         .collect()
 }
-fn write_points_sexpr(output: &mut String, points: &[KicadPoint]) {
-    let points = points
-        .iter()
-        .map(|point| format!("(xy {} {})", format_number(point.x), format_number(point.y)))
-        .collect::<Vec<_>>()
-        .join(" ");
-    output.push_str(&format!(" (pts {})", points));
-}
-
 fn write_base64_data_sexpr(output: &mut String, data: &str, indent: usize) {
     let pad = " ".repeat(indent);
     output.push_str(&format!("{}(data", pad));
@@ -6028,37 +5954,6 @@ pub(crate) fn kicad_bounding_box_value(bounds: KicadBoundingBox) -> serde_json::
         },
         "width": bounds.width(),
         "height": bounds.height(),
-    })
-}
-
-pub(crate) fn kicad_point_value(point: KicadPoint) -> serde_json::Value {
-    serde_json::json!({
-        "x": point.x,
-        "y": point.y,
-    })
-}
-
-pub(crate) fn kicad_points_value(points: &[KicadPoint]) -> serde_json::Value {
-    serde_json::Value::Array(
-        points
-            .iter()
-            .map(|point| kicad_point_value(*point))
-            .collect(),
-    )
-}
-
-pub(crate) fn kicad_size_value(size: KicadSize) -> serde_json::Value {
-    serde_json::json!({
-        "width": size.width,
-        "height": size.height,
-    })
-}
-
-pub(crate) fn kicad_at_value(at: KicadAt) -> serde_json::Value {
-    serde_json::json!({
-        "x": at.x,
-        "y": at.y,
-        "rotation": at.rotation,
     })
 }
 
