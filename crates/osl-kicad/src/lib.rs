@@ -3667,6 +3667,7 @@ impl KicadCanvasScene {
                     .pins
                     .iter()
                     .map(|pin| {
+                        let pin_bounds = kicad_at_bounds(pin.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS);
                         if let Some(at) = pin.at {
                             sheet_bounds.include(at.point());
                             bounds.include(at.point());
@@ -3676,6 +3677,7 @@ impl KicadCanvasScene {
                             name: pin.name.clone(),
                             pin_type: pin.pin_type.clone(),
                             at: pin.at,
+                            bounds: pin_bounds,
                             effects: pin.effects.clone(),
                         }
                     })
@@ -3705,6 +3707,7 @@ impl KicadCanvasScene {
                     uuid: wire.uuid.clone(),
                     points: wire.points.clone(),
                     stroke: wire.stroke.clone(),
+                    bounds: kicad_points_bounds(&wire.points, KICAD_CANVAS_LINE_BOUNDS_PADDING),
                 }
             })
             .collect::<Vec<_>>();
@@ -3724,7 +3727,12 @@ impl KicadCanvasScene {
             .iter()
             .map(|image| {
                 let image_size = image.image_size_mm();
-                if let Some(image_bounds) = image.bounding_box() {
+                let image_bounds = image.bounding_box().or_else(|| {
+                    image
+                        .at
+                        .map(|at| kicad_point_bounds(at, KICAD_CANVAS_POINT_BOUNDS_RADIUS))
+                });
+                if let Some(image_bounds) = image_bounds {
                     bounds.include_box(image_bounds);
                 } else if let Some(at) = image.at {
                     bounds.include(at);
@@ -3736,6 +3744,7 @@ impl KicadCanvasScene {
                     data_base64: image.data_base64.clone(),
                     mime_type: image.mime_type().to_string(),
                     image_size,
+                    bounds: image_bounds,
                 }
             })
             .collect::<Vec<_>>();
@@ -3744,14 +3753,17 @@ impl KicadCanvasScene {
             .tables
             .iter()
             .map(|table| {
+                let mut table_bounds = KicadBoundingBoxBuilder::default();
                 let cells = table
                     .cells
                     .iter()
                     .map(|cell| {
-                        if let Some(cell_bounds) = cell.bounding_box() {
+                        let cell_bounds = cell
+                            .bounding_box()
+                            .or_else(|| kicad_at_bounds(cell.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS));
+                        if let Some(cell_bounds) = cell_bounds {
+                            table_bounds.include_box(cell_bounds);
                             bounds.include_box(cell_bounds);
-                        } else if let Some(at) = cell.at {
-                            bounds.include(at.point());
                         }
                         KicadCanvasTableCell {
                             uuid: cell.uuid.clone(),
@@ -3763,6 +3775,7 @@ impl KicadCanvasScene {
                             row_span: cell.row_span,
                             fill: cell.fill.clone(),
                             effects: cell.effects.clone(),
+                            bounds: cell_bounds,
                         }
                     })
                     .collect::<Vec<_>>();
@@ -3772,6 +3785,7 @@ impl KicadCanvasScene {
                     column_widths: table.column_widths.clone(),
                     row_heights: table.row_heights.clone(),
                     cells,
+                    bounds: table_bounds.finish(),
                 }
             })
             .collect::<Vec<_>>();
@@ -3788,6 +3802,10 @@ impl KicadCanvasScene {
                     points: rule_area.points.clone(),
                     stroke: rule_area.stroke.clone(),
                     fill: rule_area.fill.clone(),
+                    bounds: kicad_points_bounds(
+                        &rule_area.points,
+                        KICAD_CANVAS_LINE_BOUNDS_PADDING,
+                    ),
                 }
             })
             .collect::<Vec<_>>();
@@ -3803,6 +3821,7 @@ impl KicadCanvasScene {
                     uuid: bus.uuid.clone(),
                     points: bus.points.clone(),
                     stroke: bus.stroke.clone(),
+                    bounds: kicad_points_bounds(&bus.points, KICAD_CANVAS_LINE_BOUNDS_PADDING),
                 }
             })
             .collect::<Vec<_>>();
@@ -3813,11 +3832,13 @@ impl KicadCanvasScene {
             .map(|entry| {
                 bounds.include(entry.at);
                 bounds.include(entry.end());
+                let entry_points = [entry.at, entry.end()];
                 KicadCanvasBusEntry {
                     uuid: entry.uuid.clone(),
                     at: entry.at,
                     size: entry.size,
                     stroke: entry.stroke.clone(),
+                    bounds: kicad_points_bounds(&entry_points, KICAD_CANVAS_LINE_BOUNDS_PADDING),
                 }
             })
             .collect::<Vec<_>>();
@@ -3835,6 +3856,7 @@ impl KicadCanvasScene {
                     kind: label.kind,
                     at: label.at,
                     effects: label.effects.clone(),
+                    bounds: kicad_at_bounds(label.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
                 }
             })
             .collect::<Vec<_>>();
@@ -3843,6 +3865,11 @@ impl KicadCanvasScene {
             .directive_labels
             .iter()
             .map(|label| {
+                let label_bounds = label.at.map(|at| {
+                    let pin_end = pin_body_end(at, label.length.unwrap_or(2.54));
+                    kicad_points_bounds(&[at.point(), pin_end], KICAD_CANVAS_LINE_BOUNDS_PADDING)
+                        .expect("directive label bounds use two points")
+                });
                 if let Some(at) = label.at {
                     bounds.include(at.point());
                     let pin_end = pin_body_end(at, label.length.unwrap_or(2.54));
@@ -3856,6 +3883,7 @@ impl KicadCanvasScene {
                     shape: label.shape.clone(),
                     effects: label.effects.clone(),
                     properties: label.properties.clone(),
+                    bounds: label_bounds,
                 }
             })
             .collect::<Vec<_>>();
@@ -3873,6 +3901,7 @@ impl KicadCanvasScene {
                     at: text.at,
                     is_spice_directive: text.text.trim_start().starts_with('.'),
                     effects: text.effects.clone(),
+                    bounds: kicad_at_bounds(text.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
                 }
             })
             .collect::<Vec<_>>();
@@ -3881,10 +3910,11 @@ impl KicadCanvasScene {
             .text_boxes
             .iter()
             .map(|text_box| {
-                if let Some(text_box_bounds) = text_box.bounding_box() {
+                let text_box_bounds = text_box
+                    .bounding_box()
+                    .or_else(|| kicad_at_bounds(text_box.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS));
+                if let Some(text_box_bounds) = text_box_bounds {
                     bounds.include_box(text_box_bounds);
-                } else if let Some(at) = text_box.at {
-                    bounds.include(at.point());
                 }
                 KicadCanvasTextBox {
                     uuid: text_box.uuid.clone(),
@@ -3895,6 +3925,7 @@ impl KicadCanvasScene {
                     stroke: text_box.stroke.clone(),
                     fill: text_box.fill.clone(),
                     effects: text_box.effects.clone(),
+                    bounds: text_box_bounds,
                 }
             })
             .collect::<Vec<_>>();
@@ -3909,6 +3940,13 @@ impl KicadCanvasScene {
                     at: junction.at,
                     diameter: junction.diameter,
                     color: junction.color,
+                    bounds: kicad_point_bounds(
+                        junction.at,
+                        junction
+                            .diameter
+                            .map(|diameter| diameter.max(0.0) / 2.0)
+                            .unwrap_or(KICAD_CANVAS_POINT_BOUNDS_RADIUS),
+                    ),
                 }
             })
             .collect::<Vec<_>>();
@@ -3921,18 +3959,45 @@ impl KicadCanvasScene {
                 KicadCanvasNoConnect {
                     uuid: marker.uuid.clone(),
                     at: marker.at,
+                    bounds: kicad_point_bounds(marker.at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
                 }
             })
             .collect::<Vec<_>>();
 
+        let item_bounds = kicad_canvas_item_bounds(
+            &symbols,
+            &sheets,
+            &graphics,
+            &images,
+            &tables,
+            &rule_areas,
+            &wires,
+            &buses,
+            &bus_entries,
+            &directive_labels,
+            &labels,
+            &text_items,
+            &text_boxes,
+            &junctions,
+            &no_connects,
+        );
         let groups = schematic
             .groups
             .iter()
-            .map(|group| KicadCanvasGroup {
-                uuid: group.uuid.clone(),
-                name: group.name.clone(),
-                locked: group.locked,
-                members: group.members.clone(),
+            .map(|group| {
+                let mut group_bounds = KicadBoundingBoxBuilder::default();
+                for member in &group.members {
+                    if let Some(bounds) = item_bounds.get(member) {
+                        group_bounds.include_box(*bounds);
+                    }
+                }
+                KicadCanvasGroup {
+                    uuid: group.uuid.clone(),
+                    name: group.name.clone(),
+                    locked: group.locked,
+                    members: group.members.clone(),
+                    bounds: group_bounds.finish(),
+                }
             })
             .collect::<Vec<_>>();
 
@@ -4175,6 +4240,7 @@ pub struct KicadCanvasSheetPin {
     pub pin_type: String,
     pub at: Option<KicadAt>,
     pub effects: Option<KicadTextEffects>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasSheetPin {
@@ -4185,6 +4251,7 @@ impl KicadCanvasSheetPin {
             "pin_type": self.pin_type,
             "at": self.at.map(kicad_at_value),
             "effects": self.effects.as_ref().map(kicad_text_effects_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4195,6 +4262,7 @@ pub struct KicadCanvasRuleArea {
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
     pub fill: Option<KicadFill>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasRuleArea {
@@ -4204,6 +4272,7 @@ impl KicadCanvasRuleArea {
             "points": kicad_points_value(&self.points),
             "stroke": self.stroke.as_ref().map(kicad_stroke_value),
             "fill": self.fill.as_ref().map(kicad_fill_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4217,6 +4286,7 @@ pub struct KicadCanvasDirectiveLabel {
     pub shape: Option<String>,
     pub effects: Option<KicadTextEffects>,
     pub properties: Vec<KicadProperty>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasDirectiveLabel {
@@ -4229,6 +4299,7 @@ impl KicadCanvasDirectiveLabel {
             "shape": self.shape,
             "effects": self.effects.as_ref().map(kicad_text_effects_value),
             "properties": self.properties.iter().map(kicad_property_value).collect::<Vec<_>>(),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4293,6 +4364,7 @@ impl KicadCanvasGraphic {
                 "points": kicad_points_value(points),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
+                "bounds": self.bounds().map(kicad_bounding_box_value),
             }),
             Self::Bezier {
                 uuid,
@@ -4305,6 +4377,7 @@ impl KicadCanvasGraphic {
                 "points": kicad_points_value(points),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
+                "bounds": self.bounds().map(kicad_bounding_box_value),
             }),
             Self::Rectangle {
                 uuid,
@@ -4319,6 +4392,7 @@ impl KicadCanvasGraphic {
                 "end": kicad_point_value(*end),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
+                "bounds": self.bounds().map(kicad_bounding_box_value),
             }),
             Self::Circle {
                 uuid,
@@ -4333,6 +4407,7 @@ impl KicadCanvasGraphic {
                 "radius": radius,
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
+                "bounds": self.bounds().map(kicad_bounding_box_value),
             }),
             Self::Arc {
                 uuid,
@@ -4349,6 +4424,7 @@ impl KicadCanvasGraphic {
                 "end": kicad_point_value(*end),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
+                "bounds": self.bounds().map(kicad_bounding_box_value),
             }),
             Self::Text {
                 uuid,
@@ -4365,6 +4441,7 @@ impl KicadCanvasGraphic {
                 "effects": effects.as_ref().map(kicad_text_effects_value),
                 "stroke": stroke.as_ref().map(kicad_stroke_value),
                 "fill": fill.as_ref().map(kicad_fill_value),
+                "bounds": self.bounds().map(kicad_bounding_box_value),
             }),
         }
     }
@@ -4434,6 +4511,17 @@ impl KicadCanvasGraphic {
         self
     }
 
+    fn uuid(&self) -> Option<String> {
+        match self {
+            Self::Polyline { uuid, .. }
+            | Self::Bezier { uuid, .. }
+            | Self::Rectangle { uuid, .. }
+            | Self::Circle { uuid, .. }
+            | Self::Arc { uuid, .. }
+            | Self::Text { uuid, .. } => uuid.clone(),
+        }
+    }
+
     fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
         match self {
             Self::Polyline { points, .. } => {
@@ -4476,6 +4564,37 @@ impl KicadCanvasGraphic {
             }
         }
     }
+
+    fn bounds(&self) -> Option<KicadBoundingBox> {
+        match self {
+            Self::Polyline { points, .. } | Self::Bezier { points, .. } => {
+                kicad_points_bounds(points, KICAD_CANVAS_LINE_BOUNDS_PADDING)
+            }
+            Self::Rectangle { start, end, .. } => {
+                kicad_points_bounds(&[*start, *end], KICAD_CANVAS_LINE_BOUNDS_PADDING)
+            }
+            Self::Circle { center, radius, .. } => Some(KicadBoundingBox {
+                min: KicadPoint {
+                    x: center.x - radius,
+                    y: center.y - radius,
+                },
+                max: KicadPoint {
+                    x: center.x + radius,
+                    y: center.y + radius,
+                },
+            }),
+            Self::Arc {
+                start, mid, end, ..
+            } => {
+                let mut points = vec![*start, *end];
+                if let Some(mid) = mid {
+                    points.push(*mid);
+                }
+                kicad_points_bounds(&points, KICAD_CANVAS_LINE_BOUNDS_PADDING)
+            }
+            Self::Text { at, .. } => kicad_at_bounds(*at, KICAD_CANVAS_POINT_BOUNDS_RADIUS),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4486,6 +4605,7 @@ pub struct KicadCanvasImage {
     pub data_base64: String,
     pub mime_type: String,
     pub image_size: Option<KicadSize>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasImage {
@@ -4497,6 +4617,7 @@ impl KicadCanvasImage {
             "mime_type": self.mime_type,
             "image_size": self.image_size.map(kicad_size_value),
             "data_base64": self.data_base64,
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4508,6 +4629,7 @@ pub struct KicadCanvasTable {
     pub column_widths: Vec<f64>,
     pub row_heights: Vec<f64>,
     pub cells: Vec<KicadCanvasTableCell>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasTable {
@@ -4519,6 +4641,7 @@ impl KicadCanvasTable {
             "row_heights": self.row_heights,
             "cell_count": self.cells.len(),
             "cells": self.cells.iter().map(KicadCanvasTableCell::to_json_value).collect::<Vec<_>>(),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4534,6 +4657,7 @@ pub struct KicadCanvasTableCell {
     pub row_span: usize,
     pub fill: Option<KicadFill>,
     pub effects: Option<KicadTextEffects>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasTableCell {
@@ -4548,6 +4672,7 @@ impl KicadCanvasTableCell {
             "row_span": self.row_span,
             "fill": self.fill.as_ref().map(kicad_fill_value),
             "effects": self.effects.as_ref().map(kicad_text_effects_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4576,6 +4701,7 @@ impl KicadCanvasPin {
             "name_effects": self.name_effects.as_ref().map(kicad_text_effects_value),
             "number_effects": self.number_effects.as_ref().map(kicad_text_effects_value),
             "alternates": self.alternates.iter().map(kicad_pin_alternate_value).collect::<Vec<_>>(),
+            "bounds": kicad_points_bounds(&[self.start, self.end], KICAD_CANVAS_LINE_BOUNDS_PADDING).map(kicad_bounding_box_value),
         })
     }
 
@@ -4602,6 +4728,7 @@ pub struct KicadCanvasWire {
     pub uuid: Option<String>,
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasWire {
@@ -4610,6 +4737,7 @@ impl KicadCanvasWire {
             "uuid": self.uuid,
             "points": kicad_points_value(&self.points),
             "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4619,6 +4747,7 @@ pub struct KicadCanvasBus {
     pub uuid: Option<String>,
     pub points: Vec<KicadPoint>,
     pub stroke: Option<KicadStroke>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasBus {
@@ -4627,6 +4756,7 @@ impl KicadCanvasBus {
             "uuid": self.uuid,
             "points": kicad_points_value(&self.points),
             "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4637,6 +4767,7 @@ pub struct KicadCanvasBusEntry {
     pub at: KicadPoint,
     pub size: KicadSize,
     pub stroke: Option<KicadStroke>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasBusEntry {
@@ -4654,6 +4785,7 @@ impl KicadCanvasBusEntry {
             "size": kicad_size_value(self.size),
             "end": kicad_point_value(self.end()),
             "stroke": self.stroke.as_ref().map(kicad_stroke_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4665,6 +4797,7 @@ pub struct KicadCanvasLabel {
     pub kind: KicadLabelKind,
     pub at: Option<KicadAt>,
     pub effects: Option<KicadTextEffects>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasLabel {
@@ -4675,6 +4808,7 @@ impl KicadCanvasLabel {
             "kind": self.kind.as_str(),
             "at": self.at.map(kicad_at_value),
             "effects": self.effects.as_ref().map(kicad_text_effects_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4686,6 +4820,7 @@ pub struct KicadCanvasText {
     pub at: Option<KicadAt>,
     pub is_spice_directive: bool,
     pub effects: Option<KicadTextEffects>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasText {
@@ -4696,6 +4831,7 @@ impl KicadCanvasText {
             "at": self.at.map(kicad_at_value),
             "is_spice_directive": self.is_spice_directive,
             "effects": self.effects.as_ref().map(kicad_text_effects_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4710,6 +4846,7 @@ pub struct KicadCanvasTextBox {
     pub stroke: Option<KicadStroke>,
     pub fill: Option<KicadFill>,
     pub effects: Option<KicadTextEffects>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasTextBox {
@@ -4723,6 +4860,7 @@ impl KicadCanvasTextBox {
             "stroke": self.stroke.as_ref().map(kicad_stroke_value),
             "fill": self.fill.as_ref().map(kicad_fill_value),
             "effects": self.effects.as_ref().map(kicad_text_effects_value),
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
     }
 }
@@ -4733,6 +4871,7 @@ pub struct KicadCanvasJunction {
     pub at: KicadPoint,
     pub diameter: Option<f64>,
     pub color: Option<KicadColor>,
+    pub bounds: KicadBoundingBox,
 }
 
 impl KicadCanvasJunction {
@@ -4742,6 +4881,7 @@ impl KicadCanvasJunction {
             "at": kicad_point_value(self.at),
             "diameter": self.diameter,
             "color": self.color.map(kicad_color_value),
+            "bounds": kicad_bounding_box_value(self.bounds),
         })
     }
 }
@@ -4750,6 +4890,7 @@ impl KicadCanvasJunction {
 pub struct KicadCanvasNoConnect {
     pub uuid: Option<String>,
     pub at: KicadPoint,
+    pub bounds: KicadBoundingBox,
 }
 
 impl KicadCanvasNoConnect {
@@ -4757,6 +4898,7 @@ impl KicadCanvasNoConnect {
         serde_json::json!({
             "uuid": self.uuid,
             "at": kicad_point_value(self.at),
+            "bounds": kicad_bounding_box_value(self.bounds),
         })
     }
 }
@@ -4767,6 +4909,7 @@ pub struct KicadCanvasGroup {
     pub name: String,
     pub locked: Option<bool>,
     pub members: Vec<String>,
+    pub bounds: Option<KicadBoundingBox>,
 }
 
 impl KicadCanvasGroup {
@@ -4777,7 +4920,104 @@ impl KicadCanvasGroup {
             "locked": self.locked,
             "member_count": self.members.len(),
             "members": self.members,
+            "bounds": self.bounds.map(kicad_bounding_box_value),
         })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn kicad_canvas_item_bounds(
+    symbols: &[KicadCanvasSymbol],
+    sheets: &[KicadCanvasSheet],
+    graphics: &[KicadCanvasGraphic],
+    images: &[KicadCanvasImage],
+    tables: &[KicadCanvasTable],
+    rule_areas: &[KicadCanvasRuleArea],
+    wires: &[KicadCanvasWire],
+    buses: &[KicadCanvasBus],
+    bus_entries: &[KicadCanvasBusEntry],
+    directive_labels: &[KicadCanvasDirectiveLabel],
+    labels: &[KicadCanvasLabel],
+    text_items: &[KicadCanvasText],
+    text_boxes: &[KicadCanvasTextBox],
+    junctions: &[KicadCanvasJunction],
+    no_connects: &[KicadCanvasNoConnect],
+) -> BTreeMap<String, KicadBoundingBox> {
+    let mut item_bounds = BTreeMap::new();
+    for symbol in symbols {
+        insert_canvas_item_bounds(&mut item_bounds, symbol.uuid.as_deref(), symbol.bounds);
+    }
+    for sheet in sheets {
+        insert_canvas_item_bounds(&mut item_bounds, sheet.uuid.as_deref(), sheet.bounds);
+    }
+    for graphic in graphics {
+        insert_canvas_item_bounds(
+            &mut item_bounds,
+            graphic.uuid().as_deref(),
+            graphic.bounds(),
+        );
+    }
+    for image in images {
+        insert_canvas_item_bounds(&mut item_bounds, image.uuid.as_deref(), image.bounds);
+    }
+    for table in tables {
+        insert_canvas_item_bounds(&mut item_bounds, table.uuid.as_deref(), table.bounds);
+        for cell in &table.cells {
+            insert_canvas_item_bounds(&mut item_bounds, cell.uuid.as_deref(), cell.bounds);
+        }
+    }
+    for rule_area in rule_areas {
+        insert_canvas_item_bounds(
+            &mut item_bounds,
+            rule_area.uuid.as_deref(),
+            rule_area.bounds,
+        );
+    }
+    for wire in wires {
+        insert_canvas_item_bounds(&mut item_bounds, wire.uuid.as_deref(), wire.bounds);
+    }
+    for bus in buses {
+        insert_canvas_item_bounds(&mut item_bounds, bus.uuid.as_deref(), bus.bounds);
+    }
+    for entry in bus_entries {
+        insert_canvas_item_bounds(&mut item_bounds, entry.uuid.as_deref(), entry.bounds);
+    }
+    for label in directive_labels {
+        insert_canvas_item_bounds(&mut item_bounds, label.uuid.as_deref(), label.bounds);
+    }
+    for label in labels {
+        insert_canvas_item_bounds(&mut item_bounds, label.uuid.as_deref(), label.bounds);
+    }
+    for text in text_items {
+        insert_canvas_item_bounds(&mut item_bounds, text.uuid.as_deref(), text.bounds);
+    }
+    for text_box in text_boxes {
+        insert_canvas_item_bounds(&mut item_bounds, text_box.uuid.as_deref(), text_box.bounds);
+    }
+    for junction in junctions {
+        insert_canvas_item_bounds(
+            &mut item_bounds,
+            junction.uuid.as_deref(),
+            Some(junction.bounds),
+        );
+    }
+    for marker in no_connects {
+        insert_canvas_item_bounds(
+            &mut item_bounds,
+            marker.uuid.as_deref(),
+            Some(marker.bounds),
+        );
+    }
+    item_bounds
+}
+
+fn insert_canvas_item_bounds(
+    item_bounds: &mut BTreeMap<String, KicadBoundingBox>,
+    uuid: Option<&str>,
+    bounds: Option<KicadBoundingBox>,
+) {
+    if let (Some(uuid), Some(bounds)) = (uuid, bounds) {
+        item_bounds.insert(uuid.to_string(), bounds);
     }
 }
 
@@ -7208,7 +7448,23 @@ impl KicadBoundingBox {
     pub fn height(self) -> f64 {
         self.max.y - self.min.y
     }
+
+    fn padded(self, padding: f64) -> Self {
+        Self {
+            min: KicadPoint {
+                x: self.min.x - padding,
+                y: self.min.y - padding,
+            },
+            max: KicadPoint {
+                x: self.max.x + padding,
+                y: self.max.y + padding,
+            },
+        }
+    }
 }
+
+const KICAD_CANVAS_POINT_BOUNDS_RADIUS: f64 = 1.27;
+const KICAD_CANVAS_LINE_BOUNDS_PADDING: f64 = 0.635;
 
 #[derive(Debug, Default)]
 struct KicadBoundingBoxBuilder {
@@ -7245,6 +7501,26 @@ impl KicadBoundingBoxBuilder {
             max: self.max?,
         })
     }
+}
+
+fn kicad_point_bounds(point: KicadPoint, padding: f64) -> KicadBoundingBox {
+    KicadBoundingBox {
+        min: point,
+        max: point,
+    }
+    .padded(padding)
+}
+
+fn kicad_points_bounds(points: &[KicadPoint], padding: f64) -> Option<KicadBoundingBox> {
+    let mut bounds = KicadBoundingBoxBuilder::default();
+    for point in points {
+        bounds.include(*point);
+    }
+    bounds.finish().map(|bounds| bounds.padded(padding))
+}
+
+fn kicad_at_bounds(at: Option<KicadAt>, padding: f64) -> Option<KicadBoundingBox> {
+    at.map(|at| kicad_point_bounds(at.point(), padding))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -11871,6 +12147,16 @@ mod tests {
         );
         assert_eq!(scene_json["images"][0]["mime_type"], "image/png");
         assert_eq!(scene_json["images"][0]["scale"], 1.5);
+        assert_close(
+            scene_json["images"][0]["bounds"]["width"].as_f64().unwrap(),
+            6.096,
+        );
+        assert_close(
+            scene_json["images"][0]["bounds"]["height"]
+                .as_f64()
+                .unwrap(),
+            6.096,
+        );
         assert_eq!(
             scene_json["images"][0]["data_base64"],
             "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"
@@ -12023,11 +12309,21 @@ mod tests {
             scene_json["tables"][0]["uuid"],
             "67676767-6767-4767-8767-676767676767"
         );
+        assert_close(
+            scene_json["tables"][0]["bounds"]["width"].as_f64().unwrap(),
+            48.26,
+        );
         assert_eq!(scene_json["tables"][0]["column_count"], 2);
         assert_eq!(scene_json["tables"][0]["cell_count"], 2);
         assert_eq!(
             scene_json["tables"][0]["cells"][0]["uuid"],
             "68686868-6868-4868-8868-686868686868"
+        );
+        assert_close(
+            scene_json["tables"][0]["cells"][0]["bounds"]["width"]
+                .as_f64()
+                .unwrap(),
+            26.67,
         );
         assert_eq!(scene_json["tables"][0]["cells"][0]["text"], "LED pin");
         assert_eq!(
@@ -12131,6 +12427,7 @@ mod tests {
             "7267eac2-0eb2-494a-bc81-61295bcdf08c"
         );
         assert_eq!(scene_json["groups"][0]["member_count"], 2);
+        assert!(scene_json["groups"][0]["bounds"]["width"].as_f64().unwrap() > 5.0);
 
         let roundtrip = schematic.to_kicad_schematic_sexpr();
         assert!(roundtrip.contains("(group \"GroupName\""));
@@ -14350,17 +14647,34 @@ mod tests {
             scene_json["symbols"][0]["uuid"],
             "88888888-8888-8888-8888-888888888888"
         );
+        assert!(
+            scene_json["symbols"][0]["bounds"]["width"]
+                .as_f64()
+                .unwrap()
+                > 0.0
+        );
         assert_eq!(
             scene_json["wires"][0]["uuid"],
             "22222222-2222-2222-2222-222222222222"
         );
+        assert!(scene_json["wires"][0]["bounds"]["width"].as_f64().unwrap() > 16.0);
         assert_eq!(
             scene_json["labels"][1]["uuid"],
             "66666666-6666-6666-6666-666666666666"
         );
+        assert_close(
+            scene_json["labels"][1]["bounds"]["width"].as_f64().unwrap(),
+            super::KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0,
+        );
         assert_eq!(
             scene_json["text_items"][0]["uuid"],
             "77777777-7777-7777-7777-777777777777"
+        );
+        assert_close(
+            scene_json["text_items"][0]["bounds"]["height"]
+                .as_f64()
+                .unwrap(),
+            super::KICAD_CANVAS_POINT_BOUNDS_RADIUS * 2.0,
         );
     }
 
