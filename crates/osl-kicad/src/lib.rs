@@ -330,6 +330,9 @@ pub enum KicadSchematicEdit {
         to: KicadPoint,
         rotation: Option<f64>,
     },
+    DeleteItem {
+        uuid: String,
+    },
     ConfigureSymbol {
         reference: String,
         unit: Option<u32>,
@@ -521,6 +524,7 @@ impl KicadSchematic {
                 to,
                 rotation,
             } => self.move_symbol(&reference, to, rotation),
+            KicadSchematicEdit::DeleteItem { uuid } => self.delete_item_by_uuid(&uuid),
             KicadSchematicEdit::ConfigureSymbol {
                 reference,
                 unit,
@@ -611,6 +615,76 @@ impl KicadSchematic {
             operation: "move-symbol".to_string(),
             target: reference.to_string(),
         })
+    }
+
+    pub fn delete_item_by_uuid(&mut self, uuid: &str) -> OslResult<KicadEditSummary> {
+        let uuid = uuid.trim();
+        if uuid.is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad delete-item UUID must not be empty".to_string(),
+            ));
+        }
+
+        if remove_by_uuid(&mut self.symbols, uuid, |symbol| symbol.uuid.as_deref()) {
+            return Ok(delete_summary("symbol", uuid));
+        }
+        if remove_by_uuid(&mut self.wires, uuid, |wire| wire.uuid.as_deref()) {
+            return Ok(delete_summary("wire", uuid));
+        }
+        if remove_by_uuid(&mut self.buses, uuid, |bus| bus.uuid.as_deref()) {
+            return Ok(delete_summary("bus", uuid));
+        }
+        if remove_by_uuid(&mut self.bus_entries, uuid, |entry| entry.uuid.as_deref()) {
+            return Ok(delete_summary("bus-entry", uuid));
+        }
+        if remove_by_uuid(&mut self.junctions, uuid, |junction| {
+            junction.uuid.as_deref()
+        }) {
+            return Ok(delete_summary("junction", uuid));
+        }
+        if remove_by_uuid(&mut self.no_connects, uuid, |marker| marker.uuid.as_deref()) {
+            return Ok(delete_summary("no-connect", uuid));
+        }
+        if remove_by_uuid(&mut self.labels, uuid, |label| label.uuid.as_deref()) {
+            return Ok(delete_summary("label", uuid));
+        }
+        if remove_by_uuid(&mut self.directive_labels, uuid, |label| {
+            label.uuid.as_deref()
+        }) {
+            return Ok(delete_summary("directive-label", uuid));
+        }
+        if remove_by_uuid(&mut self.text_items, uuid, |text| text.uuid.as_deref()) {
+            return Ok(delete_summary("text", uuid));
+        }
+        if remove_by_uuid(&mut self.text_boxes, uuid, |text_box| {
+            text_box.uuid.as_deref()
+        }) {
+            return Ok(delete_summary("text-box", uuid));
+        }
+        if remove_by_uuid(&mut self.sheets, uuid, |sheet| sheet.uuid.as_deref()) {
+            return Ok(delete_summary("sheet", uuid));
+        }
+        if remove_by_uuid(&mut self.graphics, uuid, |graphic| graphic.uuid.as_deref()) {
+            return Ok(delete_summary("graphic", uuid));
+        }
+        if remove_by_uuid(&mut self.rule_areas, uuid, |rule_area| {
+            rule_area.uuid.as_deref()
+        }) {
+            return Ok(delete_summary("rule-area", uuid));
+        }
+        if remove_by_uuid(&mut self.images, uuid, |image| image.uuid.as_deref()) {
+            return Ok(delete_summary("image", uuid));
+        }
+        if remove_by_uuid(&mut self.tables, uuid, |table| table.uuid.as_deref()) {
+            return Ok(delete_summary("table", uuid));
+        }
+        if remove_by_uuid(&mut self.groups, uuid, |group| group.uuid.as_deref()) {
+            return Ok(delete_summary("group", uuid));
+        }
+
+        Err(OslError::InvalidInput(format!(
+            "KiCad schematic item UUID '{uuid}' was not found"
+        )))
     }
 
     pub fn configure_symbol(
@@ -3051,6 +3125,26 @@ impl KicadHierarchyExport {
             ));
         }
         aliases
+    }
+}
+
+fn remove_by_uuid<T>(
+    items: &mut Vec<T>,
+    uuid: &str,
+    item_uuid: impl Fn(&T) -> Option<&str>,
+) -> bool {
+    if let Some(index) = items.iter().position(|item| item_uuid(item) == Some(uuid)) {
+        items.remove(index);
+        true
+    } else {
+        false
+    }
+}
+
+fn delete_summary(kind: &str, uuid: &str) -> KicadEditSummary {
+    KicadEditSummary {
+        operation: format!("delete-{kind}"),
+        target: uuid.to_string(),
     }
 }
 
@@ -13461,6 +13555,53 @@ mod tests {
                 .iter()
                 .any(|directive| directive.text == ".save v(sense)")
         );
+    }
+
+    #[test]
+    fn deletes_kicad_schematic_items_by_uuid_and_roundtrips() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        let mut schematic =
+            read_kicad_schematic(&workspace_root.join("examples/kicad_schematic/rc.kicad_sch"))
+                .unwrap();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::DeleteItem {
+                uuid: "22222222-2222-2222-2222-222222222222".to_string(),
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::DeleteItem {
+                uuid: "66666666-6666-6666-6666-666666666666".to_string(),
+            })
+            .unwrap();
+        schematic
+            .apply_edit(KicadSchematicEdit::DeleteItem {
+                uuid: "77777777-7777-7777-7777-777777777777".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(schematic.wires.len(), 2);
+        assert_eq!(schematic.labels.len(), 2);
+        assert!(schematic.spice_directives().is_empty());
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(!exported.contains("22222222-2222-2222-2222-222222222222"));
+        assert!(!exported.contains("66666666-6666-6666-6666-666666666666"));
+        assert!(!exported.contains("77777777-7777-7777-7777-777777777777"));
+        let reparsed = parse_kicad_schematic(&exported, "deleted_items.kicad_sch").unwrap();
+        assert_eq!(reparsed.wires.len(), 2);
+        assert_eq!(reparsed.labels.len(), 2);
+        assert!(reparsed.canvas_scene().text_items.is_empty());
+
+        let error = schematic
+            .apply_edit(KicadSchematicEdit::DeleteItem {
+                uuid: "00000000-0000-4000-8000-000000000000".to_string(),
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("was not found"));
     }
 
     #[test]

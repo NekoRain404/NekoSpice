@@ -87,6 +87,7 @@ Usage:
   osl kicad-check <file.kicad_sch> [--output <file>]
   osl kicad-export <file.kicad_sch-or-file.kicad_sym> --output <file>
   osl kicad-edit <file.kicad_sch> --output <file.kicad_sch> [--library <file.kicad_sym>] <ops...>
+      delete-item:<uuid>
       configure-symbol:<reference>[:unit=<n>][:body-style=<n|none>][:mirror=<x|y|xy|none>][:alt=<pin>=<alternate>[,<pin>=<alternate>...]]
       move-symbol:<reference>:<x,y>[:rotation]
       set-property:<reference>:<name>=<value>[:x,y[,rotation]]
@@ -1783,6 +1784,7 @@ fn parse_kicad_edit_op(
     })?;
     match name {
         "move-symbol" => parse_kicad_move_symbol_edit(payload),
+        "delete-item" => parse_kicad_delete_item_edit(payload),
         "configure-symbol" => parse_kicad_configure_symbol_edit(payload),
         "set-property" => parse_kicad_set_property_edit(payload),
         "place-symbol" => parse_kicad_place_symbol_edit(payload, symbol_definitions),
@@ -1802,6 +1804,19 @@ fn parse_kicad_edit_op(
             "unsupported kicad-edit op '{name}'"
         ))),
     }
+}
+
+fn parse_kicad_delete_item_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
+    let uuid = payload.trim();
+    if uuid.is_empty() {
+        return Err(OslError::InvalidInput(
+            "delete-item expects delete-item:<uuid>".to_string(),
+        ));
+    }
+
+    Ok(KicadSchematicEdit::DeleteItem {
+        uuid: uuid.to_string(),
+    })
 }
 
 fn parse_kicad_configure_symbol_edit(payload: &str) -> OslResult<KicadSchematicEdit> {
@@ -2562,6 +2577,7 @@ mod tests {
             "add-junction:88.9,45.72",
             "add-no-connect:101.6,45.72",
             "add-global-label:sense:88.9,45.72",
+            "delete-item:22222222-2222-2222-2222-222222222222",
         ]
         .iter()
         .map(|value| value.to_string())
@@ -2578,11 +2594,12 @@ mod tests {
                 "add-junction:88.9,45.72",
                 "add-no-connect:101.6,45.72",
                 "add-global-label:sense:88.9,45.72",
+                "delete-item:22222222-2222-2222-2222-222222222222",
             ]
         );
 
         let edits = parse_kicad_edit_ops(&args, &[]).unwrap();
-        assert_eq!(edits.len(), 7);
+        assert_eq!(edits.len(), 8);
         match &edits[0] {
             KicadSchematicEdit::MoveSymbol { reference, to, .. } => {
                 assert_eq!(reference, "R1");
@@ -2627,6 +2644,12 @@ mod tests {
                 assert_eq!(*kind, KicadLabelKind::Global);
             }
             edit => panic!("expected add-label edit, got {edit:?}"),
+        }
+        match &edits[7] {
+            KicadSchematicEdit::DeleteItem { uuid } => {
+                assert_eq!(uuid, "22222222-2222-2222-2222-222222222222");
+            }
+            edit => panic!("expected delete-item edit, got {edit:?}"),
         }
     }
 
