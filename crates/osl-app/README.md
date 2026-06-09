@@ -27,7 +27,8 @@ search stay in `osl-kicad`.
   schematic netlist to a run directory and invokes `osl-sim` backends on a
   background worker.
 - `waveform_summary.rs`: GUI-facing waveform summary adapter around
-  `osl-waveform`, keeping raw parsing out of panel drawing code.
+  `osl-waveform`, keeping raw parsing and preview-envelope generation out of
+  panel drawing code.
 - `library.rs`: GUI-facing symbol-library table, definition, dependency, and preview adapter around `KicadSymbolLibraryIndex`.
 - `placement_config.rs`: GUI-neutral symbol placement scope (`unit` / `body_style` / pin alternates) shared by preview and document edits.
 - `viewport.rs`: world/screen transforms, zoom, pan, fit-to-scene, and culling bounds.
@@ -45,3 +46,5 @@ search stay in `osl-kicad`.
 - Simulation setup UI should stay in GUI state and route KiCad-compatible directive changes through `document.rs`, not by editing text items directly.
 - Simulation execution should route through `simulation.rs` and `osl-sim`; UI
   widgets should not invoke simulator processes directly.
+- Waveform panels should consume precomputed GUI DTOs from `waveform_summary.rs`
+  so drawing code does not parse raw files or scan full waveform arrays.

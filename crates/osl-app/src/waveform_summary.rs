@@ -1,8 +1,12 @@
-use osl_waveform::{WaveformSummary, read_ngspice_raw};
+use osl_waveform::{
+    Waveform, WaveformEnvelopeBucket, WaveformSummary, WaveformViewportQuery, read_ngspice_raw,
+};
 use std::path::{Path, PathBuf};
 
 const WAVEFORM_RAW_FILE: &str = "waveform.raw";
 const MAX_DISPLAY_VARIABLES: usize = 8;
+const MAX_PREVIEW_SIGNALS: usize = 32;
+const MAX_PREVIEW_BUCKETS: usize = 96;
 
 #[derive(Debug, Clone)]
 pub(crate) enum GuiWaveformSummaryState {
@@ -34,6 +38,24 @@ pub(crate) struct GuiWaveformSummary {
     pub(crate) variable_count: usize,
     pub(crate) variables: Vec<GuiWaveformVariableSummary>,
     pub(crate) omitted_variable_count: usize,
+    pub(crate) previews: Vec<GuiWaveformPreview>,
+    pub(crate) omitted_preview_count: usize,
+}
+
+impl GuiWaveformSummary {
+    pub(crate) fn default_signal_name(&self) -> Option<&str> {
+        self.previews.first().map(|preview| preview.signal.as_str())
+    }
+
+    pub(crate) fn has_preview_signal(&self, signal: &str) -> bool {
+        self.preview_for_signal(signal).is_some()
+    }
+
+    pub(crate) fn preview_for_signal(&self, signal: &str) -> Option<&GuiWaveformPreview> {
+        self.previews
+            .iter()
+            .find(|preview| same_signal(&preview.signal, signal))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +69,27 @@ pub(crate) struct GuiWaveformVariableSummary {
     pub(crate) max: f64,
     pub(crate) peak_to_peak: f64,
     pub(crate) rms: f64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GuiWaveformPreview {
+    pub(crate) signal: String,
+    pub(crate) unit: String,
+    pub(crate) source_points: usize,
+    pub(crate) time_min: f64,
+    pub(crate) time_max: f64,
+    pub(crate) value_min: f64,
+    pub(crate) value_max: f64,
+    pub(crate) buckets: Vec<GuiWaveformPreviewBucket>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GuiWaveformPreviewBucket {
+    pub(crate) start_time: f64,
+    pub(crate) end_time: f64,
+    pub(crate) min: f64,
+    pub(crate) max: f64,
+    pub(crate) samples: usize,
 }
 
 fn summarize_raw(raw_path: &Path) -> Result<GuiWaveformSummary, String> {
@@ -74,6 +117,16 @@ fn summarize_raw(raw_path: &Path) -> Result<GuiWaveformSummary, String> {
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
+    let preview_candidates = waveform
+        .variables()
+        .iter()
+        .filter(|variable| !is_time_signal(&variable.name))
+        .collect::<Vec<_>>();
+    let previews = preview_candidates
+        .iter()
+        .take(MAX_PREVIEW_SIGNALS)
+        .filter_map(|variable| preview_for_signal(&waveform, &variable.name, &variable.unit))
+        .collect::<Vec<_>>();
 
     Ok(GuiWaveformSummary {
         raw_path: raw_path.to_path_buf(),
@@ -83,7 +136,69 @@ fn summarize_raw(raw_path: &Path) -> Result<GuiWaveformSummary, String> {
         variable_count,
         omitted_variable_count: variable_count.saturating_sub(variables.len()),
         variables,
+        omitted_preview_count: preview_candidates.len().saturating_sub(previews.len()),
+        previews,
     })
+}
+
+fn preview_for_signal(waveform: &Waveform, signal: &str, unit: &str) -> Option<GuiWaveformPreview> {
+    let envelope = waveform
+        .viewport_envelope(&WaveformViewportQuery::new(signal, MAX_PREVIEW_BUCKETS))
+        .ok()?;
+    if envelope.buckets.is_empty() {
+        return None;
+    }
+
+    let buckets = envelope
+        .buckets
+        .iter()
+        .map(preview_bucket_from_envelope)
+        .collect::<Vec<_>>();
+    let (time_min, time_max, value_min, value_max) = preview_bounds(&buckets)?;
+
+    Some(GuiWaveformPreview {
+        signal: signal.to_string(),
+        unit: unit.to_string(),
+        source_points: envelope.source_points,
+        time_min,
+        time_max,
+        value_min,
+        value_max,
+        buckets,
+    })
+}
+
+fn preview_bucket_from_envelope(bucket: &WaveformEnvelopeBucket) -> GuiWaveformPreviewBucket {
+    GuiWaveformPreviewBucket {
+        start_time: bucket.start_time,
+        end_time: bucket.end_time,
+        min: bucket.min,
+        max: bucket.max,
+        samples: bucket.samples,
+    }
+}
+
+fn preview_bounds(buckets: &[GuiWaveformPreviewBucket]) -> Option<(f64, f64, f64, f64)> {
+    let first = buckets.first()?;
+    let mut time_min = first.start_time.min(first.end_time);
+    let mut time_max = first.start_time.max(first.end_time);
+    let mut value_min = first.min.min(first.max);
+    let mut value_max = first.min.max(first.max);
+    for bucket in buckets.iter().skip(1) {
+        time_min = time_min.min(bucket.start_time.min(bucket.end_time));
+        time_max = time_max.max(bucket.start_time.max(bucket.end_time));
+        value_min = value_min.min(bucket.min.min(bucket.max));
+        value_max = value_max.max(bucket.min.max(bucket.max));
+    }
+    Some((time_min, time_max, value_min, value_max))
+}
+
+fn is_time_signal(signal: &str) -> bool {
+    same_signal(signal, "time")
+}
+
+fn same_signal(left: &str, right: &str) -> bool {
+    left.trim().eq_ignore_ascii_case(right.trim())
 }
 
 #[cfg(test)]
@@ -124,6 +239,11 @@ Values:
         assert_eq!(summary.variable_count, 2);
         assert_eq!(summary.variables[1].name, "v(out)");
         assert_eq!(summary.variables[1].last, 4.0);
+        assert_eq!(summary.default_signal_name(), Some("v(out)"));
+        assert_eq!(summary.previews.len(), 1);
+        assert_eq!(summary.previews[0].source_points, 2);
+        assert_eq!(summary.previews[0].value_min, 2.0);
+        assert_eq!(summary.previews[0].value_max, 4.0);
         let _ = fs::remove_dir_all(output_dir);
     }
 
