@@ -1,6 +1,6 @@
 use osl_core::{
-    OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, html_escape, make_run_id,
-    read_text, write_text,
+    OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, make_run_id, read_text,
+    write_text,
 };
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
@@ -14,7 +14,7 @@ use osl_netlist::{ImportReport, NormalizedDependency, read_import_input};
 use osl_render::render_kicad_scene_svg;
 use osl_report::{
     CheckResult, VerifyReport, VerifyRunResult, report_css, write_bench_report_bundle,
-    write_verify_report_bundle,
+    write_report_directory_html, write_verify_report_bundle,
 };
 use osl_sim::{NgspiceCliBackend, SimulatorBackend, finalize_run_artifacts};
 use osl_waveform::{
@@ -667,61 +667,9 @@ fn sanitize_dependency_file_name(file_name: &str) -> String {
 
 fn report_command(args: &[String]) -> OslResult<i32> {
     let dir = PathBuf::from(positional(args, 0, "missing directory for 'osl report'")?);
-    let run_json = dir.join("run.json");
-    let verify_json = dir.join("verify.json");
-    let bench_json = dir.join("bench.json");
-    let model_check_json = dir.join("model-check.json");
-    let import_json = dir.join("import.json");
-
-    if run_json.is_file() {
-        let content = read_text(&run_json)?;
-        let html = format!(
-            concat!(
-                "<!doctype html><html><head><meta charset=\"utf-8\">",
-                "<title>NekoSpice Run Report</title>{}</head><body>",
-                "<main><h1>NekoSpice Run Report</h1><pre>{}</pre></main></body></html>\n"
-            ),
-            report_css(),
-            html_escape(&content)
-        );
-        write_text(&dir.join("report.html"), &html)?;
-        println!("report -> {}", dir.join("report.html").display());
-        return Ok(0);
-    }
-
-    if verify_json.is_file()
-        || bench_json.is_file()
-        || model_check_json.is_file()
-        || import_json.is_file()
-    {
-        let source = if verify_json.is_file() {
-            verify_json
-        } else if model_check_json.is_file() {
-            model_check_json
-        } else if import_json.is_file() {
-            import_json
-        } else {
-            bench_json
-        };
-        let content = read_text(&source)?;
-        let html = format!(
-            concat!(
-                "<!doctype html><html><head><meta charset=\"utf-8\">",
-                "<title>NekoSpice Batch Report</title>{}</head><body>",
-                "<main><h1>NekoSpice Batch Report</h1><pre>{}</pre></main></body></html>\n"
-            ),
-            report_css(),
-            html_escape(&content)
-        );
-        write_text(&dir.join("report.html"), &html)?;
-        println!("report -> {}", dir.join("report.html").display());
-        return Ok(0);
-    }
-
-    Err(OslError::InvalidInput(format!(
-        "{} does not contain run.json, verify.json, bench.json, model-check.json, or import.json",
-        dir.display()
-    )))
+    let output_path = write_report_directory_html(&dir)?;
+    println!("report -> {}", output_path.display());
+    Ok(0)
 }
 
 #[derive(Debug)]
