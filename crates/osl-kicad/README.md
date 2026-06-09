@@ -20,6 +20,9 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
   canvas JSON export, and canvas item bounding metadata used by frontends.
 - `canvas_hit.rs` owns canvas hit-test reports, point selection, and UUID-based
   selection refresh helpers used by GUI/editor state.
+- `connectivity.rs` owns schematic connectivity graph construction, quantized
+  point keys, wire segment membership, net label normalization, and generated
+  net naming used by diagnostics and SPICE export.
 - `sexpr.rs` owns the reusable KiCad S-expression tree, parser, tree-navigation
   helpers, atom/string escaping, inline writer, and numeric formatting used by
   the parser/writer layers.
@@ -35,8 +38,8 @@ library, canvas-scene, edit, and netlist foundation for NekoSpice.
 
 ## Refactor Direction
 
-Keep file-format parsing, IR mutation, symbol-library resolution, canvas scene
-projection, hit-testing, and geometry math in separate modules. Future cleanup
-should peel off the remaining mutation method bodies and parser families while
-preserving the public API consumed by `osl-app`, `osl-render`, `osl-netlist`,
-and `osl-cli`.
+Keep file-format parsing, IR mutation, symbol-library resolution, connectivity,
+canvas scene projection, hit-testing, and geometry math in separate modules.
+Future cleanup should peel off the remaining mutation method bodies and parser
+families while preserving the public API consumed by `osl-app`, `osl-render`,
+`osl-netlist`, and `osl-cli`.
