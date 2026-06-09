@@ -4228,14 +4228,7 @@ impl KicadCanvasScene {
     pub fn hit_test(&self, point: KicadPoint) -> KicadCanvasHitReport {
         let mut hits = Vec::new();
         for symbol in &self.symbols {
-            push_canvas_hit(
-                &mut hits,
-                "symbol",
-                symbol.uuid.clone(),
-                symbol.reference.clone(),
-                symbol.bounds,
-                point,
-            );
+            push_canvas_symbol_hit(&mut hits, symbol, point);
         }
         for sheet in &self.sheets {
             push_canvas_sheet_hit(&mut hits, sheet, point);
@@ -5279,6 +5272,33 @@ fn push_canvas_graphic_hit(
     }
 }
 
+fn push_canvas_symbol_hit(
+    hits: &mut Vec<KicadCanvasHit>,
+    symbol: &KicadCanvasSymbol,
+    point: KicadPoint,
+) {
+    let Some(bounds) = symbol.bounds else {
+        return;
+    };
+    if bounds.contains(point)
+        && (symbol
+            .graphics
+            .iter()
+            .any(|graphic| graphic.hits_point(point))
+            || symbol
+                .pins
+                .iter()
+                .any(|pin| kicad_canvas_pin_hits_point(pin, point)))
+    {
+        hits.push(KicadCanvasHit {
+            kind: "symbol".to_string(),
+            uuid: symbol.uuid.clone(),
+            label: symbol.reference.clone(),
+            bounds,
+        });
+    }
+}
+
 fn push_canvas_rule_area_hit(
     hits: &mut Vec<KicadCanvasHit>,
     rule_area: &KicadCanvasRuleArea,
@@ -5384,6 +5404,10 @@ fn kicad_table_cell_hits_point(cell: &KicadCanvasTableCell, point: KicadPoint) -
         (Some(at), Some(size)) => kicad_rotated_rect_contains_point(at, size, point),
         _ => cell.bounds.is_some_and(|bounds| bounds.contains(point)),
     }
+}
+
+fn kicad_canvas_pin_hits_point(pin: &KicadCanvasPin, point: KicadPoint) -> bool {
+    kicad_polyline_hits_point(&[pin.start, pin.end], None, point)
 }
 
 fn push_canvas_text_box_hit(
@@ -11521,11 +11545,18 @@ fn canvas_symbol_bounds(
 ) -> Option<KicadBoundingBox> {
     let mut bounds = KicadBoundingBoxBuilder::default();
     for graphic in graphics {
-        graphic.include_in_bounds(&mut bounds);
+        if let Some(graphic_bounds) = graphic.bounds() {
+            bounds.include_box(graphic_bounds);
+        } else {
+            graphic.include_in_bounds(&mut bounds);
+        }
     }
     for pin in pins {
-        bounds.include(pin.start);
-        bounds.include(pin.end);
+        if let Some(pin_bounds) =
+            kicad_points_bounds(&[pin.start, pin.end], KICAD_CANVAS_LINE_BOUNDS_PADDING)
+        {
+            bounds.include_box(pin_bounds);
+        }
     }
     bounds.finish()
 }
@@ -15940,6 +15971,53 @@ mod tests {
             .hit_test(KicadPoint { x: 10.0, y: 10.0 });
         assert_eq!(empty_report.hit_count, 0);
         assert!(empty_report.hits.is_empty());
+    }
+
+    #[test]
+    fn hit_tests_symbols_by_body_and_pin_geometry() {
+        let schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (uuid "11111111-1111-4111-8111-111111111111")
+  (paper "A4")
+  (lib_symbols
+    (symbol "NekoSpice:Sparse"
+      (property "Reference" "U" (at 0 0 0))
+      (property "Value" "Sparse" (at 0 -2.54 0))
+      (symbol "Sparse_0_1"
+        (polyline (pts (xy -2.54 0) (xy 2.54 0)))
+        (pin passive line (at -5.08 0 0) (length 2.54) (name "A") (number "1"))
+      )
+    )
+  )
+  (symbol
+    (lib_id "NekoSpice:Sparse")
+    (at 20 20 0)
+    (property "Reference" "U1" (at 20 17 0))
+    (property "Value" "Sparse" (at 20 23 0))
+    (uuid "22222222-2222-4222-8222-222222222222")
+    (pin "1" (uuid "33333333-3333-4333-8333-333333333333"))
+  )
+)"#,
+            "symbol_hit_test.kicad_sch",
+        )
+        .unwrap();
+        let scene = schematic.canvas_scene();
+        let symbol = &scene.symbols[0];
+        assert!(symbol.bounds.unwrap().height() >= super::KICAD_CANVAS_LINE_BOUNDS_PADDING * 2.0);
+
+        let body_hit = scene.hit_test(KicadPoint { x: 20.0, y: 20.4 });
+        assert!(body_hit.hits.iter().any(|hit| hit.kind == "symbol"
+            && hit.uuid.as_deref() == Some("22222222-2222-4222-8222-222222222222")));
+
+        let pin_hit = scene.hit_test(KicadPoint { x: 16.2, y: 20.4 });
+        assert!(pin_hit.hits.iter().any(|hit| hit.kind == "symbol"
+            && hit.uuid.as_deref() == Some("22222222-2222-4222-8222-222222222222")));
+
+        let bounds_only_miss = scene.hit_test(KicadPoint { x: 17.0, y: 20.7 });
+        assert!(!bounds_only_miss.hits.iter().any(|hit| hit.kind == "symbol"
+            && hit.uuid.as_deref() == Some("22222222-2222-4222-8222-222222222222")));
     }
 
     #[test]
