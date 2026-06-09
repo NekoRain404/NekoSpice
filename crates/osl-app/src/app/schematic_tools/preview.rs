@@ -1,6 +1,6 @@
 use crate::canvas;
 use crate::viewport::CanvasViewport;
-use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke};
+use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke, StrokeKind};
 use osl_kicad::KicadPoint;
 
 use super::state::{SchematicTool, SchematicToolState};
@@ -70,6 +70,30 @@ pub(super) fn draw_schematic_tool_preview(
                 &tools.text_item,
                 FontId::monospace(12.0),
                 Color32::from_rgb(165, 45, 45),
+            );
+        }
+        SchematicTool::Sheet => {
+            let start = viewport.world_to_screen(rect, point);
+            let end = viewport.world_to_screen(
+                rect,
+                KicadPoint {
+                    x: point.x + tools.sheet_size.width,
+                    y: point.y + tools.sheet_size.height,
+                },
+            );
+            let sheet_rect = Rect::from_two_pos(start, end);
+            painter.rect_stroke(
+                sheet_rect,
+                0.0,
+                Stroke::new(1.5, Color32::from_rgb(90, 120, 190)),
+                StrokeKind::Inside,
+            );
+            painter.text(
+                sheet_rect.left_top() + egui::vec2(4.0, 4.0),
+                Align2::LEFT_TOP,
+                &tools.sheet_name,
+                FontId::monospace(12.0),
+                Color32::from_rgb(50, 80, 150),
             );
         }
         SchematicTool::Junction => {

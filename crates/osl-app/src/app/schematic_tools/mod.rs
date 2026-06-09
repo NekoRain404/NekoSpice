@@ -1,7 +1,7 @@
 use super::NekoSpiceApp;
 use crate::document::KicadGuiDocument;
 use eframe::egui::{self, Rect};
-use osl_kicad::{KicadAt, KicadEditSummary, KicadLabelKind, KicadPoint};
+use osl_kicad::{KicadAt, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSheetPin, KicadSize};
 
 mod preview;
 mod state;
@@ -56,6 +56,31 @@ impl NekoSpiceApp {
                     ui.add(egui::DragValue::new(
                         &mut self.schematic_tools.bus_entry_size.height,
                     ));
+                });
+            }
+            SchematicTool::Sheet => {
+                ui.horizontal(|ui| {
+                    ui.label("Name");
+                    ui.text_edit_singleline(&mut self.schematic_tools.sheet_name);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("File");
+                    ui.text_edit_singleline(&mut self.schematic_tools.sheet_file);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("W");
+                    ui.add(egui::DragValue::new(
+                        &mut self.schematic_tools.sheet_size.width,
+                    ));
+                    ui.label("H");
+                    ui.add(egui::DragValue::new(
+                        &mut self.schematic_tools.sheet_size.height,
+                    ));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Pins");
+                    ui.text_edit_singleline(&mut self.schematic_tools.sheet_pin_names[0]);
+                    ui.text_edit_singleline(&mut self.schematic_tools.sheet_pin_names[1]);
                 });
             }
             SchematicTool::Select | SchematicTool::Junction | SchematicTool::NoConnect => {}
@@ -116,6 +141,16 @@ impl NekoSpiceApp {
                 let text = self.schematic_tools.text_item.clone();
                 self.apply_schematic_tool_edit(Some(point), |document| {
                     document.add_text(text, at_from_point(point))
+                });
+                true
+            }
+            SchematicTool::Sheet => {
+                let name = self.schematic_tools.sheet_name.clone();
+                let file = self.schematic_tools.sheet_file.clone();
+                let size = self.schematic_tools.sheet_size;
+                let pins = sheet_pins_for_tool(point, size, &self.schematic_tools.sheet_pin_names);
+                self.apply_schematic_tool_edit(Some(point), |document| {
+                    document.add_sheet(name, file, at_from_point(point), size, pins)
                 });
                 true
             }
@@ -227,6 +262,44 @@ fn at_from_point(point: KicadPoint) -> KicadAt {
     }
 }
 
+fn sheet_pins_for_tool(
+    point: KicadPoint,
+    size: KicadSize,
+    names: &[String; 2],
+) -> Vec<KicadSheetPin> {
+    let mut pins = Vec::new();
+    let y = point.y + size.height / 2.0;
+    let left = names[0].trim();
+    if !left.is_empty() {
+        pins.push(KicadSheetPin {
+            name: left.to_string(),
+            pin_type: "input".to_string(),
+            at: Some(KicadAt {
+                x: point.x,
+                y,
+                rotation: 180.0,
+            }),
+            uuid: None,
+            effects: None,
+        });
+    }
+    let right = names[1].trim();
+    if !right.is_empty() {
+        pins.push(KicadSheetPin {
+            name: right.to_string(),
+            pin_type: "output".to_string(),
+            at: Some(KicadAt {
+                x: point.x + size.width,
+                y,
+                rotation: 0.0,
+            }),
+            uuid: None,
+            effects: None,
+        });
+    }
+    pins
+}
+
 fn same_point(left: KicadPoint, right: KicadPoint) -> bool {
     (left.x - right.x).abs() < 1e-6 && (left.y - right.y).abs() < 1e-6
 }
@@ -256,5 +329,27 @@ mod tests {
                 y: 2.0 - 1e-7
             }
         ));
+    }
+
+    #[test]
+    fn sheet_pins_follow_sheet_edges() {
+        let pins = sheet_pins_for_tool(
+            KicadPoint { x: 10.0, y: 20.0 },
+            KicadSize {
+                width: 30.0,
+                height: 12.0,
+            },
+            &["in".to_string(), "out".to_string()],
+        );
+
+        assert_eq!(pins.len(), 2);
+        assert_eq!(pins[0].name, "in");
+        assert_eq!(pins[0].pin_type, "input");
+        assert_eq!(pins[0].at.unwrap().x, 10.0);
+        assert_eq!(pins[0].at.unwrap().rotation, 180.0);
+        assert_eq!(pins[1].name, "out");
+        assert_eq!(pins[1].pin_type, "output");
+        assert_eq!(pins[1].at.unwrap().x, 40.0);
+        assert_eq!(pins[1].at.unwrap().rotation, 0.0);
     }
 }

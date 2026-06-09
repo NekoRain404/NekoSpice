@@ -1,8 +1,8 @@
 use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSchematic,
-    KicadSchematicEdit, KicadSize, KicadSymbolDef, read_kicad_schematic_with_libraries,
-    write_kicad_schematic,
+    KicadSchematicEdit, KicadSheetPin, KicadSize, KicadSymbolDef,
+    read_kicad_schematic_with_libraries, write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
 
@@ -138,6 +138,24 @@ impl KicadGuiDocument {
         self.apply_edit(KicadSchematicEdit::AddText {
             text,
             at,
+            uuid: None,
+        })
+    }
+
+    pub(crate) fn add_sheet(
+        &mut self,
+        name: String,
+        file: String,
+        at: KicadAt,
+        size: KicadSize,
+        pins: Vec<KicadSheetPin>,
+    ) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::AddSheet {
+            name,
+            file,
+            at,
+            size,
+            pins,
             uuid: None,
         })
     }
@@ -402,12 +420,54 @@ mod tests {
         document
             .add_no_connect(KicadPoint { x: 111.76, y: 50.8 })
             .unwrap();
+        document
+            .add_sheet(
+                "gain_stage".to_string(),
+                "gain_stage.kicad_sch".to_string(),
+                KicadAt {
+                    x: 120.0,
+                    y: 40.0,
+                    rotation: 0.0,
+                },
+                osl_kicad::KicadSize {
+                    width: 25.4,
+                    height: 12.7,
+                },
+                vec![
+                    osl_kicad::KicadSheetPin {
+                        name: "in".to_string(),
+                        pin_type: "input".to_string(),
+                        at: Some(KicadAt {
+                            x: 120.0,
+                            y: 46.35,
+                            rotation: 180.0,
+                        }),
+                        uuid: None,
+                        effects: None,
+                    },
+                    osl_kicad::KicadSheetPin {
+                        name: "out".to_string(),
+                        pin_type: "output".to_string(),
+                        at: Some(KicadAt {
+                            x: 145.4,
+                            y: 46.35,
+                            rotation: 0.0,
+                        }),
+                        uuid: None,
+                        effects: None,
+                    },
+                ],
+            )
+            .unwrap();
 
         let scene = document.scene();
         assert!(document.is_dirty());
         assert_eq!(scene.wires.len(), 4);
         assert_eq!(scene.buses.len(), 1);
         assert_eq!(scene.bus_entries.len(), 1);
+        assert_eq!(scene.sheets.len(), 1);
+        assert_eq!(scene.sheets[0].name, "gain_stage");
+        assert_eq!(scene.sheets[0].pins.len(), 2);
         assert!(
             scene
                 .labels

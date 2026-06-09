@@ -9,13 +9,14 @@ pub(super) enum SchematicTool {
     Label,
     GlobalLabel,
     HierarchicalLabel,
+    Sheet,
     Text,
     Junction,
     NoConnect,
 }
 
 impl SchematicTool {
-    pub(super) const ALL: [Self; 10] = [
+    pub(super) const ALL: [Self; 11] = [
         Self::Select,
         Self::Wire,
         Self::Bus,
@@ -23,6 +24,7 @@ impl SchematicTool {
         Self::Label,
         Self::GlobalLabel,
         Self::HierarchicalLabel,
+        Self::Sheet,
         Self::Text,
         Self::Junction,
         Self::NoConnect,
@@ -37,6 +39,7 @@ impl SchematicTool {
             Self::Label => "Label",
             Self::GlobalLabel => "Global",
             Self::HierarchicalLabel => "Hier Label",
+            Self::Sheet => "Sheet",
             Self::Text => "Text",
             Self::Junction => "Junction",
             Self::NoConnect => "No Connect",
@@ -49,6 +52,10 @@ pub(crate) struct SchematicToolState {
     pub(super) active: SchematicTool,
     pub(super) label_text: String,
     pub(super) text_item: String,
+    pub(super) sheet_name: String,
+    pub(super) sheet_file: String,
+    pub(super) sheet_size: KicadSize,
+    pub(super) sheet_pin_names: [String; 2],
     pub(super) pending_wire_start: Option<KicadPoint>,
     pub(super) pending_bus_start: Option<KicadPoint>,
     pub(super) bus_entry_size: KicadSize,
@@ -60,6 +67,13 @@ impl Default for SchematicToolState {
             active: SchematicTool::Select,
             label_text: "net".to_string(),
             text_item: ".save v(out)".to_string(),
+            sheet_name: "sheet".to_string(),
+            sheet_file: "sheet.kicad_sch".to_string(),
+            sheet_size: KicadSize {
+                width: 25.4,
+                height: 12.7,
+            },
+            sheet_pin_names: ["in".to_string(), "out".to_string()],
             pending_wire_start: None,
             pending_bus_start: None,
             bus_entry_size: KicadSize {
