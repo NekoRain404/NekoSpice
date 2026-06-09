@@ -738,6 +738,9 @@ impl KicadSchematic {
             }
             return Ok(move_summary("sheet", uuid));
         }
+        if move_sheet_pin_by_uuid(&mut self.sheets, uuid, delta) {
+            return Ok(move_summary("sheet-pin", uuid));
+        }
         if let Some(graphic) = self
             .graphics
             .iter_mut()
@@ -836,6 +839,9 @@ impl KicadSchematic {
         }
         if remove_by_uuid(&mut self.sheets, uuid, |sheet| sheet.uuid.as_deref()) {
             return Ok(delete_summary("sheet", uuid));
+        }
+        if remove_sheet_pin_by_uuid(&mut self.sheets, uuid) {
+            return Ok(delete_summary("sheet-pin", uuid));
         }
         if remove_by_uuid(&mut self.graphics, uuid, |graphic| graphic.uuid.as_deref()) {
             return Ok(delete_summary("graphic", uuid));
@@ -3326,6 +3332,15 @@ fn remove_table_cell_by_uuid(tables: &mut [KicadTable], uuid: &str) -> bool {
     false
 }
 
+fn remove_sheet_pin_by_uuid(sheets: &mut [KicadSheet], uuid: &str) -> bool {
+    for sheet in sheets {
+        if remove_by_uuid(&mut sheet.pins, uuid, |pin| pin.uuid.as_deref()) {
+            return true;
+        }
+    }
+    false
+}
+
 fn move_table_cell_by_uuid(tables: &mut [KicadTable], uuid: &str, delta: KicadPoint) -> bool {
     for table in tables {
         if let Some(cell) = table
@@ -3334,6 +3349,20 @@ fn move_table_cell_by_uuid(tables: &mut [KicadTable], uuid: &str, delta: KicadPo
             .find(|cell| cell.uuid.as_deref() == Some(uuid))
         {
             translate_optional_at(&mut cell.at, delta);
+            return true;
+        }
+    }
+    false
+}
+
+fn move_sheet_pin_by_uuid(sheets: &mut [KicadSheet], uuid: &str, delta: KicadPoint) -> bool {
+    for sheet in sheets {
+        if let Some(pin) = sheet
+            .pins
+            .iter_mut()
+            .find(|pin| pin.uuid.as_deref() == Some(uuid))
+        {
+            translate_optional_at(&mut pin.at, delta);
             return true;
         }
     }
@@ -15323,6 +15352,66 @@ mod tests {
         );
         assert_close(reparsed.tables[0].cells[0].at.unwrap().x, 12.54);
         assert_eq!(reparsed.canvas_scene().tables[0].cells.len(), 1);
+    }
+
+    #[test]
+    fn edits_kicad_sheet_pins_by_uuid_and_roundtrips() {
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+  (sheet
+    (at 50 40)
+    (size 30 20)
+    (property "Sheetname" "gain_stage" (id 0) (at 50 38 0))
+    (property "Sheetfile" "gain_stage.kicad_sch" (id 1) (at 50 62 0))
+    (pin "in" input (at 50 45 180) (uuid "11111111-1111-4111-8111-111111111111"))
+    (pin "out" output (at 80 45 0) (uuid "22222222-2222-4222-8222-222222222222"))
+    (uuid "33333333-3333-4333-8333-333333333333")
+  )
+)"#,
+            "sheet_pin_edits.kicad_sch",
+        )
+        .unwrap();
+
+        let move_summary = schematic
+            .apply_edit(KicadSchematicEdit::MoveItem {
+                uuid: "11111111-1111-4111-8111-111111111111".to_string(),
+                delta: KicadPoint { x: 2.54, y: -1.27 },
+            })
+            .unwrap();
+        assert_eq!(move_summary.operation, "move-sheet-pin");
+        assert_close(schematic.sheets[0].pins[0].at.unwrap().x, 52.54);
+        assert_close(schematic.sheets[0].pins[0].at.unwrap().y, 43.73);
+        assert_close(schematic.sheets[0].at.unwrap().x, 50.0);
+
+        let delete_summary = schematic
+            .apply_edit(KicadSchematicEdit::DeleteItem {
+                uuid: "22222222-2222-4222-8222-222222222222".to_string(),
+            })
+            .unwrap();
+        assert_eq!(delete_summary.operation, "delete-sheet-pin");
+        assert_eq!(schematic.sheets.len(), 1);
+        assert_eq!(schematic.sheets[0].pins.len(), 1);
+        assert_eq!(schematic.sheets[0].pins[0].name, "in");
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(sheet"));
+        assert!(exported.contains("(pin \"in\" input (at 52.54 43.73 180)"));
+        assert!(!exported.contains("pin \"out\""));
+        assert!(!exported.contains("22222222-2222-4222-8222-222222222222"));
+        let reparsed =
+            parse_kicad_schematic(&exported, "sheet_pin_edits_roundtrip.kicad_sch").unwrap();
+        assert_eq!(reparsed.sheets.len(), 1);
+        assert_eq!(reparsed.sheets[0].pins.len(), 1);
+        assert_eq!(
+            reparsed.sheets[0].pins[0].uuid.as_deref(),
+            Some("11111111-1111-4111-8111-111111111111")
+        );
+        assert_close(reparsed.sheets[0].pins[0].at.unwrap().x, 52.54);
+        assert_eq!(reparsed.canvas_scene().sheets[0].pins.len(), 1);
     }
 
     #[test]
