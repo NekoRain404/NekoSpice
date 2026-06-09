@@ -9,11 +9,12 @@ search stay in `osl-kicad`.
 - `lib.rs`: public crate entry points and shared fixture defaults.
 - `app.rs`: application state, document/library loading, and edit commands.
 - `app/canvas_panel.rs`: canvas widget input, shortcuts, painter routing, and scene loading helper.
-- `app/panels.rs`: toolbar, side panels, library browser, and `eframe::App` layout.
+- `app/panels.rs`: toolbar, project/selection side panel, and `eframe::App` layout.
 - `app/placement.rs`: symbol placement mode state, canvas placement routing, repeat placement, and post-edit selection refresh.
 - `app/runtime.rs`: native window options, wgpu renderer selection, and initial egui style.
+- `app/symbol_browser.rs`: symbol library browser, metadata details, preview canvas, and placement controls.
 - `document.rs`: editable KiCad schematic adapter around `KicadSchematicEdit`.
-- `library.rs`: GUI-facing symbol-library table adapter around `KicadSymbolLibraryIndex`.
+- `library.rs`: GUI-facing symbol-library table, definition, dependency, and preview adapter around `KicadSymbolLibraryIndex`.
 - `viewport.rs`: world/screen transforms, zoom, pan, fit-to-scene, and culling bounds.
 - `canvas.rs`: KiCad canvas scene traversal and draw-order routing.
 - `canvas/primitives.rs`: current egui painter prototype for grid, shapes, graphics, and bounds.

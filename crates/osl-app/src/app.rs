@@ -9,6 +9,7 @@ mod canvas_panel;
 mod panels;
 mod placement;
 mod runtime;
+mod symbol_browser;
 
 pub use canvas_panel::load_canvas_scene;
 use placement::SymbolPlacementState;

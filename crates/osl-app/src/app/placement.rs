@@ -49,10 +49,9 @@ impl NekoSpiceApp {
             rotation: 0.0,
         };
 
-        match library
-            .symbol_definition(&symbol_id)
-            .and_then(|symbol| document.place_symbol_from_definition(symbol.definition, at))
-        {
+        match library.symbol_definition(&symbol_id).and_then(|symbol| {
+            document.place_symbol_from_definition(symbol.definition, symbol.library_symbols, at)
+        }) {
             Ok(placement) => {
                 let keep_active = self
                     .placement

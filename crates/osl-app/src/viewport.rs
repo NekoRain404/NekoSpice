@@ -20,11 +20,32 @@ impl Default for CanvasViewport {
 }
 
 impl CanvasViewport {
+    pub(crate) fn for_rect(rect: Rect, bounds: Option<KicadBoundingBox>) -> Self {
+        let mut viewport = Self::default();
+        viewport.fit_rect(rect, bounds);
+        viewport
+    }
+
     pub(crate) fn fit_scene(&mut self, bounds: Option<KicadBoundingBox>) {
+        self.fit_size(Vec2::new(900.0, 560.0), bounds, 4.0..=32.0);
+    }
+
+    pub(crate) fn fit_rect(&mut self, rect: Rect, bounds: Option<KicadBoundingBox>) {
+        self.fit_size(rect.size() - Vec2::splat(24.0), bounds, 6.0..=48.0);
+    }
+
+    fn fit_size(
+        &mut self,
+        size: Vec2,
+        bounds: Option<KicadBoundingBox>,
+        zoom_range: std::ops::RangeInclusive<f32>,
+    ) {
         if let Some(bounds) = bounds {
             let width = bounds.width().max(1.0) as f32;
             let height = bounds.height().max(1.0) as f32;
-            self.zoom = (900.0 / width).min(560.0 / height).clamp(4.0, 32.0);
+            self.zoom = (size.x.max(1.0) / width)
+                .min(size.y.max(1.0) / height)
+                .clamp(*zoom_range.start(), *zoom_range.end());
             let center = KicadPoint {
                 x: (bounds.min.x + bounds.max.x) / 2.0,
                 y: (bounds.min.y + bounds.max.y) / 2.0,

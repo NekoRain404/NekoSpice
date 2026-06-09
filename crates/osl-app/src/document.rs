@@ -72,6 +72,7 @@ impl KicadGuiDocument {
     pub(crate) fn place_symbol_from_definition(
         &mut self,
         definition: KicadSymbolDef,
+        library_symbols: Vec<KicadSymbolDef>,
         at: KicadAt,
     ) -> Result<KicadSymbolPlacementResult, String> {
         let reference = self.next_reference_for_definition(&definition);
@@ -80,6 +81,7 @@ impl KicadGuiDocument {
         self.schematic
             .apply_edit(KicadSchematicEdit::PlaceSymbol {
                 definition: Box::new(definition),
+                library_symbols,
                 reference: reference.clone(),
                 value,
                 at,
@@ -225,6 +227,7 @@ mod tests {
         let placement = document
             .place_symbol_from_definition(
                 definition,
+                Vec::new(),
                 KicadAt {
                     x: 101.6,
                     y: 50.8,

@@ -1984,6 +1984,7 @@ fn parse_kicad_place_symbol_edit(
 
     Ok(KicadSchematicEdit::PlaceSymbol {
         definition: Box::new(definition),
+        library_symbols: symbol_definitions.to_vec(),
         reference: reference.to_string(),
         value: value.to_string(),
         at: parse_kicad_at(at, "symbol placement")?,
@@ -2839,6 +2840,7 @@ mod tests {
         match &edits[0] {
             KicadSchematicEdit::PlaceSymbol {
                 definition,
+                library_symbols,
                 reference,
                 value,
                 at,
@@ -2848,6 +2850,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(definition.name, "NekoSpice:C");
+                assert_eq!(library_symbols.len(), library.symbols.len());
                 assert_eq!(reference, "C2");
                 assert_eq!(value, "47n");
                 assert_close(at.x, 101.6);

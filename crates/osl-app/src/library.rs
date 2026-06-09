@@ -1,6 +1,6 @@
 use osl_kicad::{
-    KicadIndexedSymbol, KicadSymbolDef, KicadSymbolLibraryIndex, KicadSymbolLibraryIndexQuery,
-    read_kicad_symbol_library, read_kicad_symbol_library_index,
+    KicadCanvasScene, KicadIndexedSymbol, KicadSymbolDef, KicadSymbolLibraryIndex,
+    KicadSymbolLibraryIndexQuery, read_kicad_symbol_library, read_kicad_symbol_library_index,
 };
 use std::path::{Path, PathBuf};
 
@@ -14,6 +14,13 @@ pub(crate) struct KicadGuiLibrary {
 pub(crate) struct KicadGuiSymbolDefinition {
     pub(crate) id: String,
     pub(crate) definition: KicadSymbolDef,
+    pub(crate) library_symbols: Vec<KicadSymbolDef>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct KicadGuiSymbolPreview {
+    pub(crate) id: String,
+    pub(crate) scene: KicadCanvasScene,
 }
 
 impl KicadGuiLibrary {
@@ -71,6 +78,22 @@ impl KicadGuiLibrary {
         Ok(KicadGuiSymbolDefinition {
             id: symbol.id.clone(),
             definition,
+            library_symbols: library.symbols,
+        })
+    }
+
+    pub(crate) fn symbol_preview(&self, lib_id: &str) -> Result<KicadGuiSymbolPreview, String> {
+        let symbol = self.symbol_definition(lib_id)?;
+        let scene = KicadCanvasScene::from_symbol_definition(
+            symbol.id.clone(),
+            &symbol.definition,
+            &symbol.library_symbols,
+            Some(1),
+            None,
+        );
+        Ok(KicadGuiSymbolPreview {
+            id: symbol.id,
+            scene,
         })
     }
 }
@@ -107,6 +130,23 @@ mod tests {
 
         assert_eq!(symbol.id, "NekoSpice:R");
         assert_eq!(symbol.definition.name, "NekoSpice:R");
+        assert_eq!(symbol.library_symbols.len(), 3);
         assert_eq!(symbol.definition.property("Reference"), Some("R"));
+    }
+
+    #[test]
+    fn builds_symbol_preview_scene_for_gui_browser() {
+        let library = KicadGuiLibrary::load(
+            crate::test_support::workspace_root().join(DEFAULT_SYMBOL_LIBRARY_TABLE),
+        )
+        .unwrap();
+
+        let preview = library.symbol_preview("NekoSpice:R").unwrap();
+
+        assert_eq!(preview.id, "NekoSpice:R");
+        assert_eq!(preview.scene.symbols.len(), 1);
+        assert_eq!(preview.scene.symbols[0].lib_id, "NekoSpice:R");
+        assert_eq!(preview.scene.symbols[0].pins.len(), 2);
+        assert!(preview.scene.bounds.is_some());
     }
 }

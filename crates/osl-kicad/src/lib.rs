@@ -352,6 +352,7 @@ pub enum KicadSchematicEdit {
     },
     PlaceSymbol {
         definition: Box<KicadSymbolDef>,
+        library_symbols: Vec<KicadSymbolDef>,
         reference: String,
         value: String,
         at: KicadAt,
@@ -411,6 +412,7 @@ pub struct KicadEditSummary {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadSymbolPlacement {
     pub definition: KicadSymbolDef,
+    pub library_symbols: Vec<KicadSymbolDef>,
     pub reference: String,
     pub value: String,
     pub at: KicadAt,
@@ -545,6 +547,7 @@ impl KicadSchematic {
             } => self.set_symbol_property(&reference, &name, &value, at),
             KicadSchematicEdit::PlaceSymbol {
                 definition,
+                library_symbols,
                 reference,
                 value,
                 at,
@@ -554,6 +557,7 @@ impl KicadSchematic {
                 uuid,
             } => self.place_symbol(KicadSymbolPlacement {
                 definition: *definition,
+                library_symbols,
                 reference,
                 value,
                 at,
@@ -987,6 +991,7 @@ impl KicadSchematic {
     pub fn place_symbol(&mut self, placement: KicadSymbolPlacement) -> OslResult<KicadEditSummary> {
         let KicadSymbolPlacement {
             definition,
+            library_symbols,
             reference,
             value,
             at,
@@ -1022,18 +1027,12 @@ impl KicadSchematic {
         }
 
         let lib_id = definition.name.clone();
-        match self
-            .library_symbols
-            .iter()
-            .find(|symbol| symbol.name == lib_id)
-        {
-            Some(existing) if !library_symbol_definitions_are_compatible(existing, &definition) => {
-                return Err(OslError::InvalidInput(format!(
-                    "KiCad embedded library symbol '{lib_id}' already exists with different content"
-                )));
+        self.merge_symbol_placement_library_symbol(&definition)?;
+        for dependency in library_symbols {
+            if dependency.name == lib_id {
+                continue;
             }
-            Some(_) => {}
-            None => self.library_symbols.push(definition.clone()),
+            self.merge_symbol_placement_library_symbol(&dependency)?;
         }
 
         let resolved_definition = resolve_symbol_definition(&definition, &self.library_symbols)
@@ -2043,6 +2042,29 @@ impl KicadSchematic {
         }
         self.library_symbols.push(definition);
         true
+    }
+
+    fn merge_symbol_placement_library_symbol(
+        &mut self,
+        definition: &KicadSymbolDef,
+    ) -> OslResult<()> {
+        match self
+            .library_symbols
+            .iter()
+            .find(|symbol| symbol.name == definition.name)
+        {
+            Some(existing) if !library_symbol_definitions_are_compatible(existing, definition) => {
+                Err(OslError::InvalidInput(format!(
+                    "KiCad embedded library symbol '{}' already exists with different content",
+                    definition.name
+                )))
+            }
+            Some(_) => Ok(()),
+            None => {
+                self.library_symbols.push(definition.clone());
+                Ok(())
+            }
+        }
     }
 
     fn merge_library_symbol_with_parents(
@@ -15999,6 +16021,7 @@ mod tests {
         schematic
             .apply_edit(KicadSchematicEdit::PlaceSymbol {
                 definition: Box::new(capacitor),
+                library_symbols: library.symbols.clone(),
                 reference: "C2".to_string(),
                 value: "47n".to_string(),
                 at: KicadAt {
@@ -16040,6 +16063,85 @@ mod tests {
                 .iter()
                 .any(|symbol| symbol.reference == "C2" && symbol.pins.len() == 2)
         );
+    }
+
+    #[test]
+    fn places_derived_symbol_with_parent_library_context() {
+        let mut schematic = parse_kicad_schematic(
+            r#"(kicad_sch
+  (version 20230121)
+  (generator "NekoSpice")
+  (paper "A4")
+  (lib_symbols)
+)"#,
+            "empty_derived_placement.kicad_sch",
+        )
+        .unwrap();
+        let library = parse_kicad_symbol_library(
+            r#"(kicad_symbol_lib
+  (version 20230121)
+  (symbol "NekoSpice:ParentR"
+    (property "Reference" "R" (at 0 0 0))
+    (property "Value" "1k" (at 0 -2.54 0))
+    (symbol "ParentR_0_1"
+      (rectangle (start -1 -1) (end 1 1) (stroke (width 0.127) (type default)) (fill (type none)))
+      (pin passive line (at -2.54 0 0) (length 2.54) (name "~") (number "1"))
+      (pin passive line (at 2.54 0 180) (length 2.54) (name "~") (number "2"))
+    )
+  )
+  (symbol "NekoSpice:DerivedR"
+    (extends "NekoSpice:ParentR")
+    (property "Reference" "R" (at 0 0 0))
+    (property "Value" "2.2k" (at 0 -2.54 0))
+  )
+)"#,
+            "derived_placement.kicad_sym",
+        )
+        .unwrap();
+
+        schematic
+            .apply_edit(KicadSchematicEdit::PlaceSymbol {
+                definition: Box::new(library.symbol("NekoSpice:DerivedR").unwrap().clone()),
+                library_symbols: library.symbols.clone(),
+                reference: "R1".to_string(),
+                value: "2.2k".to_string(),
+                at: KicadAt {
+                    x: 10.0,
+                    y: 10.0,
+                    rotation: 0.0,
+                },
+                unit: Some(1),
+                body_style: None,
+                pin_alternates: BTreeMap::new(),
+                uuid: Some("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb".to_string()),
+            })
+            .unwrap();
+
+        assert!(
+            schematic
+                .library_symbols
+                .iter()
+                .any(|symbol| symbol.name == "NekoSpice:ParentR")
+        );
+        assert!(
+            schematic
+                .library_symbols
+                .iter()
+                .any(|symbol| symbol.name == "NekoSpice:DerivedR")
+        );
+        let placed = schematic
+            .symbols
+            .iter()
+            .find(|symbol| symbol.reference() == Some("R1"))
+            .unwrap();
+        assert_eq!(placed.pins.len(), 2);
+        assert_eq!(schematic.canvas_scene().symbols[0].graphics.len(), 1);
+
+        let exported = schematic.to_kicad_schematic_sexpr();
+        assert!(exported.contains("(symbol \"NekoSpice:ParentR\""));
+        assert!(exported.contains("(symbol \"NekoSpice:DerivedR\""));
+        assert!(exported.contains("(extends \"NekoSpice:ParentR\")"));
+        assert!(!exported.contains("(symbol \"DerivedR_0_1\""));
     }
 
     #[test]
@@ -16088,6 +16190,7 @@ mod tests {
         let summary = schematic
             .apply_edit(KicadSchematicEdit::PlaceSymbol {
                 definition: Box::new(library.symbol("NekoSpice:R").unwrap().clone()),
+                library_symbols: library.symbols.clone(),
                 reference: "R1".to_string(),
                 value: "1k".to_string(),
                 at: KicadAt {
@@ -16150,6 +16253,7 @@ mod tests {
         schematic
             .apply_edit(KicadSchematicEdit::PlaceSymbol {
                 definition: Box::new(definition),
+                library_symbols: library.symbols.clone(),
                 reference: "U2".to_string(),
                 value: "Scoped".to_string(),
                 at: KicadAt {
@@ -16214,6 +16318,7 @@ mod tests {
         let error = schematic
             .apply_edit(KicadSchematicEdit::PlaceSymbol {
                 definition: Box::new(definition),
+                library_symbols: Vec::new(),
                 reference: "U3".to_string(),
                 value: "Scoped".to_string(),
                 at: KicadAt {
@@ -17698,6 +17803,7 @@ mod tests {
         schematic
             .place_symbol(KicadSymbolPlacement {
                 definition: derived,
+                library_symbols: Vec::new(),
                 reference: "R2".to_string(),
                 value: "3.3k".to_string(),
                 at: KicadAt {
