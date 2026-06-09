@@ -12,7 +12,7 @@ search stay in `osl-kicad`.
 - `app/panels.rs`: toolbar, project/selection side panel, and `eframe::App` layout.
 - `app/placement.rs`: symbol placement mode state, repeat placement, and post-edit selection refresh.
 - `app/runtime.rs`: native window options, wgpu renderer selection, and initial egui style.
-- `app/selection_properties.rs`: selected symbol property editor state sync and `KicadSchematicEdit::SetSymbolProperty` routing.
+- `app/selection_properties.rs`: selected symbol property editor state sync and `KicadSchematicEdit::{SetSymbolProperty, ConfigureSymbol}` routing.
 - `app/schematic_tools/mod.rs`: schematic tool UI, canvas click routing, and GUI calls into the document adapter.
 - `app/schematic_tools/state.rs`: active tool state, pending wire/bus starts, sheet options, and other tool-local inputs.
 - `app/schematic_tools/preview.rs`: transient canvas previews for active schematic drawing tools.

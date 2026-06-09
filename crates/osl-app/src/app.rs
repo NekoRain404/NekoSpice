@@ -19,6 +19,7 @@ pub use canvas_panel::load_canvas_scene;
 use placement::SymbolPlacementState;
 pub use runtime::run_native;
 use schematic_tools::SchematicToolState;
+use selection_properties::SelectionPropertyEditorState;
 
 const EDIT_NUDGE_MM: f64 = 2.54;
 
@@ -33,9 +34,7 @@ pub struct NekoSpiceApp {
     pub(super) selected_symbol_id: Option<String>,
     pub(super) selected_symbol_placement: SymbolPlacementConfig,
     pub(crate) placement: Option<SymbolPlacementState>,
-    pub(super) property_reference: String,
-    pub(super) property_value: String,
-    pub(super) property_selection_uuid: Option<String>,
+    selection_properties: SelectionPropertyEditorState,
     pub(super) schematic_tools: SchematicToolState,
     pub(super) symbol_search: String,
     pub(super) load_error: Option<String>,
@@ -87,9 +86,7 @@ impl Default for NekoSpiceApp {
             selected_symbol_id: None,
             selected_symbol_placement: SymbolPlacementConfig::default(),
             placement: None,
-            property_reference: String::new(),
-            property_value: String::new(),
-            property_selection_uuid: None,
+            selection_properties: SelectionPropertyEditorState::default(),
             schematic_tools: SchematicToolState::default(),
             symbol_search: String::new(),
             load_error: None,

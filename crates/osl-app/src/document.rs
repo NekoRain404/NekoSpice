@@ -74,6 +74,20 @@ impl KicadGuiDocument {
         })
     }
 
+    pub(crate) fn configure_symbol_mirror(
+        &mut self,
+        reference: String,
+        mirror: Option<String>,
+    ) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::ConfigureSymbol {
+            reference,
+            unit: None,
+            body_style: None,
+            mirror: Some(mirror),
+            pin_alternates: None,
+        })
+    }
+
     pub(crate) fn place_symbol_from_definition(
         &mut self,
         definition: KicadSymbolDef,
@@ -385,6 +399,9 @@ mod tests {
         document
             .set_symbol_property("RLOAD".to_string(), "Value".to_string(), "2k".to_string())
             .unwrap();
+        document
+            .configure_symbol_mirror("RLOAD".to_string(), Some("x y".to_string()))
+            .unwrap();
 
         let scene = document.scene();
         let symbol = scene
@@ -393,6 +410,7 @@ mod tests {
             .find(|symbol| symbol.reference == "RLOAD")
             .unwrap();
         assert_eq!(symbol.value, "2k");
+        assert_eq!(symbol.mirror.as_deref(), Some("x y"));
         assert!(document.is_dirty());
     }
 

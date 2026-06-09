@@ -3757,6 +3757,7 @@ impl KicadCanvasScene {
                     .unwrap_or_else(|| symbol.local_name())
                     .to_string(),
                 at,
+                mirror: None,
                 graphics,
                 pins,
                 pin_names: definition.pin_names.clone(),
@@ -3817,6 +3818,7 @@ impl KicadCanvasScene {
                     reference: symbol.reference().unwrap_or_default().to_string(),
                     value: symbol.value().unwrap_or_default().to_string(),
                     at,
+                    mirror: symbol.mirror.clone(),
                     graphics,
                     pins,
                     pin_names: definition.pin_names.clone(),
@@ -4691,6 +4693,7 @@ pub struct KicadCanvasSymbol {
     pub reference: String,
     pub value: String,
     pub at: KicadAt,
+    pub mirror: Option<String>,
     pub graphics: Vec<KicadCanvasGraphic>,
     pub pins: Vec<KicadCanvasPin>,
     pub pin_names: Option<KicadPinDisplay>,
@@ -4707,6 +4710,7 @@ impl KicadCanvasSymbol {
             "reference": self.reference,
             "value": self.value,
             "at": kicad_at_value(self.at),
+            "mirror": self.mirror,
             "unit_name": self.unit_name,
             "pin_names": self.pin_names.as_ref().map(kicad_pin_display_value),
             "pin_numbers": self.pin_numbers.as_ref().map(kicad_pin_display_value),
@@ -17071,6 +17075,7 @@ mod tests {
 
         let scene = schematic.canvas_scene();
         assert_eq!(scene.symbols[0].unit_name.as_deref(), Some("Analog"));
+        assert_eq!(scene.symbols[0].mirror.as_deref(), Some("x y"));
         let pin3 = scene.symbols[0]
             .pins
             .iter()
