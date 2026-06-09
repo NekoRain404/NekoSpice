@@ -1790,6 +1790,7 @@ dependencies = [
  "osl-model",
  "osl-netlist",
  "osl-render",
+ "osl-report",
  "osl-sim",
  "osl-waveform",
  "serde",
@@ -1829,6 +1830,14 @@ version = "0.1.0"
 dependencies = [
  "osl-core",
  "osl-kicad",
+]
+
+[[package]]
+name = "osl-report"
+version = "0.1.0"
+dependencies = [
+ "osl-core",
+ "osl-waveform",
 ]
 
 [[package]]
