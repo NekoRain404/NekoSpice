@@ -14,6 +14,12 @@ mod home_insights_panel;
 mod home_project_context;
 mod home_sections;
 mod home_widgets;
+mod library_data;
+mod library_inspector;
+mod library_preview;
+mod library_sections;
+mod library_widgets;
+mod library_workspace;
 mod localization;
 mod navigation;
 mod navigation_panel;
@@ -36,7 +42,6 @@ mod simulation_report_panel;
 mod simulation_waveform_panel;
 mod status_strip;
 mod studio_toolbar;
-mod symbol_browser;
 mod symbol_placement_controls;
 mod theme;
 mod widgets;
@@ -173,7 +178,11 @@ impl NekoSpiceApp {
             Ok(library) => {
                 self.library_table_path = path.display().to_string();
                 self.library = Some(library);
-                self.selected_symbol_id = None;
+                self.selected_symbol_id = self
+                    .library
+                    .as_ref()
+                    .and_then(|library| library.index().symbols.first())
+                    .map(|symbol| symbol.id.clone());
                 self.selected_symbol_placement = SymbolPlacementConfig::default();
                 self.placement = None;
                 self.library_error = None;

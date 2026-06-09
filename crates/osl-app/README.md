@@ -22,6 +22,18 @@ search stay in `osl-kicad`.
   actions, templates, queue, solver health, measurements, and recommendations.
 - `app/home_widgets.rs`: Home-only responsive layout helpers and small display
   rows/cards. Shared widgets still belong in `app/widgets.rs`.
+- `app/library_workspace.rs`: Library center workspace layout, header, search,
+  and category tabs for KiCad-compatible symbols.
+- `app/library_sections.rs`: Library symbol list, selected-symbol preview card,
+  and generated SPICE model preview sections.
+- `app/library_inspector.rs`: Library right-side status, selected-symbol detail,
+  and validation summary cards.
+- `app/library_preview.rs`: Library-only preview drawing for KiCad symbol canvas
+  snapshots and compact SPICE stub listings.
+- `app/library_data.rs`: GUI-facing library filter, search result, selected
+  symbol snapshot, and SPICE preview helper data.
+- `app/library_widgets.rs`: Library-only tabs, symbol rows, metadata rows, and
+  code-line widgets.
 - `app/navigation.rs`: Studio workspace tabs and labels for home, schematic,
   library, simulation, report, and settings contexts.
 - `app/panels.rs`: Studio shell layout compositor only. It mounts the chrome
@@ -76,7 +88,6 @@ search stay in `osl-kicad`.
   tabs, canvas toolbar, framed canvas mounting, and bottom waveform/console dock.
 - `app/schematic_workspace_widgets.rs`: Schematic-only display widgets for tabs,
   toolbar buttons, signal rows, and console lines.
-- `app/symbol_browser.rs`: symbol library browser, metadata details, and preview canvas.
 - `app/symbol_placement_controls.rs`: unit, body-style, and pin-alternate controls for KiCad-compatible symbol placement.
 - `app/theme.rs`: Studio theme modes, palette tokens, style application, and
   frame/text helpers. Shared UI color and spacing decisions live here instead of
