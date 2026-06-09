@@ -2,7 +2,8 @@ use crate::sexpr::{
     Sexp, atom_text, child, child_value, format_number, head, list_items, list_value,
     sexpr_atom_or_string, sexpr_string,
 };
-use crate::{KicadSize, parse_kicad_bool_value, parse_size};
+use crate::util::parse_kicad_bool_value;
+use crate::{KicadSize, parse_size};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadStroke {

@@ -3,11 +3,12 @@ use crate::geometry::{
     kicad_point_distance, kicad_polyline_hits_point, kicad_rotated_rect_contains_point,
     kicad_sheet_box_bounds, kicad_text_bounds, pin_body_end,
 };
+use crate::json::kicad_bounding_box_value;
 use crate::{
     KicadBoundingBox, KicadCanvasDirectiveLabel, KicadCanvasGraphic, KicadCanvasJunction,
     KicadCanvasNoConnect, KicadCanvasPin, KicadCanvasRuleArea, KicadCanvasScene, KicadCanvasSheet,
     KicadCanvasSheetPin, KicadCanvasSymbol, KicadCanvasTable, KicadCanvasTableCell,
-    KicadCanvasTextBox, KicadPoint, KicadStroke, kicad_bounding_box_value, kicad_point_value,
+    KicadCanvasTextBox, KicadPoint, KicadStroke, kicad_point_value,
 };
 
 #[derive(Debug, Clone, PartialEq)]

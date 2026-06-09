@@ -9,7 +9,7 @@ use crate::style::{
     parse_stroke, parse_text_effects, write_inline_fill, write_inline_optional_bool_sexpr,
     write_inline_stroke, write_text_effects_line,
 };
-use crate::{parse_kicad_bool_value, parse_optional_bool_child};
+use crate::util::{parse_kicad_bool_value, parse_optional_bool_child};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadTable {

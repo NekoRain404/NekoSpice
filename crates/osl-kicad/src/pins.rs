@@ -1,10 +1,10 @@
 use crate::coordinates::{KicadAt, parse_at};
-use crate::parse_optional_bool_child;
 use crate::sexpr::{
     Sexp, atom_text, child, child_value, direct_children, format_number, list_items, list_value,
     sexpr_atom_or_string, sexpr_string,
 };
 use crate::style::{KicadTextEffects, parse_text_effects, write_optional_bool_sexpr};
+use crate::util::parse_optional_bool_child;
 use std::cmp::Ordering;
 
 #[derive(Debug, Clone, PartialEq)]

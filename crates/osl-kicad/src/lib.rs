@@ -29,6 +29,7 @@ mod symbols;
 mod table;
 mod text;
 mod transform;
+mod util;
 mod wiring;
 
 pub use canvas::{
@@ -100,17 +101,15 @@ use edit::{
     uuid_from_hashes, validate_at, validate_bus_entry_size, validate_point, validate_size,
 };
 #[cfg(test)]
-use geometry::KICAD_CANVAS_POINT_BOUNDS_RADIUS;
-use geometry::{KICAD_CANVAS_LINE_BOUNDS_PADDING, KicadBoundingBoxBuilder, kicad_points_bounds};
+use geometry::{KICAD_CANVAS_LINE_BOUNDS_PADDING, KICAD_CANVAS_POINT_BOUNDS_RADIUS};
 use osl_core::{OslError, OslResult, read_text, write_text};
 use pins::{compare_pin_numbers, kicad_pin_alternate_value, kicad_pin_display_value};
-use sexpr::{child, format_number, list_value};
+use sexpr::format_number;
 use sheet::sheet_properties;
 use simulation::is_spice_analysis_directive_text;
 use spice_export::spice_primitive_for_device;
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 pub(crate) use style::{
     default_kicad_text_effects, kicad_color_value, kicad_fill_value, kicad_margins_value,
     kicad_stroke_value, kicad_text_effects_value,
@@ -121,6 +120,7 @@ pub(crate) use symbols::{
     symbol_item_scope_matches, symbol_sim_pin_order,
 };
 use transform::transform_symbol_point;
+use util::resolve_kicad_uri;
 
 pub fn read_kicad_schematic_hierarchy_netlist(path: &Path) -> OslResult<KicadHierarchyNetlist> {
     let schematic = read_kicad_schematic_with_libraries(path)?;
@@ -1957,241 +1957,6 @@ fn normalize_default_property_effects(symbol: &mut KicadSymbolDef) {
             property.effects = Some(default_kicad_text_effects());
         }
     }
-}
-
-pub(crate) fn parse_kicad_footprint_filters(value: &str) -> Vec<String> {
-    value
-        .split_whitespace()
-        .map(unescape_kicad_brace_string)
-        .filter(|filter| !filter.is_empty())
-        .collect()
-}
-
-pub(crate) fn case_insensitive_contains(value: &str, needle: &str) -> bool {
-    value
-        .to_ascii_lowercase()
-        .contains(&needle.to_ascii_lowercase())
-}
-
-pub(crate) fn kicad_wildcard_match(pattern: &str, value: &str) -> bool {
-    wildcard_match(
-        pattern.to_ascii_lowercase().as_bytes(),
-        value.to_ascii_lowercase().as_bytes(),
-    )
-}
-
-fn wildcard_match(pattern: &[u8], value: &[u8]) -> bool {
-    let (mut pattern_index, mut value_index) = (0, 0);
-    let mut star_index = None;
-    let mut star_value_index = 0;
-
-    while value_index < value.len() {
-        if pattern_index < pattern.len()
-            && (pattern[pattern_index] == b'?' || pattern[pattern_index] == value[value_index])
-        {
-            pattern_index += 1;
-            value_index += 1;
-        } else if pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
-            star_index = Some(pattern_index);
-            pattern_index += 1;
-            star_value_index = value_index;
-        } else if let Some(star) = star_index {
-            pattern_index = star + 1;
-            star_value_index += 1;
-            value_index = star_value_index;
-        } else {
-            return false;
-        }
-    }
-
-    while pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
-        pattern_index += 1;
-    }
-
-    pattern_index == pattern.len()
-}
-
-fn unescape_kicad_brace_string(value: &str) -> String {
-    let mut output = String::with_capacity(value.len());
-    let mut characters = value.chars().peekable();
-    while let Some(character) = characters.next() {
-        if character != '{' {
-            output.push(character);
-            continue;
-        }
-
-        let mut token = String::new();
-        let mut terminated = false;
-        for token_character in characters.by_ref() {
-            if token_character == '}' {
-                terminated = true;
-                break;
-            }
-            token.push(token_character);
-        }
-
-        if terminated {
-            match token.as_str() {
-                "dblquote" => output.push('"'),
-                "quote" => output.push('\''),
-                "lt" => output.push('<'),
-                "gt" => output.push('>'),
-                "backslash" => output.push('\\'),
-                "slash" => output.push('/'),
-                "bar" => output.push('|'),
-                "comma" => output.push(','),
-                "colon" => output.push(':'),
-                "space" => output.push(' '),
-                "dollar" => output.push('$'),
-                "tab" => output.push('\t'),
-                "return" => output.push('\n'),
-                "brace" => output.push('{'),
-                _ => {
-                    output.push('{');
-                    output.push_str(&unescape_kicad_brace_string(&token));
-                    output.push('}');
-                }
-            }
-        } else {
-            output.push('{');
-            output.push_str(&unescape_kicad_brace_string(&token));
-        }
-    }
-    output
-}
-
-pub(crate) fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
-    format!(
-        concat!(
-            "{{ ",
-            "\"min\": {{ \"x\": {}, \"y\": {} }}, ",
-            "\"max\": {{ \"x\": {}, \"y\": {} }}, ",
-            "\"width\": {}, ",
-            "\"height\": {} ",
-            "}}"
-        ),
-        bounds.min.x,
-        bounds.min.y,
-        bounds.max.x,
-        bounds.max.y,
-        bounds.width(),
-        bounds.height()
-    )
-}
-
-pub(crate) fn kicad_bounding_box_value(bounds: KicadBoundingBox) -> serde_json::Value {
-    serde_json::json!({
-        "min": {
-            "x": bounds.min.x,
-            "y": bounds.min.y,
-        },
-        "max": {
-            "x": bounds.max.x,
-            "y": bounds.max.y,
-        },
-        "width": bounds.width(),
-        "height": bounds.height(),
-    })
-}
-
-pub(crate) fn kicad_property_value(property: &KicadProperty) -> serde_json::Value {
-    serde_json::json!({
-        "name": property.name,
-        "value": property.value,
-        "id": property.id,
-        "at": property.at.map(kicad_at_value),
-        "hide": property.hide,
-        "show_name": property.show_name,
-        "do_not_autoplace": property.do_not_autoplace,
-        "effects": property.effects.as_ref().map(kicad_text_effects_value),
-    })
-}
-
-pub(crate) fn resolve_kicad_uri(uri: &str, base_dir: &Path) -> PathBuf {
-    let base_dir = normalize_base_dir(base_dir);
-    let expanded = expand_kicad_uri(uri, &base_dir);
-    let path = PathBuf::from(expanded);
-    if path.is_absolute() {
-        path
-    } else {
-        base_dir.join(path)
-    }
-}
-
-fn normalize_base_dir(base_dir: &Path) -> PathBuf {
-    if base_dir.is_absolute() {
-        base_dir.to_path_buf()
-    } else {
-        env::current_dir()
-            .map(|cwd| cwd.join(base_dir))
-            .unwrap_or_else(|_| base_dir.to_path_buf())
-    }
-}
-
-fn expand_kicad_uri(uri: &str, base_dir: &Path) -> String {
-    let mut expanded = String::new();
-    let mut remaining = uri;
-
-    while let Some(start) = remaining.find("${") {
-        expanded.push_str(&remaining[..start]);
-        let after_start = &remaining[start + 2..];
-        let Some(end) = after_start.find('}') else {
-            expanded.push_str(&remaining[start..]);
-            return expanded;
-        };
-
-        let name = &after_start[..end];
-        if name == "KIPRJMOD" {
-            expanded.push_str(&base_dir.display().to_string());
-        } else if let Ok(value) = env::var(name) {
-            expanded.push_str(&value);
-        } else {
-            expanded.push_str("${");
-            expanded.push_str(name);
-            expanded.push('}');
-        }
-        remaining = &after_start[end + 1..];
-    }
-
-    expanded.push_str(remaining);
-    expanded
-}
-
-pub(crate) fn canvas_symbol_bounds(
-    graphics: &[KicadCanvasGraphic],
-    pins: &[KicadCanvasPin],
-) -> Option<KicadBoundingBox> {
-    let mut bounds = KicadBoundingBoxBuilder::default();
-    for graphic in graphics {
-        if let Some(graphic_bounds) = graphic.bounds() {
-            bounds.include_box(graphic_bounds);
-        } else {
-            graphic.include_in_bounds(&mut bounds);
-        }
-    }
-    for pin in pins {
-        if let Some(pin_bounds) =
-            kicad_points_bounds(&[pin.start, pin.end], KICAD_CANVAS_LINE_BOUNDS_PADDING)
-        {
-            bounds.include_box(pin_bounds);
-        }
-    }
-    bounds.finish()
-}
-pub(crate) fn parse_kicad_bool_value(value: String) -> Option<bool> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "yes" | "true" | "1" => Some(true),
-        "no" | "false" | "0" => Some(false),
-        _ => None,
-    }
-}
-
-pub(crate) fn parse_optional_bool_child(items: &[Sexp], name: &str) -> Option<bool> {
-    child(items, name).map(|node| {
-        list_value(node, 1)
-            .and_then(parse_kicad_bool_value)
-            .unwrap_or(true)
-    })
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ use crate::style::{
     write_optional_bool_sexpr,
 };
 use crate::transform::{transform_local_at, transform_local_point};
-use crate::{parse_kicad_bool_value, parse_optional_bool_child};
+use crate::util::{parse_kicad_bool_value, parse_optional_bool_child};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadSymbolGraphic {

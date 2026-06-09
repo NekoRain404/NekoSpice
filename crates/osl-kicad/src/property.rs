@@ -1,7 +1,7 @@
 use crate::coordinates::{KicadAt, parse_at};
-use crate::parse_kicad_bool_value;
 use crate::sexpr::{Sexp, child, child_value, format_number, list_items, list_value, sexpr_string};
 use crate::style::{KicadTextEffects, parse_text_effects, write_optional_bool_sexpr};
+use crate::util::parse_kicad_bool_value;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadProperty {

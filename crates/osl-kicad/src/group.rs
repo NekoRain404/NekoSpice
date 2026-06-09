@@ -1,5 +1,5 @@
-use crate::parse_kicad_bool_value;
 use crate::sexpr::{Sexp, atom_text, child, child_value, list_items, list_value, sexpr_string};
+use crate::util::parse_kicad_bool_value;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadGroup {

@@ -16,8 +16,9 @@ use crate::sheet::parse_sheet;
 use crate::symbols::{parse_symbol_def, parse_symbol_instance};
 use crate::table::parse_table;
 use crate::text::{parse_text_box, parse_text_item};
+use crate::util::parse_kicad_bool_value;
 use crate::wiring::{parse_bus, parse_bus_alias, parse_bus_entry, parse_net_chain, parse_wire};
-use crate::{KicadLabelKind, KicadSchematic, parse_kicad_bool_value, parse_sexpr};
+use crate::{KicadLabelKind, KicadSchematic, parse_sexpr};
 use osl_core::{OslResult, read_text, write_text};
 use std::path::Path;
 

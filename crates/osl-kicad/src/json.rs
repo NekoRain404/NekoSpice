@@ -1,5 +1,7 @@
 use osl_core::json_escape;
 
+use crate::{KicadBoundingBox, KicadProperty, kicad_at_value, kicad_text_effects_value};
+
 pub(crate) fn json_option(value: Option<&str>) -> String {
     match value {
         Some(value) => format!("\"{}\"", json_escape(value)),
@@ -19,4 +21,51 @@ pub(crate) fn json_bool_option(value: Option<bool>) -> &'static str {
         Some(false) => "false",
         None => "null",
     }
+}
+
+pub(crate) fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
+    format!(
+        concat!(
+            "{{ ",
+            "\"min\": {{ \"x\": {}, \"y\": {} }}, ",
+            "\"max\": {{ \"x\": {}, \"y\": {} }}, ",
+            "\"width\": {}, ",
+            "\"height\": {} ",
+            "}}"
+        ),
+        bounds.min.x,
+        bounds.min.y,
+        bounds.max.x,
+        bounds.max.y,
+        bounds.width(),
+        bounds.height()
+    )
+}
+
+pub(crate) fn kicad_bounding_box_value(bounds: KicadBoundingBox) -> serde_json::Value {
+    serde_json::json!({
+        "min": {
+            "x": bounds.min.x,
+            "y": bounds.min.y,
+        },
+        "max": {
+            "x": bounds.max.x,
+            "y": bounds.max.y,
+        },
+        "width": bounds.width(),
+        "height": bounds.height(),
+    })
+}
+
+pub(crate) fn kicad_property_value(property: &KicadProperty) -> serde_json::Value {
+    serde_json::json!({
+        "name": property.name,
+        "value": property.value,
+        "id": property.id,
+        "at": property.at.map(kicad_at_value),
+        "hide": property.hide,
+        "show_name": property.show_name,
+        "do_not_autoplace": property.do_not_autoplace,
+        "effects": property.effects.as_ref().map(kicad_text_effects_value),
+    })
 }

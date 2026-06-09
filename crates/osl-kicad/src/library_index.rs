@@ -1,7 +1,8 @@
+use crate::json::kicad_bounding_box_value;
+use crate::util::{case_insensitive_contains, kicad_wildcard_match, resolve_kicad_uri};
 use crate::{
     KicadBoundingBox, KicadDiagnosticSeverity, KicadPinAlternate, KicadResolvedSymbolDef,
-    KicadSymbolLibraryTable, case_insensitive_contains, kicad_bounding_box_value,
-    kicad_pin_alternate_value, kicad_wildcard_match, read_kicad_symbol_library, resolve_kicad_uri,
+    KicadSymbolLibraryTable, kicad_pin_alternate_value, read_kicad_symbol_library,
     resolve_symbol_definition,
 };
 use osl_core::json_escape;

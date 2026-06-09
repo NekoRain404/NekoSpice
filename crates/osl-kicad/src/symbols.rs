@@ -19,7 +19,9 @@ use crate::sexpr::{
 use crate::style::write_optional_bool_sexpr;
 use crate::symbol_library::KicadSymbolLibrary;
 use crate::transform::{normalize_symbol_mirror, transform_local_at};
-use crate::{parse_kicad_bool_value, parse_kicad_footprint_filters, parse_optional_bool_child};
+use crate::util::{
+    parse_kicad_bool_value, parse_kicad_footprint_filters, parse_optional_bool_child,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq)]

@@ -12,7 +12,7 @@ use crate::style::{
     KicadFill, KicadStroke, KicadTextEffects, parse_fill, parse_stroke, parse_text_effects,
     write_inline_fill, write_inline_stroke, write_inline_text_effects, write_optional_bool_sexpr,
 };
-use crate::{parse_kicad_bool_value, parse_optional_bool_child};
+use crate::util::{parse_kicad_bool_value, parse_optional_bool_child};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadSheet {

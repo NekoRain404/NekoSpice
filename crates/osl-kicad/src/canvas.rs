@@ -1,21 +1,20 @@
 use crate::geometry::{
-    KICAD_CANVAS_LINE_BOUNDS_PADDING, KICAD_CANVAS_POINT_BOUNDS_RADIUS, kicad_arc_hits_point,
-    kicad_at_bounds, kicad_bezier_hits_point, kicad_circle_hits_point,
+    KICAD_CANVAS_LINE_BOUNDS_PADDING, KICAD_CANVAS_POINT_BOUNDS_RADIUS, KicadBoundingBoxBuilder,
+    kicad_arc_hits_point, kicad_at_bounds, kicad_bezier_hits_point, kicad_circle_hits_point,
     kicad_closed_polyline_hits_point, kicad_fill_is_solid, kicad_junction_bounds,
     kicad_no_connect_bounds, kicad_point_bounds, kicad_points_bounds, kicad_polygon_contains_point,
     kicad_polyline_hits_point, kicad_rectangle_hits_point, kicad_sheet_pin_bounds,
     kicad_text_bounds, pin_body_end, sample_kicad_arc_points,
 };
+use crate::json::{kicad_bounding_box_json, kicad_bounding_box_value, kicad_property_value};
 use crate::transform::transform_local_point;
 use crate::{
-    KicadAt, KicadBoundingBox, KicadBoundingBoxBuilder, KicadColor, KicadFill, KicadLabelKind,
-    KicadMargins, KicadPinAlternate, KicadPinDef, KicadPinDisplay, KicadPoint, KicadProperty,
+    KicadAt, KicadBoundingBox, KicadColor, KicadFill, KicadLabelKind, KicadMargins,
+    KicadPinAlternate, KicadPinDef, KicadPinDisplay, KicadPoint, KicadProperty,
     KicadResolvedSymbolDef, KicadSchematic, KicadSize, KicadStroke, KicadSymbolDef,
-    KicadTextEffects, canvas_symbol_bounds, kicad_at_value, kicad_bounding_box_json,
-    kicad_bounding_box_value, kicad_color_value, kicad_fill_value, kicad_margins_value,
+    KicadTextEffects, kicad_at_value, kicad_color_value, kicad_fill_value, kicad_margins_value,
     kicad_pin_alternate_value, kicad_pin_display_value, kicad_point_value, kicad_points_value,
-    kicad_property_value, kicad_size_value, kicad_stroke_value, kicad_text_effects_value,
-    resolve_symbol_definition,
+    kicad_size_value, kicad_stroke_value, kicad_text_effects_value, resolve_symbol_definition,
 };
 use osl_core::json_escape;
 
@@ -1611,6 +1610,28 @@ fn kicad_canvas_item_bounds(
         );
     }
     item_bounds
+}
+
+fn canvas_symbol_bounds(
+    graphics: &[KicadCanvasGraphic],
+    pins: &[KicadCanvasPin],
+) -> Option<KicadBoundingBox> {
+    let mut bounds = KicadBoundingBoxBuilder::default();
+    for graphic in graphics {
+        if let Some(graphic_bounds) = graphic.bounds() {
+            bounds.include_box(graphic_bounds);
+        } else {
+            graphic.include_in_bounds(&mut bounds);
+        }
+    }
+    for pin in pins {
+        if let Some(pin_bounds) =
+            kicad_points_bounds(&[pin.start, pin.end], KICAD_CANVAS_LINE_BOUNDS_PADDING)
+        {
+            bounds.include_box(pin_bounds);
+        }
+    }
+    bounds.finish()
 }
 
 fn insert_canvas_item_bounds(

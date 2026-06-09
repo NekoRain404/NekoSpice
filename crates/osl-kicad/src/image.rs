@@ -1,6 +1,7 @@
 use crate::coordinates::parse_image_at;
 use crate::sexpr::{Sexp, atom_text, child, child_value, format_number, list_items, sexpr_string};
-use crate::{KicadBoundingBox, KicadPoint, KicadSize, parse_kicad_bool_value};
+use crate::util::parse_kicad_bool_value;
+use crate::{KicadBoundingBox, KicadPoint, KicadSize};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadImage {

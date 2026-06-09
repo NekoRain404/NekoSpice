@@ -1,11 +1,11 @@
 use crate::coordinates::{KicadAt, parse_at};
-use crate::parse_optional_bool_child;
 use crate::property::{KicadProperty, parse_property};
 use crate::sexpr::{
     Sexp, child, child_value, direct_children, format_number, list_items, list_value,
     sexpr_atom_or_string, sexpr_string,
 };
 use crate::style::{KicadTextEffects, parse_text_effects, write_inline_text_effects};
+use crate::util::parse_optional_bool_child;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KicadLabel {
