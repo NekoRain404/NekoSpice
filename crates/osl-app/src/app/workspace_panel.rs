@@ -22,7 +22,7 @@ impl NekoSpiceApp {
         match self.active_workspace {
             StudioWorkspace::Home => self.draw_home_insights_panel(ui),
             StudioWorkspace::Schematic => self.draw_schematic_inspector_panel(ui),
-            StudioWorkspace::Library => self.draw_library_workspace_panel(ui),
+            StudioWorkspace::Library => self.draw_library_validation_panel(ui),
             StudioWorkspace::Simulation => self.draw_simulation_panel(ui),
             StudioWorkspace::Optimization => self.draw_optimization_workspace_panel(ui),
             StudioWorkspace::Waveforms => self.draw_waveform_workspace_panel(ui),

@@ -9,20 +9,35 @@ impl NekoSpiceApp {
     pub(super) fn draw_library_center_workspace(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            self.draw_library_workspace_header(ui);
-            ui.add_space(8.0);
-            self.draw_library_filter_tabs(ui);
-            ui.add_space(8.0);
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() * 0.30).clamp(240.0, 360.0));
-                    self.draw_library_symbol_list(ui);
+            egui::ScrollArea::vertical()
+                .id_salt("library_center_scroll")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    self.draw_library_workspace_header(ui);
+                    ui.add_space(8.0);
+                    self.draw_library_filter_tabs(ui);
+                    ui.add_space(8.0);
+                    self.draw_library_model_status_cards(ui);
+                    ui.add_space(8.0);
+                    if ui.available_width() >= 920.0 {
+                        ui.horizontal_top(|ui| {
+                            ui.vertical(|ui| {
+                                ui.set_width((ui.available_width() * 0.30).clamp(240.0, 360.0));
+                                self.draw_library_symbol_list(ui);
+                            });
+                            ui.add_space(10.0);
+                            ui.vertical(|ui| {
+                                self.draw_library_model_browser(ui);
+                            });
+                        });
+                    } else {
+                        self.draw_library_symbol_list(ui);
+                        ui.add_space(8.0);
+                        ui.vertical(|ui| {
+                            self.draw_library_model_browser(ui);
+                        });
+                    }
                 });
-                ui.add_space(10.0);
-                ui.vertical(|ui| {
-                    self.draw_library_symbol_workspace(ui);
-                });
-            });
         });
     }
 

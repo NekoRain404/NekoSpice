@@ -1,5 +1,4 @@
 use super::NekoSpiceApp;
-use super::library_preview::{draw_spice_preview, draw_symbol_preview};
 use super::library_widgets::{metadata_row, symbol_list_row};
 use super::localization::UiText;
 use super::theme::StudioTheme;
@@ -37,40 +36,6 @@ impl NekoSpiceApp {
         });
     }
 
-    pub(super) fn draw_library_symbol_workspace(&mut self, ui: &mut egui::Ui) {
-        let Some(symbol) = self.selected_library_symbol_snapshot() else {
-            let mode = self.theme_mode();
-            StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-                ui.label(StudioTheme::section_title_for(
-                    mode,
-                    self.text(UiText::ModelPreview),
-                ));
-                ui.label(StudioTheme::muted_for(
-                    mode,
-                    self.text(UiText::NoSelectedItem),
-                ));
-            });
-            return;
-        };
-
-        if ui.available_width() < 700.0 {
-            self.draw_library_symbol_preview_card(ui, &symbol);
-            ui.add_space(8.0);
-            self.draw_library_spice_preview_card(ui, &symbol);
-        } else {
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() * 0.50).max(300.0));
-                    self.draw_library_symbol_preview_card(ui, &symbol);
-                });
-                ui.add_space(10.0);
-                ui.vertical(|ui| {
-                    self.draw_library_spice_preview_card(ui, &symbol);
-                });
-            });
-        }
-    }
-
     fn draw_library_symbol_row(
         &mut self,
         ui: &mut egui::Ui,
@@ -88,47 +53,5 @@ impl NekoSpiceApp {
             self.selected_symbol_placement = Default::default();
             self.placement = None;
         }
-    }
-
-    fn draw_library_symbol_preview_card(&mut self, ui: &mut egui::Ui, symbol: &KicadIndexedSymbol) {
-        let mode = self.theme_mode();
-        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(StudioTheme::section_title_for(
-                    mode,
-                    self.text(UiText::SymbolPreview),
-                ));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(self.text(UiText::Use)).clicked() {
-                        self.selected_symbol_id = Some(symbol.id.clone());
-                        self.start_symbol_placement();
-                    }
-                });
-            });
-            self.draw_symbol_scope_controls(ui, &symbol.id);
-            match self.library.as_ref().and_then(|library| {
-                library
-                    .symbol_preview(&symbol.id, self.selected_symbol_placement.clone())
-                    .ok()
-            }) {
-                Some(preview) => {
-                    draw_symbol_preview(ui, &preview.scene, self.theme_palette().canvas)
-                }
-                None => {
-                    ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoDocument)));
-                }
-            };
-        });
-    }
-
-    fn draw_library_spice_preview_card(&self, ui: &mut egui::Ui, symbol: &KicadIndexedSymbol) {
-        let mode = self.theme_mode();
-        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(
-                mode,
-                self.text(UiText::ModelPreview),
-            ));
-            draw_spice_preview(ui, symbol);
-        });
     }
 }

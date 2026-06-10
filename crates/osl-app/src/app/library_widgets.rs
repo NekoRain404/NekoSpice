@@ -95,3 +95,54 @@ pub(super) fn metadata_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str
         });
     });
 }
+
+pub(super) fn library_metric_card(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    label: &str,
+    value: &str,
+    caption: &str,
+) {
+    let palette = StudioTheme::palette(mode);
+    StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+        ui.set_min_height(74.0);
+        ui.label(StudioTheme::muted_for(mode, label));
+        ui.label(RichText::new(value).strong().size(18.0).color(palette.text));
+        ui.label(RichText::new(caption).size(11.0).color(palette.text_muted));
+    });
+}
+
+pub(super) fn pin_mapping_row(
+    ui: &mut egui::Ui,
+    number: &str,
+    name: &str,
+    kind: &str,
+    target: &str,
+) {
+    ui.monospace(number);
+    ui.label(name);
+    ui.label(kind);
+    ui.label(target);
+    ui.end_row();
+}
+
+pub(super) fn validation_row(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    label: &str,
+    value: &str,
+    passed: bool,
+) {
+    let palette = StudioTheme::palette(mode);
+    let color = if passed {
+        palette.success
+    } else {
+        palette.warning
+    };
+    ui.horizontal(|ui| {
+        ui.label(StudioTheme::muted_for(mode, label));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(RichText::new(value).strong().color(color));
+        });
+    });
+}
