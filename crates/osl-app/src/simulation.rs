@@ -17,6 +17,12 @@ pub(crate) struct GuiSimulationRun {
     pub(crate) waveform: GuiWaveformSummaryState,
 }
 
+impl GuiSimulationRun {
+    pub(crate) fn from_output_dir(output_dir: PathBuf) -> Result<Self, String> {
+        crate::simulation_run_loader::load_gui_simulation_run(output_dir)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct GuiSimulationJob {
     schematic_path: PathBuf,

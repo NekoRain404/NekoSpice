@@ -35,7 +35,7 @@ search stay in `osl-kicad`.
 - `app/library_widgets.rs`: Library-only tabs, symbol rows, metadata rows, and
   code-line widgets.
 - `app/navigation.rs`: Studio workspace tabs and labels for home, schematic,
-  library, simulation, report, and settings contexts.
+  library, simulation, waveforms, report, and settings contexts.
 - `app/panels.rs`: Studio shell layout compositor only. It mounts the chrome
   regions and delegates all panel content to focused modules.
 - `app/navigation_panel.rs`: left Studio workspace navigation and renderer /
@@ -48,8 +48,17 @@ search stay in `osl-kicad`.
   preview, and export shell sections backed by GUI run DTOs.
 - `app/reports_workspace_widgets.rs`: Reports-only metric cards, metadata rows,
   and artifact rows.
+- `app/waveform_workspace.rs`: Waveform Analysis center workspace state,
+  header, run action, and high-level page composition.
+- `app/waveform_workspace_sections.rs`: Waveform Analysis tabs, trace selection,
+  plot, measurement, statistics, comparison, cursor, and export sections backed
+  by GUI waveform DTOs.
+- `app/waveform_workspace_widgets.rs`: Waveform-only tabs, trace chips,
+  measurement table rows, cursor rows, empty state, and comparison cards.
+- `app/waveform_preview.rs`: Reusable waveform plot drawing for compact
+  simulation panels and the larger analysis workspace.
 - `app/workspace_panel.rs`: left/right workspace context routers for home,
-  schematic tools, library, simulation, reports, and settings contexts.
+  schematic tools, library, simulation, waveforms, reports, and settings contexts.
 - `app/diagnostics_panel.rs`: reusable document diagnostic summary and scroll
   list for schematic-focused surfaces.
 - `app/studio_toolbar.rs`: top action buttons and the framed canvas mounting
@@ -75,7 +84,7 @@ search stay in `osl-kicad`.
 - `app/simulation_workspace_widgets.rs`: Simulation-only analysis mode buttons,
   solver metric cards, and code preview rows.
 - `app/simulation_waveform_panel.rs`: GUI-only waveform result panel for signal
-  selection, compact measurement display, and preview-envelope drawing.
+  selection and compact measurement display using the shared preview renderer.
 - `app/status_strip.rs`: Studio project, solver, diagnostics, selection, and
   waveform status summaries used by the shell chrome.
 - `app/schematic_tools/mod.rs`: schematic tool module entry point and canvas
@@ -111,6 +120,10 @@ search stay in `osl-kicad`.
 - `simulation.rs`: GUI-facing simulation run adapter that writes the current
   schematic netlist to a run directory and invokes `osl-sim` backends on a
   background worker, then finalizes shared run artifacts through `osl-sim`.
+- `simulation_run_loader.rs`: GUI smoke-test and workspace preload adapter for
+  existing run directories. It reconstructs `GuiSimulationRun` DTOs from
+  `run.json`, generated reports, and waveform artifacts without invoking
+  ngspice.
 - `report_summary.rs`: GUI-facing report summary adapter around `osl-report`,
   keeping report directory scanning and fallback `report.html` generation out of
   panel drawing code.
@@ -162,3 +175,6 @@ search stay in `osl-kicad`.
   outside source control.
 - `NEKOSPICE_INITIAL_WORKSPACE=schematic` can be used by GUI smoke scripts to
   open a non-default workspace deterministically before capturing screenshots.
+- `NEKOSPICE_INITIAL_RUN_DIR=runs/gui/<run>` can preload an existing GUI run
+  directory for deterministic waveform/report screenshots without rerunning
+  ngspice.

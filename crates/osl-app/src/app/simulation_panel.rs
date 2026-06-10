@@ -232,13 +232,17 @@ impl NekoSpiceApp {
             draw_simulation_artifacts_panel(ui, run);
             draw_simulation_waveform_panel(
                 ui,
+                self.theme_mode(),
                 &run.waveform,
                 &mut self.simulation_panel.selected_waveform_signal,
             );
         }
     }
 
-    fn sync_selected_waveform_signal(&mut self, waveform: &GuiWaveformSummaryState) {
+    pub(in crate::app) fn sync_selected_waveform_signal(
+        &mut self,
+        waveform: &GuiWaveformSummaryState,
+    ) {
         let GuiWaveformSummaryState::Ready(summary) = waveform else {
             self.simulation_panel.selected_waveform_signal = None;
             return;

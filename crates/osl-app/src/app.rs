@@ -50,6 +50,11 @@ mod status_strip;
 mod studio_toolbar;
 mod symbol_placement_controls;
 mod theme;
+mod waveform_preview;
+mod waveform_preview_primitives;
+mod waveform_workspace;
+mod waveform_workspace_sections;
+mod waveform_workspace_widgets;
 mod widgets;
 mod workspace_panel;
 
@@ -62,6 +67,7 @@ use schematic_inspector_panel::SchematicInspectorPanelState;
 use schematic_tools::SchematicToolState;
 use selection_properties::SelectionPropertyEditorState;
 use simulation_panel::SimulationPanelState;
+use waveform_workspace::WaveformWorkspaceState;
 
 const EDIT_NUDGE_MM: f64 = 2.54;
 
@@ -80,6 +86,7 @@ pub struct NekoSpiceApp {
     schematic_inspector: SchematicInspectorPanelState,
     pub(super) schematic_tools: SchematicToolState,
     pub(super) simulation_panel: SimulationPanelState,
+    waveform_workspace: WaveformWorkspaceState,
     active_workspace: StudioWorkspace,
     preferences: StudioPreferences,
     pub(super) symbol_search: String,
@@ -136,6 +143,7 @@ impl Default for NekoSpiceApp {
             schematic_inspector: SchematicInspectorPanelState::default(),
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
+            waveform_workspace: WaveformWorkspaceState::default(),
             active_workspace: initial_workspace(),
             preferences: StudioPreferences::default(),
             symbol_search: String::new(),
@@ -146,6 +154,7 @@ impl Default for NekoSpiceApp {
         };
         app.load_schematic(PathBuf::from(DEFAULT_SCHEMATIC));
         app.load_symbol_library(PathBuf::from(DEFAULT_SYMBOL_LIBRARY_TABLE));
+        app.load_initial_simulation_run();
         app
     }
 }
@@ -158,6 +167,22 @@ fn initial_workspace() -> StudioWorkspace {
 }
 
 impl NekoSpiceApp {
+    fn load_initial_simulation_run(&mut self) {
+        let Some(path) = std::env::var_os("NEKOSPICE_INITIAL_RUN_DIR") else {
+            return;
+        };
+        match crate::simulation::GuiSimulationRun::from_output_dir(PathBuf::from(path)) {
+            Ok(run) => {
+                self.sync_selected_waveform_signal(&run.waveform);
+                self.simulation_panel.last_run = Some(run);
+            }
+            Err(error) => {
+                self.simulation_panel.last_error = Some(error.clone());
+                self.status_message = Some(error);
+            }
+        }
+    }
+
     pub(super) fn load_schematic(&mut self, path: PathBuf) {
         match KicadGuiDocument::load(path.clone()) {
             Ok(document) => {

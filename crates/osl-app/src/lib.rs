@@ -11,6 +11,7 @@ mod library;
 mod placement_config;
 mod report_summary;
 mod simulation;
+mod simulation_run_loader;
 #[cfg(test)]
 mod test_support;
 mod viewport;
