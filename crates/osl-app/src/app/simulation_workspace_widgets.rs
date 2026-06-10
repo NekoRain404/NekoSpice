@@ -58,3 +58,20 @@ pub(super) fn code_preview_line(ui: &mut egui::Ui, line_number: usize, text: &st
         ui.monospace(text);
     });
 }
+
+pub(super) fn profile_row(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    label: &str,
+    value: &str,
+    status: &str,
+) {
+    let palette = StudioTheme::palette(mode);
+    ui.horizontal(|ui| {
+        ui.label(StudioTheme::muted_for(mode, label));
+        ui.label(RichText::new(value).monospace().color(palette.text));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(StudioTheme::accent_for(mode, status));
+        });
+    });
+}

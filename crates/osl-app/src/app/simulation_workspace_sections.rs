@@ -1,6 +1,6 @@
 use super::NekoSpiceApp;
 use super::localization::UiText;
-use super::simulation_workspace_widgets::{analysis_mode_button, code_preview_line};
+use super::simulation_workspace_widgets::{analysis_mode_button, code_preview_line, profile_row};
 use super::status_strip::severity_color;
 use super::theme::StudioTheme;
 use eframe::egui;
@@ -30,6 +30,8 @@ impl NekoSpiceApp {
             }
             ui.separator();
             self.draw_simulation_directive_editor(ui);
+            ui.separator();
+            self.draw_simulation_profile_grid(ui);
         });
     }
 
@@ -85,6 +87,38 @@ impl NekoSpiceApp {
                 ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoRecentRun)));
             }
         });
+    }
+
+    fn draw_simulation_profile_grid(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        ui.label(StudioTheme::section_title_for(
+            mode,
+            self.text(UiText::SimulationProfile),
+        ));
+        profile_row(ui, mode, self.text(UiText::StopTime), "1 ms", "tran");
+        profile_row(ui, mode, self.text(UiText::StepSize), "1 us", "max");
+        profile_row(ui, mode, self.text(UiText::Tolerance), "1e-6", "solver");
+        profile_row(
+            ui,
+            mode,
+            self.text(UiText::TemperatureSweep),
+            "27 C",
+            "nominal",
+        );
+        profile_row(
+            ui,
+            mode,
+            self.text(UiText::OutputArtifacts),
+            "raw/csv/html",
+            "on",
+        );
+        profile_row(
+            ui,
+            mode,
+            self.text(UiText::Backend),
+            "ngspice-cli",
+            "wgpu UI",
+        );
     }
 }
 
