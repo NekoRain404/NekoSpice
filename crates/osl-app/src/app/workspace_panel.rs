@@ -11,6 +11,7 @@ impl NekoSpiceApp {
             StudioWorkspace::Schematic
             | StudioWorkspace::Library
             | StudioWorkspace::Simulation
+            | StudioWorkspace::Optimization
             | StudioWorkspace::Waveforms
             | StudioWorkspace::Reports
             | StudioWorkspace::Settings => self.draw_project_sidebar(ui),
@@ -23,6 +24,7 @@ impl NekoSpiceApp {
             StudioWorkspace::Schematic => self.draw_schematic_inspector_panel(ui),
             StudioWorkspace::Library => self.draw_library_workspace_panel(ui),
             StudioWorkspace::Simulation => self.draw_simulation_panel(ui),
+            StudioWorkspace::Optimization => self.draw_optimization_workspace_panel(ui),
             StudioWorkspace::Waveforms => self.draw_waveform_workspace_panel(ui),
             StudioWorkspace::Reports => self.draw_reports_workspace_panel(ui),
             StudioWorkspace::Settings => self.draw_settings_workspace_panel(ui),

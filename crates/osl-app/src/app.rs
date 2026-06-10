@@ -23,6 +23,7 @@ mod library_workspace;
 mod localization;
 mod navigation;
 mod navigation_panel;
+mod optimization_workspace;
 mod panels;
 mod placement;
 mod preferences;
@@ -60,6 +61,7 @@ mod workspace_panel;
 
 pub use canvas_panel::load_canvas_scene;
 use navigation::StudioWorkspace;
+use optimization_workspace::OptimizationWorkspaceState;
 use placement::SymbolPlacementState;
 use preferences::StudioPreferences;
 pub use runtime::run_native;
@@ -86,6 +88,7 @@ pub struct NekoSpiceApp {
     schematic_inspector: SchematicInspectorPanelState,
     pub(super) schematic_tools: SchematicToolState,
     pub(super) simulation_panel: SimulationPanelState,
+    optimization_workspace: OptimizationWorkspaceState,
     waveform_workspace: WaveformWorkspaceState,
     active_workspace: StudioWorkspace,
     preferences: StudioPreferences,
@@ -143,6 +146,7 @@ impl Default for NekoSpiceApp {
             schematic_inspector: SchematicInspectorPanelState::default(),
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
+            optimization_workspace: OptimizationWorkspaceState::default(),
             waveform_workspace: WaveformWorkspaceState::default(),
             active_workspace: initial_workspace(),
             preferences: StudioPreferences::default(),

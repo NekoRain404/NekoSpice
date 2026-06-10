@@ -40,6 +40,8 @@ search stay in `osl-kicad`.
   regions and delegates all panel content to focused modules.
 - `app/navigation_panel.rs`: left Studio workspace navigation and renderer /
   solver system summary.
+- `app/optimization_workspace.rs`: Optimization, parametric sweep, and Monte
+  Carlo workspace shell with target, constraint, candidate, and yield panels.
 - `app/project_panel.rs`: active schematic path, project health, selection, and
   edit command sidebar.
 - `app/reports_workspace.rs`: Reports center workspace layout, run summary
