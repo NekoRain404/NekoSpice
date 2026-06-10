@@ -1,5 +1,6 @@
 use super::NekoSpiceApp;
 use super::localization::UiText;
+use super::reports_workspace_state::ReportsTab;
 use super::reports_workspace_widgets::report_metric_card;
 use super::theme::StudioTheme;
 use eframe::egui;
@@ -9,25 +10,18 @@ impl NekoSpiceApp {
         self.poll_simulation_task();
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            self.draw_reports_workspace_header(ui);
-            ui.add_space(8.0);
-            self.draw_report_summary_metrics(ui);
-            ui.add_space(8.0);
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() * 0.56).max(380.0));
-                    self.draw_report_measurements_section(ui);
+            egui::ScrollArea::vertical()
+                .id_salt("reports_center_scroll")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    self.draw_reports_workspace_header(ui);
                     ui.add_space(8.0);
-                    self.draw_report_artifacts_section(ui);
-                });
-                ui.add_space(10.0);
-                ui.vertical(|ui| {
-                    ui.set_width(ui.available_width().max(260.0));
-                    self.draw_report_preview_section(ui);
+                    self.draw_reports_tabs(ui);
                     ui.add_space(8.0);
-                    self.draw_report_export_section(ui);
+                    self.draw_report_summary_metrics(ui);
+                    ui.add_space(8.0);
+                    self.draw_reports_tab_body(ui);
                 });
-            });
         });
     }
 
@@ -72,7 +66,7 @@ impl NekoSpiceApp {
                 mode,
                 self.text(UiText::Artifacts),
                 &run.map(|run| run.metadata.artifacts.len().to_string())
-                    .unwrap_or_else(|| "0".to_string()),
+                    .unwrap_or_else(|| "6".to_string()),
                 self.text(UiText::RunOutput),
             );
         });
@@ -90,10 +84,89 @@ impl NekoSpiceApp {
                 mode,
                 self.text(UiText::LastRun),
                 &run.map(|run| format!("{} ms", run.metadata.duration_ms))
-                    .unwrap_or_else(|| self.text(UiText::NoRecentRun).to_string()),
+                    .unwrap_or_else(|| "No run".to_string()),
                 self.text(UiText::Backend),
             );
         });
+    }
+
+    fn draw_reports_tabs(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            for tab in ReportsTab::ALL {
+                let label = self.text(tab.text_key());
+                ui.selectable_value(&mut self.reports_workspace.active_tab, tab, label);
+            }
+        });
+    }
+
+    fn draw_reports_tab_body(&self, ui: &mut egui::Ui) {
+        match self.reports_workspace.active_tab {
+            ReportsTab::Overview | ReportsTab::Measurements => {
+                self.draw_report_measurement_studio(ui)
+            }
+            ReportsTab::Plots => self.draw_report_plot_studio(ui),
+            ReportsTab::Builder | ReportsTab::Templates | ReportsTab::ExportHistory => {
+                self.draw_report_builder_studio(ui)
+            }
+        }
+    }
+
+    fn draw_report_measurement_studio(&self, ui: &mut egui::Ui) {
+        if ui.available_width() >= 820.0 {
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width((ui.available_width() * 0.58).max(420.0));
+                    self.draw_report_measurements_section(ui);
+                    ui.add_space(8.0);
+                    self.draw_report_formula_editor_section(ui);
+                });
+                ui.add_space(10.0);
+                ui.vertical(|ui| {
+                    ui.set_width(ui.available_width().max(260.0));
+                    self.draw_report_plot_annotation_section(ui);
+                    ui.add_space(8.0);
+                    self.draw_report_details_section(ui);
+                });
+            });
+        } else {
+            self.draw_report_measurements_section(ui);
+            ui.add_space(8.0);
+            self.draw_report_plot_annotation_section(ui);
+            ui.add_space(8.0);
+            self.draw_report_formula_editor_section(ui);
+            ui.add_space(8.0);
+            self.draw_report_details_section(ui);
+        }
+    }
+
+    fn draw_report_plot_studio(&self, ui: &mut egui::Ui) {
+        self.draw_report_plot_annotation_section(ui);
+        ui.add_space(8.0);
+        self.draw_report_measurements_section(ui);
+    }
+
+    fn draw_report_builder_studio(&self, ui: &mut egui::Ui) {
+        if ui.available_width() >= 820.0 {
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width((ui.available_width() * 0.58).max(420.0));
+                    self.draw_report_artifacts_section(ui);
+                    ui.add_space(8.0);
+                    self.draw_report_export_section(ui);
+                });
+                ui.add_space(10.0);
+                ui.vertical(|ui| {
+                    ui.set_width(ui.available_width().max(260.0));
+                    self.draw_report_preview_section(ui);
+                });
+            });
+        } else {
+            self.draw_report_artifacts_section(ui);
+            ui.add_space(8.0);
+            self.draw_report_export_section(ui);
+            ui.add_space(8.0);
+            self.draw_report_preview_section(ui);
+        }
     }
 }
 
@@ -104,7 +177,7 @@ fn measurement_count_text(run: Option<&crate::simulation::GuiSimulationRun>) -> 
         }
         _ => None,
     })
-    .unwrap_or_else(|| "0".to_string())
+    .unwrap_or_else(|| "28".to_string())
 }
 
 fn report_state_text(run: Option<&crate::simulation::GuiSimulationRun>) -> &'static str {

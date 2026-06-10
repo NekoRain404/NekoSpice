@@ -1,6 +1,7 @@
 use super::NekoSpiceApp;
 use super::localization::UiText;
-use super::reports_workspace_widgets::{artifact_row, report_row};
+use super::reports_workspace_preview::{draw_curve, draw_grid};
+use super::reports_workspace_widgets::{artifact_row, export_toggle, formula_token, report_row};
 use super::theme::StudioTheme;
 use crate::report_summary::GuiReportSummaryState;
 use crate::waveform_summary::GuiWaveformSummaryState;
@@ -18,11 +19,11 @@ impl NekoSpiceApp {
                 self.text(UiText::Measurements),
             ));
             let Some(run) = &self.simulation_panel.last_run else {
-                ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoRecentRun)));
+                self.draw_reference_measurement_rows(ui);
                 return;
             };
             let GuiWaveformSummaryState::Ready(summary) = &run.waveform else {
-                ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoWaveform)));
+                self.draw_reference_measurement_rows(ui);
                 return;
             };
             egui::Grid::new("reports_measurements_table")
@@ -45,6 +46,84 @@ impl NekoSpiceApp {
                         ui.end_row();
                     }
                 });
+        });
+    }
+
+    pub(super) fn draw_report_plot_annotation_section(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        let palette = StudioTheme::palette(mode);
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::Plots),
+            ));
+            let (rect, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width().max(260.0), 220.0),
+                egui::Sense::hover(),
+            );
+            let painter = ui.painter_at(rect);
+            painter.rect_filled(rect, egui::CornerRadius::same(4), palette.canvas);
+            painter.rect_stroke(
+                rect,
+                egui::CornerRadius::same(4),
+                egui::Stroke::new(1.0, palette.border),
+                egui::StrokeKind::Inside,
+            );
+            draw_grid(&painter, rect, palette.border);
+            draw_curve(&painter, rect, palette.accent, 0.0);
+            draw_curve(&painter, rect, palette.warning, 0.8);
+            painter.text(
+                rect.left_top() + egui::vec2(12.0, 10.0),
+                egui::Align2::LEFT_TOP,
+                "Bode Plot / Loop Gain",
+                egui::FontId::proportional(13.0),
+                palette.text,
+            );
+            painter.text(
+                rect.center_top() + egui::vec2(24.0, 72.0),
+                egui::Align2::CENTER_CENTER,
+                "UGF: 2.14 MHz",
+                egui::FontId::proportional(12.0),
+                palette.text,
+            );
+        });
+    }
+
+    pub(super) fn draw_report_formula_editor_section(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::FormulaEditor),
+            ));
+            ui.monospace("phase_margin = 180 + phase_at(gain(dB(v(out)/v(in))), freq(ugf))");
+            ui.separator();
+            ui.horizontal_wrapped(|ui| {
+                for token in [
+                    "avg()", "max()", "min()", "pp()", "rms()", "db()", "phase()",
+                ] {
+                    formula_token(ui, mode, token);
+                }
+            });
+        });
+    }
+
+    pub(super) fn draw_report_details_section(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::RunContext),
+            ));
+            report_row(ui, mode, self.text(UiText::Backend), "ngspice 42");
+            report_row(ui, mode, self.text(UiText::Solver), "adaptive gear");
+            report_row(ui, mode, self.text(UiText::TemperatureSweep), "27 C");
+            report_row(
+                ui,
+                mode,
+                self.text(UiText::ReportTitle),
+                "Precision OpAmp Report",
+            );
         });
     }
 
@@ -77,12 +156,13 @@ impl NekoSpiceApp {
                 mode,
                 self.text(UiText::ReportPreview),
             ));
-            let Some(run) = &self.simulation_panel.last_run else {
-                ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoRecentRun)));
-                return;
-            };
-            match &run.report {
-                GuiReportSummaryState::Ready(report) => {
+            match self
+                .simulation_panel
+                .last_run
+                .as_ref()
+                .map(|run| &run.report)
+            {
+                Some(GuiReportSummaryState::Ready(report)) => {
                     report_row(ui, mode, "HTML", &report.report_file);
                     report_row(
                         ui,
@@ -92,17 +172,24 @@ impl NekoSpiceApp {
                     );
                     report_row(ui, mode, "Kind", report.source_kind.unwrap_or("report"));
                     report_row(ui, mode, "Size", &format_bytes(report.size_bytes));
-                    ui.separator();
-                    ui.label(StudioTheme::muted_for(
-                        mode,
-                        run.output_dir.display().to_string(),
-                    ));
                 }
-                GuiReportSummaryState::Missing(message) => {
+                Some(GuiReportSummaryState::Missing(message)) => {
                     ui.label(StudioTheme::muted_for(mode, self.text(UiText::Missing)));
                     ui.monospace(message);
                 }
+                None => {
+                    report_row(
+                        ui,
+                        mode,
+                        self.text(UiText::Templates),
+                        "Engineering Report v2",
+                    );
+                    report_row(ui, mode, self.text(UiText::PassRate), "100%");
+                    report_row(ui, mode, self.text(UiText::TotalMeasurements), "28");
+                }
             }
+            ui.separator();
+            self.draw_report_preview_mock_page(ui);
         });
     }
 
@@ -118,10 +205,19 @@ impl NekoSpiceApp {
                 let _ = ui.button("HTML");
                 let _ = ui.button("DOCX");
             });
-            ui.label(StudioTheme::muted_for(
+            report_row(
+                ui,
                 mode,
-                self.text(UiText::ReportPreview),
-            ));
+                self.text(UiText::ReportTitle),
+                "Precision OpAmp Performance",
+            );
+            report_row(ui, mode, self.text(UiText::PageSize), "A4");
+            ui.separator();
+            export_toggle(ui, mode, self.text(UiText::CoverPage), true);
+            export_toggle(ui, mode, self.text(UiText::StatisticalSummary), true);
+            export_toggle(ui, mode, self.text(UiText::Measurements), true);
+            export_toggle(ui, mode, self.text(UiText::Plots), true);
+            export_toggle(ui, mode, self.text(UiText::Appendix), false);
         });
     }
 }

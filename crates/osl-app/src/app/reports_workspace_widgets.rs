@@ -39,3 +39,46 @@ pub(super) fn artifact_row(ui: &mut egui::Ui, kind: &str, file: &str, selected: 
         }
     });
 }
+
+pub(super) fn report_status_card(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    label: &str,
+    value: &str,
+    caption: &str,
+    emphasized: bool,
+) {
+    let palette = StudioTheme::palette(mode);
+    StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+        ui.set_min_height(86.0);
+        ui.label(StudioTheme::muted_for(mode, label));
+        let value_color = if emphasized {
+            palette.success
+        } else {
+            palette.text
+        };
+        ui.label(RichText::new(value).strong().size(19.0).color(value_color));
+        ui.label(RichText::new(caption).size(11.0).color(palette.text_muted));
+    });
+}
+
+pub(super) fn formula_token(ui: &mut egui::Ui, mode: StudioThemeMode, token: &str) {
+    let palette = StudioTheme::palette(mode);
+    egui::Frame::new()
+        .fill(palette.panel_soft)
+        .stroke(egui::Stroke::new(1.0, palette.border))
+        .corner_radius(egui::CornerRadius::same(4))
+        .inner_margin(egui::Margin::symmetric(8, 4))
+        .show(ui, |ui| {
+            ui.monospace(token);
+        });
+}
+
+pub(super) fn export_toggle(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, enabled: bool) {
+    let palette = StudioTheme::palette(mode);
+    ui.horizontal(|ui| {
+        let marker = if enabled { "[x]" } else { "[ ]" };
+        ui.label(RichText::new(marker).monospace().color(palette.accent));
+        ui.label(label);
+    });
+}

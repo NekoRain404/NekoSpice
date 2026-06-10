@@ -32,7 +32,10 @@ mod placement;
 mod preferences;
 mod project_panel;
 mod reports_workspace;
+mod reports_workspace_measurements;
+mod reports_workspace_preview;
 mod reports_workspace_sections;
+mod reports_workspace_state;
 mod reports_workspace_widgets;
 mod runtime;
 mod schematic_inspector_panel;
@@ -68,6 +71,7 @@ use navigation::StudioWorkspace;
 use optimization_workspace_state::OptimizationWorkspaceState;
 use placement::SymbolPlacementState;
 use preferences::StudioPreferences;
+use reports_workspace_state::ReportsWorkspaceState;
 pub use runtime::run_native;
 use schematic_inspector_panel::SchematicInspectorPanelState;
 use schematic_tools::SchematicToolState;
@@ -93,6 +97,7 @@ pub struct NekoSpiceApp {
     pub(super) schematic_tools: SchematicToolState,
     pub(super) simulation_panel: SimulationPanelState,
     optimization_workspace: OptimizationWorkspaceState,
+    reports_workspace: ReportsWorkspaceState,
     waveform_workspace: WaveformWorkspaceState,
     active_workspace: StudioWorkspace,
     preferences: StudioPreferences,
@@ -151,6 +156,7 @@ impl Default for NekoSpiceApp {
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
             optimization_workspace: OptimizationWorkspaceState::default(),
+            reports_workspace: ReportsWorkspaceState::default(),
             waveform_workspace: WaveformWorkspaceState::default(),
             active_workspace: initial_workspace(),
             preferences: StudioPreferences::default(),

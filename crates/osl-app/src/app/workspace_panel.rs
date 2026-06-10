@@ -39,7 +39,14 @@ impl NekoSpiceApp {
             self.text(UiText::ReportsCaption),
         ));
         ui.add_space(8.0);
-        self.draw_simulation_panel(ui);
+        egui::ScrollArea::vertical()
+            .id_salt("reports_right_panel_scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                self.draw_report_preview_section(ui);
+                ui.add_space(8.0);
+                self.draw_report_export_section(ui);
+            });
     }
 
     fn draw_settings_workspace_panel(&mut self, ui: &mut egui::Ui) {
