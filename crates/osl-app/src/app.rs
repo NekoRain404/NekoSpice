@@ -24,6 +24,9 @@ mod localization;
 mod navigation;
 mod navigation_panel;
 mod optimization_workspace;
+mod optimization_workspace_sections;
+mod optimization_workspace_state;
+mod optimization_workspace_widgets;
 mod panels;
 mod placement;
 mod preferences;
@@ -62,7 +65,7 @@ mod workspace_panel;
 
 pub use canvas_panel::load_canvas_scene;
 use navigation::StudioWorkspace;
-use optimization_workspace::OptimizationWorkspaceState;
+use optimization_workspace_state::OptimizationWorkspaceState;
 use placement::SymbolPlacementState;
 use preferences::StudioPreferences;
 pub use runtime::run_native;
