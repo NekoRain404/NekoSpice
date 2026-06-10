@@ -12,7 +12,7 @@ impl NekoSpiceApp {
             StudioWorkspace::Optimization => self.draw_optimization_center_workspace(ui),
             StudioWorkspace::Waveforms => self.draw_waveform_center_workspace(ui),
             StudioWorkspace::Reports => self.draw_reports_center_workspace(ui),
-            StudioWorkspace::Settings => self.draw_studio_canvas_frame(ui),
+            StudioWorkspace::Settings => self.draw_settings_center_workspace(ui),
         }
     }
 }

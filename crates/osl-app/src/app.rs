@@ -40,6 +40,7 @@ mod schematic_tools;
 mod schematic_workspace;
 mod schematic_workspace_widgets;
 mod selection_properties;
+mod settings_workspace;
 mod simulation_artifacts_panel;
 mod simulation_panel;
 mod simulation_report_panel;

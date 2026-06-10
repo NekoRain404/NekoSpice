@@ -65,10 +65,4 @@ impl NekoSpiceApp {
             });
         });
     }
-
-    pub(super) fn draw_studio_canvas_frame(&mut self, ui: &mut egui::Ui) {
-        StudioTheme::panel_frame_for(self.theme_mode()).show(ui, |ui| {
-            self.draw_canvas(ui);
-        });
-    }
 }

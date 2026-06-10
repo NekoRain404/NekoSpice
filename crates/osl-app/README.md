@@ -111,6 +111,8 @@ search stay in `osl-kicad`.
   tabs, canvas toolbar, framed canvas mounting, and bottom waveform/console dock.
 - `app/schematic_workspace_widgets.rs`: Schematic-only display widgets for tabs,
   toolbar buttons, signal rows, and console lines.
+- `app/settings_workspace.rs`: Settings center workspace for theme, language,
+  renderer/runtime, and active workspace paths.
 - `app/symbol_placement_controls.rs`: unit, body-style, and pin-alternate controls for KiCad-compatible symbol placement.
 - `app/theme.rs`: Studio theme modes, palette tokens, style application, and
   frame/text helpers. Shared UI color and spacing decisions live here instead of
