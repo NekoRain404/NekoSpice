@@ -134,7 +134,7 @@ impl NekoSpiceApp {
         }
     }
 
-    fn apply_simulation_directive_edit(&mut self) {
+    pub(in crate::app) fn apply_simulation_directive_edit(&mut self) {
         let Some(document) = &mut self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());
             return;

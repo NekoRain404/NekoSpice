@@ -57,6 +57,10 @@ mod settings_theme_preview;
 mod settings_workspace;
 mod simulation_artifacts_panel;
 mod simulation_panel;
+mod simulation_profile_editor;
+mod simulation_profile_editor_options;
+mod simulation_profile_editor_sections;
+mod simulation_profile_editor_widgets;
 mod simulation_report_panel;
 mod simulation_waveform_panel;
 mod simulation_workspace;
@@ -82,6 +86,7 @@ use preferences::StudioPreferences;
 use reports_workspace_state::ReportsWorkspaceState;
 use review_workspace_state::ReviewWorkspaceState;
 pub use runtime::run_native;
+use simulation_profile_editor::SimulationProfileEditorState;
 use schematic_inspector_panel::SchematicInspectorPanelState;
 use schematic_tools::SchematicToolState;
 use selection_properties::SelectionPropertyEditorState;
@@ -105,6 +110,7 @@ pub struct NekoSpiceApp {
     schematic_inspector: SchematicInspectorPanelState,
     pub(super) schematic_tools: SchematicToolState,
     pub(super) simulation_panel: SimulationPanelState,
+    pub(super) simulation_profile_editor: SimulationProfileEditorState,
     optimization_workspace: OptimizationWorkspaceState,
     review_workspace: ReviewWorkspaceState,
     reports_workspace: ReportsWorkspaceState,
@@ -165,6 +171,7 @@ impl Default for NekoSpiceApp {
             schematic_inspector: SchematicInspectorPanelState::default(),
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
+            simulation_profile_editor: SimulationProfileEditorState::default(),
             optimization_workspace: OptimizationWorkspaceState::default(),
             review_workspace: ReviewWorkspaceState::default(),
             reports_workspace: ReportsWorkspaceState::default(),

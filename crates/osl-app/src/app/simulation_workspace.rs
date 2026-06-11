@@ -1,5 +1,7 @@
 use super::NekoSpiceApp;
 use super::localization::UiText;
+use super::localization::StudioLocale;
+use super::simulation_profile_editor::SimulationSubView;
 use super::simulation_workspace_widgets::solver_metric_card;
 use super::theme::StudioTheme;
 use eframe::egui;
@@ -11,22 +13,68 @@ impl NekoSpiceApp {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             self.draw_simulation_workspace_header(ui);
+            ui.add_space(6.0);
+
+            // Sub-view tab bar: Overview | Profile Editor
+            self.draw_simulation_sub_view_tabs(ui);
             ui.add_space(8.0);
-            self.draw_simulation_solver_metrics(ui);
-            ui.add_space(8.0);
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() * 0.48).max(300.0));
-                    self.draw_simulation_analysis_setup(ui);
-                    ui.add_space(8.0);
-                    self.draw_simulation_netlist_preview(ui);
-                });
-                ui.add_space(10.0);
-                ui.vertical(|ui| {
-                    self.draw_simulation_run_output(ui);
-                    ui.add_space(8.0);
-                    self.draw_document_diagnostics_panel(ui, 170.0);
-                });
+
+            // Dispatch to active sub-view
+            let sub_view = self.simulation_profile_editor.sub_view;
+            match sub_view {
+                SimulationSubView::Overview => self.draw_simulation_overview(ui),
+                SimulationSubView::ProfileEditor => self.draw_profile_editor(ui),
+            }
+        });
+    }
+
+    /// Tab bar for switching between simulation workspace sub-views.
+    fn draw_simulation_sub_view_tabs(&mut self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        let palette = StudioTheme::palette(mode);
+        ui.horizontal(|ui| {
+            for view in [SimulationSubView::Overview, SimulationSubView::ProfileEditor] {
+                let active = self.simulation_profile_editor.sub_view == view;
+                let label = match self.locale() {
+                    StudioLocale::SimplifiedChinese => view.label_zh(),
+                    _ => view.label(),
+                };
+                let btn = if active {
+                    egui::Button::new(
+                        egui::RichText::new(label).strong().color(palette.text),
+                    )
+                    .fill(palette.accent_soft)
+                    .stroke(egui::Stroke::new(1.0, palette.accent))
+                } else {
+                    egui::Button::new(
+                        egui::RichText::new(label).color(palette.text_muted),
+                    )
+                    .fill(palette.panel_soft)
+                    .stroke(egui::Stroke::new(1.0, palette.border))
+                };
+                if ui.add(btn).clicked() {
+                    self.simulation_profile_editor.sub_view = view;
+                }
+            }
+        });
+    }
+
+    /// Overview sub-view: solver metrics + analysis setup + netlist + run output.
+    fn draw_simulation_overview(&mut self, ui: &mut egui::Ui) {
+        self.draw_simulation_solver_metrics(ui);
+        ui.add_space(8.0);
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width((ui.available_width() * 0.48).max(300.0));
+                self.draw_simulation_analysis_setup(ui);
+                ui.add_space(8.0);
+                self.draw_simulation_netlist_preview(ui);
+            });
+            ui.add_space(10.0);
+            ui.vertical(|ui| {
+                self.draw_simulation_run_output(ui);
+                ui.add_space(8.0);
+                self.draw_document_diagnostics_panel(ui, 170.0);
             });
         });
     }
