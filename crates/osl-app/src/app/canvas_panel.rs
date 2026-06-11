@@ -1,5 +1,6 @@
 use super::{EditNudgeDirection, NekoSpiceApp};
 use crate::canvas;
+use crate::canvas::colors;
 use eframe::egui::{self, Color32, Sense, Vec2};
 use osl_kicad::{KicadAt, KicadCanvasScene, read_kicad_schematic_with_libraries};
 use std::path::Path;
@@ -59,7 +60,7 @@ impl NekoSpiceApp {
                     rect,
                     self.viewport,
                     hit.bounds,
-                    Color32::from_rgb(20, 120, 220),
+                    colors::SELECTION,
                     2.0,
                 );
             }

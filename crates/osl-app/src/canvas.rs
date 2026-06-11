@@ -1,11 +1,17 @@
+// Canvas rendering pipeline for KiCad schematic scenes.
+// Draws sheets, graphics, symbols, wires, buses, labels, text,
+// junctions, no-connects, and selection highlights.
+
 use crate::viewport::{CanvasViewport, item_visible};
-use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke};
+use eframe::egui::{self, Align2, FontId, Pos2, Rect, Stroke};
 use osl_kicad::{KicadBoundingBox, KicadCanvasScene, KicadPoint};
 
+pub(crate) mod colors;
 mod primitives;
 
 pub(crate) use primitives::{draw_bounds, draw_grid, draw_line};
 
+/// Render the full schematic scene into the canvas area.
 pub(crate) fn draw_scene(
     painter: &egui::Painter,
     rect: Rect,
@@ -13,12 +19,15 @@ pub(crate) fn draw_scene(
     viewport: CanvasViewport,
     visible_bounds: KicadBoundingBox,
 ) {
+    // Layer 1: Hierarchical sheets (background fill + border)
     for sheet in &scene.sheets {
         if !item_visible(sheet.bounds, visible_bounds) {
             continue;
         }
         primitives::draw_sheet(painter, rect, viewport, sheet);
     }
+
+    // Layer 2: Rule areas (translucent fill outlines)
     for rule_area in &scene.rule_areas {
         if !item_visible(rule_area.bounds, visible_bounds) {
             continue;
@@ -29,35 +38,35 @@ pub(crate) fn draw_scene(
             viewport,
             &rule_area.points,
             true,
-            Color32::from_rgb(150, 110, 20),
+            colors::RULE_AREA,
             1.5,
         );
     }
+
+    // Layer 3: Top-level graphic elements (not part of symbols)
     for graphic in &scene.graphics {
         if !item_visible(graphic.bounds(), visible_bounds) {
             continue;
         }
-        primitives::draw_graphic(
-            painter,
-            rect,
-            viewport,
-            graphic,
-            Color32::from_rgb(90, 90, 90),
-        );
+        primitives::draw_graphic(painter, rect, viewport, graphic, colors::GRAPHIC);
     }
+
+    // Layer 4: Symbol bodies, pins, and labels
     for symbol in &scene.symbols {
         if !item_visible(symbol.bounds, visible_bounds) {
             continue;
         }
+        // Symbol graphic body
         for graphic in &symbol.graphics {
             primitives::draw_graphic(
                 painter,
                 rect,
                 viewport,
                 graphic,
-                Color32::from_rgb(25, 25, 25),
+                colors::SYMBOL_BODY,
             );
         }
+        // Symbol pin stubs
         for pin in &symbol.pins {
             primitives::draw_line(
                 painter,
@@ -65,21 +74,20 @@ pub(crate) fn draw_scene(
                 viewport,
                 pin.start,
                 pin.end,
-                Color32::from_rgb(30, 30, 30),
+                colors::SYMBOL_PIN,
                 1.5,
             );
         }
+        // Symbol reference and value labels
         if let Some(bounds) = symbol.bounds {
-            // Reference label (e.g. R1, C2, U3) above the symbol
             let ref_pos = viewport.world_to_screen(rect, bounds.min);
             painter.text(
                 ref_pos,
                 Align2::LEFT_BOTTOM,
                 &symbol.reference,
                 FontId::proportional(12.0),
-                Color32::from_rgb(25, 25, 25),
+                colors::SYMBOL_REFERENCE,
             );
-            // Value label (e.g. 10k, 100nF) below the symbol
             if !symbol.value.is_empty() && symbol.value != symbol.reference {
                 let val_pos = viewport.world_to_screen(
                     rect,
@@ -93,11 +101,13 @@ pub(crate) fn draw_scene(
                     Align2::LEFT_TOP,
                     &symbol.value,
                     FontId::proportional(11.0),
-                    Color32::from_rgb(80, 80, 80),
+                    colors::SYMBOL_VALUE,
                 );
             }
         }
     }
+
+    // Layer 5: Wires (green polylines)
     for wire in &scene.wires {
         if !item_visible(wire.bounds, visible_bounds) {
             continue;
@@ -108,10 +118,12 @@ pub(crate) fn draw_scene(
             viewport,
             &wire.points,
             false,
-            Color32::from_rgb(0, 150, 72),
+            colors::WIRE,
             2.0,
         );
     }
+
+    // Layer 6: Buses (blue polylines)
     for bus in &scene.buses {
         if !item_visible(bus.bounds, visible_bounds) {
             continue;
@@ -122,16 +134,20 @@ pub(crate) fn draw_scene(
             viewport,
             &bus.points,
             false,
-            Color32::from_rgb(70, 95, 220),
+            colors::BUS,
             3.0,
         );
     }
+
+    // Layer 7: Bus entries
     for entry in &scene.bus_entries {
         if !item_visible(entry.bounds, visible_bounds) {
             continue;
         }
         primitives::draw_bus_entry(painter, rect, viewport, entry);
     }
+
+    // Layer 8: Directive labels (netclass flags with bounds box)
     for label in &scene.directive_labels {
         if !item_visible(label.bounds, visible_bounds) {
             continue;
@@ -142,7 +158,7 @@ pub(crate) fn draw_scene(
                 rect,
                 viewport,
                 bounds,
-                Color32::from_rgb(180, 95, 35),
+                colors::LABEL_DIRECTIVE_BOUNDS,
                 1.0,
             );
         }
@@ -152,10 +168,12 @@ pub(crate) fn draw_scene(
                 Align2::LEFT_TOP,
                 &label.text,
                 FontId::proportional(12.0),
-                Color32::from_rgb(150, 65, 20),
+                colors::LABEL_DIRECTIVE,
             );
         }
     }
+
+    // Layer 9: Net labels (local/global/hierarchical)
     for label in &scene.labels {
         if !item_visible(label.bounds, visible_bounds) {
             continue;
@@ -166,19 +184,21 @@ pub(crate) fn draw_scene(
                 Align2::LEFT_TOP,
                 &label.text,
                 FontId::proportional(12.0),
-                Color32::from_rgb(0, 95, 180),
+                colors::LABEL_LOCAL,
             );
         }
     }
+
+    // Layer 10: Free text items
     for text in &scene.text_items {
         if !item_visible(text.bounds, visible_bounds) {
             continue;
         }
         if let Some(at) = text.at {
             let color = if text.is_spice_directive {
-                Color32::from_rgb(165, 45, 45)
+                colors::TEXT_SPICE_DIRECTIVE
             } else {
-                Color32::from_rgb(55, 55, 55)
+                colors::TEXT
             };
             painter.text(
                 viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
@@ -189,6 +209,8 @@ pub(crate) fn draw_scene(
             );
         }
     }
+
+    // Layer 11: Text boxes (border only)
     for text_box in &scene.text_boxes {
         if !item_visible(text_box.bounds, visible_bounds) {
             continue;
@@ -199,18 +221,22 @@ pub(crate) fn draw_scene(
                 rect,
                 viewport,
                 bounds,
-                Color32::from_rgb(120, 120, 120),
+                colors::TEXT_BOX_BORDER,
                 1.0,
             );
         }
     }
+
+    // Layer 12: Junctions (filled green dots)
     for junction in &scene.junctions {
         if !junction.bounds.intersects(visible_bounds) {
             continue;
         }
         let center = viewport.world_to_screen(rect, junction.at);
-        painter.circle_filled(center, 3.0, Color32::from_rgb(0, 150, 72));
+        painter.circle_filled(center, 3.0, colors::JUNCTION);
     }
+
+    // Layer 13: No-connect markers (X marks)
     for marker in &scene.no_connects {
         if !marker.bounds.intersects(visible_bounds) {
             continue;
@@ -222,14 +248,14 @@ pub(crate) fn draw_scene(
                 Pos2::new(center.x - size, center.y - size),
                 Pos2::new(center.x + size, center.y + size),
             ],
-            Stroke::new(1.5, Color32::from_rgb(55, 55, 55)),
+            Stroke::new(1.5, colors::NO_CONNECT),
         );
         painter.line_segment(
             [
                 Pos2::new(center.x - size, center.y + size),
                 Pos2::new(center.x + size, center.y - size),
             ],
-            Stroke::new(1.5, Color32::from_rgb(55, 55, 55)),
+            Stroke::new(1.5, colors::NO_CONNECT),
         );
     }
 }

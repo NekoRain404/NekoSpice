@@ -3,6 +3,7 @@
 // wire, bus, label, junction, no-connect, and selection bounds drawing.
 
 use crate::viewport::CanvasViewport;
+use super::colors;
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke, StrokeKind, Vec2};
 use osl_kicad::{
     KicadBoundingBox, KicadCanvasBusEntry, KicadCanvasGraphic, KicadCanvasSheet, KicadPoint,
@@ -17,7 +18,7 @@ use osl_kicad::{
 pub(crate) fn draw_grid(painter: &egui::Painter, rect: Rect, viewport: CanvasViewport) {
     let major = (10.0 * viewport.zoom).max(16.0);
     let origin = rect.center() + viewport.pan;
-    let stroke = Stroke::new(1.0, Color32::from_rgb(224, 229, 234));
+    let stroke = Stroke::new(1.0, colors::GRID);
 
     let mut x = origin.x % major;
     while x < rect.width() {
@@ -72,11 +73,11 @@ pub(crate) fn draw_sheet(
         },
     );
     let sheet_rect = Rect::from_two_pos(start, end);
-    painter.rect_filled(sheet_rect, 0.0, Color32::from_rgb(245, 248, 255));
+    painter.rect_filled(sheet_rect, 0.0, colors::SHEET_FILL);
     painter.rect_stroke(
         sheet_rect,
         0.0,
-        Stroke::new(1.5, Color32::from_rgb(90, 120, 190)),
+        Stroke::new(1.5, colors::SHEET_BORDER),
         StrokeKind::Inside,
     );
     painter.text(
@@ -84,7 +85,7 @@ pub(crate) fn draw_sheet(
         Align2::LEFT_TOP,
         &sheet.name,
         FontId::monospace(12.0),
-        Color32::from_rgb(50, 80, 150),
+        colors::SHEET_NAME,
     );
 }
 
@@ -218,7 +219,7 @@ pub(crate) fn draw_bus_entry(
         viewport,
         entry.at,
         entry.end(),
-        Color32::from_rgb(70, 95, 220),
+        colors::BUS_ENTRY,
         2.0,
     );
 }
