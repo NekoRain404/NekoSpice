@@ -121,6 +121,9 @@ fn resolve_font_size(effects: &Option<osl_kicad::KicadTextEffects>) -> f32 {
 }
 
 /// Draw a KiCad canvas graphic element (polyline, bezier, rectangle, circle, arc, text).
+///
+/// Supports solid fills via KiCad fill data. Filled rectangles and circles
+/// get a translucent background fill matching the KiCad rendering style.
 pub(crate) fn draw_graphic(
     painter: &egui::Painter,
     rect: Rect,
@@ -129,39 +132,62 @@ pub(crate) fn draw_graphic(
     color: Color32,
 ) {
     match graphic {
-        KicadCanvasGraphic::Polyline { points, .. } => {
+        KicadCanvasGraphic::Polyline { points, fill, .. } => {
+            // Draw fill if present and closed
+            if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) && points.len() > 2 {
+                let screen_points: Vec<Pos2> = points
+                    .iter()
+                    .map(|p| viewport.world_to_screen(rect, *p))
+                    .collect();
+                painter.add(egui::Shape::convex_polygon(
+                    screen_points,
+                    Color32::from_rgba_premultiplied(200, 200, 200, 30),
+                    egui::Stroke::NONE,
+                ));
+            }
             draw_polyline(painter, rect, viewport, points, false, color, 1.5);
         }
-        KicadCanvasGraphic::Bezier { points, .. } => {
-            // Quadratic bezier approximation via sampled polyline
+        KicadCanvasGraphic::Bezier { points, fill, .. } => {
             if points.len() >= 3 {
                 let sampled = quadratic_bezier_sample(points, 24);
+                if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) && sampled.len() > 2 {
+                    let screen_points: Vec<Pos2> = sampled
+                        .iter()
+                        .map(|p| viewport.world_to_screen(rect, *p))
+                        .collect();
+                    painter.add(egui::Shape::convex_polygon(
+                        screen_points,
+                        Color32::from_rgba_premultiplied(200, 200, 200, 30),
+                        egui::Stroke::NONE,
+                    ));
+                }
                 draw_polyline(painter, rect, viewport, &sampled, false, color, 1.5);
             } else if !points.is_empty() {
                 draw_polyline(painter, rect, viewport, points, false, color, 1.5);
             }
         }
-        KicadCanvasGraphic::Rectangle { start, end, .. } => {
+        KicadCanvasGraphic::Rectangle { start, end, fill, .. } => {
             let s = viewport.world_to_screen(rect, *start);
             let e = viewport.world_to_screen(rect, *end);
-            painter.rect_stroke(
-                Rect::from_two_pos(s, e),
-                0.0,
-                Stroke::new(1.5, color),
-                StrokeKind::Inside,
-            );
+            let r = Rect::from_two_pos(s, e);
+            // Draw fill if present
+            if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) {
+                painter.rect_filled(r, 0.0, Color32::from_rgba_premultiplied(200, 200, 200, 30));
+            }
+            painter.rect_stroke(r, 0.0, Stroke::new(1.5, color), StrokeKind::Inside);
         }
-        KicadCanvasGraphic::Circle { center, radius, .. } => {
-            painter.circle_stroke(
-                viewport.world_to_screen(rect, *center),
-                (*radius as f32 * viewport.zoom).abs(),
-                Stroke::new(1.5, color),
-            );
+        KicadCanvasGraphic::Circle { center, radius, fill, .. } => {
+            let center_screen = viewport.world_to_screen(rect, *center);
+            let radius_screen = (*radius as f32 * viewport.zoom).abs();
+            // Draw fill if present
+            if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) {
+                painter.circle_filled(center_screen, radius_screen, Color32::from_rgba_premultiplied(200, 200, 200, 30));
+            }
+            painter.circle_stroke(center_screen, radius_screen, Stroke::new(1.5, color));
         }
         KicadCanvasGraphic::Arc {
             start, mid, end, ..
         } => {
-            // Use proper arc sampling instead of 3-point V-shape
             let sampled = sample_kicad_arc_points(*start, *mid, *end);
             draw_polyline(painter, rect, viewport, &sampled, false, color, 1.5);
         }
@@ -181,6 +207,8 @@ pub(crate) fn draw_graphic(
         }
     }
 }
+
+
 
 // ---------------------------------------------------------------------------
 // Polyline / line / bus entry
