@@ -3,7 +3,6 @@
 /// Uses Unicode symbols as icons for each workspace. The panel includes
 /// a branding header, workspace buttons with active/hover states,
 /// and a compact system info footer.
-
 use super::NekoSpiceApp;
 use super::localization::UiText;
 use super::navigation::StudioWorkspace;

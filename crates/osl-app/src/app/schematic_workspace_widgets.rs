@@ -2,7 +2,6 @@
 ///
 /// Provides compact reusable widgets for the schematic toolbar, document tab bar,
 /// and bottom-dock console output. Each widget respects the current theme mode.
-
 use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, CornerRadius, Response, RichText, Stroke};
 

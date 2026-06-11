@@ -2,7 +2,6 @@
 ///
 /// The bottom dock switches between Waveforms, FFT, Bode, Console, Netlist,
 /// ERC, and Inspector views based on the active tab.
-
 use super::NekoSpiceApp;
 use super::SchematicBottomTab;
 use super::localization::UiText;

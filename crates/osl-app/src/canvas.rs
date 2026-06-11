@@ -36,7 +36,7 @@ fn pin_text_offsets(
     let perp_x = ny;   // rotate 90 degrees
     let perp_y = -nx;
 
-    let offset = if is_name { 0.8 } else { 0.8 };
+    let offset = 0.8;
 
     if is_name {
         // Name at body end, offset perpendicular to pin direction
