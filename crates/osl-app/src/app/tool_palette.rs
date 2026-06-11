@@ -2,7 +2,6 @@
 ///
 /// Renders as a narrow vertical strip on the left side of the schematic canvas,
 /// with icon buttons for each drawing tool. Matches the reference UI's left tool panel.
-
 use super::NekoSpiceApp;
 use super::schematic_tools::SchematicTool;
 // StudioThemeMode used below for palette access

@@ -2,7 +2,6 @@
 ///
 /// Provides actions relevant to the clicked position or selected item,
 /// including cut/copy/paste, delete, rotate, and tool switching.
-
 use super::NekoSpiceApp;
 use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText, Stroke};
@@ -76,7 +75,7 @@ impl NekoSpiceApp {
             let resp = ui.add_sized(
                 [ui.available_width(), 22.0],
                 egui::Button::new(text).fill(Color32::TRANSPARENT).stroke(Stroke::NONE),
-            ).on_hover_text(format!("{shortcut}"));
+            ).on_hover_text(shortcut);
             if resp.clicked() {
                 self.activate_schematic_tool_direct(tool);
             }
