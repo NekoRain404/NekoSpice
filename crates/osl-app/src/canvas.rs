@@ -66,7 +66,7 @@ pub(crate) fn draw_scene(
                 colors::SYMBOL_BODY,
             );
         }
-        // Symbol pin stubs
+        // Symbol pin stubs with name and number labels
         for pin in &symbol.pins {
             primitives::draw_line(
                 painter,
@@ -77,6 +77,40 @@ pub(crate) fn draw_scene(
                 colors::SYMBOL_PIN,
                 1.5,
             );
+            // Pin name near the body end of the pin
+            if !pin.name.is_empty() {
+                let name_pos = viewport.world_to_screen(
+                    rect,
+                    KicadPoint {
+                        x: pin.end.x + 1.0,
+                        y: pin.end.y - 1.5,
+                    },
+                );
+                painter.text(
+                    name_pos,
+                    Align2::LEFT_TOP,
+                    &pin.name,
+                    FontId::proportional(8.0),
+                    colors::SYMBOL_PIN_NAME,
+                );
+            }
+            // Pin number near the external end of the pin
+            if !pin.number.is_empty() {
+                let num_pos = viewport.world_to_screen(
+                    rect,
+                    KicadPoint {
+                        x: pin.start.x + 1.0,
+                        y: pin.start.y + 1.5,
+                    },
+                );
+                painter.text(
+                    num_pos,
+                    Align2::LEFT_BOTTOM,
+                    &pin.number,
+                    FontId::proportional(7.0),
+                    colors::SYMBOL_PIN_NUMBER,
+                );
+            }
         }
         // Symbol reference and value labels
         if let Some(bounds) = symbol.bounds {
