@@ -21,18 +21,32 @@ impl NekoSpiceApp {
             self.draw_schematic_document_tabs(ui);
             ui.add_space(4.0);
             let canvas_height = (ui.available_height() - 220.0).max(280.0);
+            let inspector_width = 280.0;
             ui.allocate_ui_with_layout(
                 Vec2::new(ui.available_width(), canvas_height),
                 egui::Layout::left_to_right(egui::Align::Min),
                 |ui| {
                     // Vertical tool palette on the left
                     let _palette_width = self.draw_tool_palette(ui);
-                    // Main canvas area
-                    let canvas_width = ui.available_width();
+                    // Main canvas area (occupies remaining width minus inspector)
+                    let canvas_width = (ui.available_width() - inspector_width - 8.0).max(200.0);
                     ui.allocate_ui_with_layout(
                         Vec2::new(canvas_width, canvas_height),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| self.draw_canvas(ui),
+                    );
+                    // Right-side inspector panel
+                    ui.add_space(4.0);
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(inspector_width, canvas_height),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            egui::ScrollArea::vertical()
+                                .max_height(canvas_height)
+                                .show(ui, |ui| {
+                                    self.draw_schematic_inspector_panel(ui);
+                                });
+                        },
                     );
                 },
             );
