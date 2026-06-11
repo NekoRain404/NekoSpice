@@ -84,40 +84,40 @@ impl StudioTheme {
     pub(super) fn palette(mode: StudioThemeMode) -> StudioPalette {
         match mode {
             StudioThemeMode::Midnight => StudioPalette {
-                background: Self::BACKGROUND,
-                panel: Self::PANEL,
-                panel_soft: Self::PANEL_SOFT,
-                panel_hover: Self::PANEL_HOVER,
-                canvas: Self::CANVAS,
-                border: Self::BORDER,
-                border_strong: Self::BORDER_STRONG,
-                text: Self::TEXT,
-                text_muted: Self::TEXT_MUTED,
-                accent: Self::ACCENT,
-                accent_soft: Self::ACCENT_SOFT,
-                success: Self::SUCCESS,
-                warning: Self::WARNING,
-                danger: Self::DANGER,
-                strip: Color32::from_rgb(7, 19, 34),
-                strip_border: Color32::from_rgb(18, 42, 68),
+                background: Color32::from_rgb(13, 17, 23),     // GitHub dark bg
+                panel: Color32::from_rgb(22, 27, 34),          // GitHub dark surface
+                panel_soft: Color32::from_rgb(33, 38, 45),     // GitHub dark elevated
+                panel_hover: Color32::from_rgb(48, 54, 61),    // GitHub dark hover
+                canvas: Color32::from_rgb(236, 240, 244),      // Light canvas (KiCad)
+                border: Color32::from_rgb(48, 54, 61),         // GitHub dark border
+                border_strong: Color32::from_rgb(88, 96, 105), // GitHub dark border strong
+                text: Color32::from_rgb(230, 237, 243),        // Bright text
+                text_muted: Color32::from_rgb(139, 148, 158),  // Muted text
+                accent: Color32::from_rgb(56, 139, 253),       // GitHub blue
+                accent_soft: Color32::from_rgb(24, 45, 77),    // Accent background
+                success: Color32::from_rgb(63, 185, 80),       // GitHub green
+                warning: Color32::from_rgb(210, 153, 34),      // GitHub yellow
+                danger: Color32::from_rgb(248, 81, 73),        // GitHub red
+                strip: Color32::from_rgb(13, 17, 23),
+                strip_border: Color32::from_rgb(33, 38, 45),
             },
             StudioThemeMode::Graphite => StudioPalette {
-                background: Color32::from_rgb(18, 20, 24),
-                panel: Color32::from_rgb(27, 30, 36),
-                panel_soft: Color32::from_rgb(35, 39, 47),
-                panel_hover: Color32::from_rgb(45, 51, 62),
+                background: Color32::from_rgb(24, 25, 28),
+                panel: Color32::from_rgb(32, 33, 38),
+                panel_soft: Color32::from_rgb(40, 42, 48),
+                panel_hover: Color32::from_rgb(52, 55, 63),
                 canvas: Color32::from_rgb(232, 234, 237),
-                border: Color32::from_rgb(70, 78, 90),
-                border_strong: Color32::from_rgb(106, 119, 136),
-                text: Color32::from_rgb(239, 242, 247),
-                text_muted: Color32::from_rgb(158, 168, 181),
-                accent: Color32::from_rgb(70, 166, 255),
-                accent_soft: Color32::from_rgb(31, 70, 105),
-                success: Color32::from_rgb(75, 196, 121),
-                warning: Color32::from_rgb(230, 170, 73),
-                danger: Color32::from_rgb(236, 99, 99),
-                strip: Color32::from_rgb(20, 23, 28),
-                strip_border: Color32::from_rgb(48, 55, 65),
+                border: Color32::from_rgb(60, 65, 75),
+                border_strong: Color32::from_rgb(90, 98, 112),
+                text: Color32::from_rgb(235, 239, 244),
+                text_muted: Color32::from_rgb(148, 158, 172),
+                accent: Color32::from_rgb(64, 160, 255),
+                accent_soft: Color32::from_rgb(26, 58, 92),
+                success: Color32::from_rgb(68, 188, 112),
+                warning: Color32::from_rgb(218, 162, 52),
+                danger: Color32::from_rgb(228, 88, 88),
+                strip: Color32::from_rgb(24, 25, 28),
+                strip_border: Color32::from_rgb(40, 42, 48),
             },
             StudioThemeMode::Light => StudioPalette {
                 background: Color32::from_rgb(236, 240, 245),

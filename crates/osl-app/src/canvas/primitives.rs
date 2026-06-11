@@ -14,15 +14,28 @@ use osl_kicad::{
 // Grid
 // ---------------------------------------------------------------------------
 
-/// Draw a background grid aligned to the viewport origin.
+/// Draw a background grid with minor and major lines.
+///
+/// Minor lines are drawn at every 2.54mm (100mil) step.
+/// Major lines are drawn at every 12.7mm (500mil) step.
+/// Major lines use a slightly darker color and thicker stroke.
 pub(crate) fn draw_grid(painter: &egui::Painter, rect: Rect, viewport: CanvasViewport) {
-    let major = (10.0 * viewport.zoom).max(16.0);
-    let origin = rect.center() + viewport.pan;
-    let stroke = Stroke::new(1.0, colors::GRID);
+    // Minor grid step: 2.54mm in world space
+    let minor_step = (2.54 * viewport.zoom).max(4.0);
+    // Major grid step: 5x minor (12.7mm)
+    let major_step = minor_step * 5.0;
 
-    let mut x = origin.x % major;
+    let origin = rect.center() + viewport.pan;
+    let minor_stroke = Stroke::new(0.5, colors::GRID_MINOR);
+    let major_stroke = Stroke::new(1.0, colors::GRID_MAJOR);
+
+    // Draw vertical lines
+    let start_x = origin.x % minor_step;
+    let mut x = start_x;
     while x < rect.width() {
         let screen_x = rect.left() + x;
+        let is_major = (x % major_step).abs() < 0.5 || ((major_step - (x % major_step)).abs() < 0.5);
+        let stroke = if is_major { major_stroke } else { minor_stroke };
         painter.line_segment(
             [
                 Pos2::new(screen_x, rect.top()),
@@ -30,12 +43,16 @@ pub(crate) fn draw_grid(painter: &egui::Painter, rect: Rect, viewport: CanvasVie
             ],
             stroke,
         );
-        x += major;
+        x += minor_step;
     }
 
-    let mut y = origin.y % major;
+    // Draw horizontal lines
+    let start_y = origin.y % minor_step;
+    let mut y = start_y;
     while y < rect.height() {
         let screen_y = rect.top() + y;
+        let is_major = (y % major_step).abs() < 0.5 || ((major_step - (y % major_step)).abs() < 0.5);
+        let stroke = if is_major { major_stroke } else { minor_stroke };
         painter.line_segment(
             [
                 Pos2::new(rect.left(), screen_y),
@@ -43,7 +60,7 @@ pub(crate) fn draw_grid(painter: &egui::Painter, rect: Rect, viewport: CanvasVie
             ],
             stroke,
         );
-        y += major;
+        y += minor_step;
     }
 }
 

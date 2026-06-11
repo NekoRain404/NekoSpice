@@ -1,9 +1,7 @@
-//! Schematic rendering color palette.
-
-// Allow unused constants — this is a palette definition; not all colors are referenced yet.
 #![allow(dead_code)]
+//! Schematic rendering color palette.
 //!
-//! Maps KiCad element types to display colors, following the standard
+//! Maps KiCad element types to display colors following the standard
 //! KiCad color scheme for light-background schematic rendering.
 //! All colors are optimized for readability on the light canvas background.
 
@@ -16,8 +14,11 @@ use eframe::egui::Color32;
 /// Light canvas background color.
 pub(crate) const CANVAS_BG: Color32 = Color32::from_rgb(236, 240, 244);
 
-/// Grid line color (subtle, unobtrusive).
-pub(crate) const GRID: Color32 = Color32::from_rgb(224, 229, 234);
+/// Minor grid line color (subtle, unobtrusive).
+pub(crate) const GRID_MINOR: Color32 = Color32::from_rgb(228, 232, 237);
+
+/// Major grid line color (slightly more visible).
+pub(crate) const GRID_MAJOR: Color32 = Color32::from_rgb(218, 224, 230);
 
 // ---------------------------------------------------------------------------
 // Schematic elements
