@@ -56,19 +56,24 @@ impl NekoSpiceApp {
     }
 
     /// Toolbar row: file ops, drawing tools, zoom, DRC status.
+    ///
+    /// Drawing tool buttons now switch the active tool in the tool palette.
+    /// Zoom buttons provide +/- controls with the current zoom percentage.
     fn draw_schematic_workspace_toolbar(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
 
         ui.horizontal(|ui| {
             // File operations
-            canvas_toolbar_button(ui, mode, "Save", self.document.is_some());
+            if canvas_toolbar_button(ui, mode, "\u{2913} Save", self.document.is_some()).clicked() {
+                self.save_document();
+            }
             ui.add_space(2.0);
-            if canvas_toolbar_button(ui, mode, "Fit", true).clicked() {
+            if canvas_toolbar_button(ui, mode, "\u{2316} Fit", true).clicked() {
                 self.viewport
                     .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
             }
-            if canvas_toolbar_button(ui, mode, "Run", self.document.is_some())
+            if canvas_toolbar_button(ui, mode, "\u{25B6} Run", self.document.is_some())
                 .clicked()
             {
                 self.run_simulation_from_panel();
@@ -76,20 +81,35 @@ impl NekoSpiceApp {
 
             ui.separator();
 
-            // Drawing tools
-            toolbar_icon_button(ui, mode, "\u{250C}", "Wire Tool", true);
-            toolbar_icon_button(ui, mode, "\u{2190}", "Net Label", true);
-            toolbar_icon_button(ui, mode, "\u{2550}", "Bus Tool", true);
-            toolbar_icon_button(ui, mode, "\u{25A3}", "Sheet Symbol", true);
+            // Drawing tools — clicking switches the active tool
+            use super::schematic_tools::SchematicTool;
+            let tools: &[(&str, &str, SchematicTool)] = &[
+                ("\u{250C}", "Wire (W)", SchematicTool::Wire),
+                ("\u{2190}", "Label (L)", SchematicTool::Label),
+                ("\u{2550}", "Bus (B)", SchematicTool::Bus),
+                ("\u{25A3}", "Sheet (S)", SchematicTool::Sheet),
+                ("\u{2B24}", "Junction (J)", SchematicTool::Junction),
+                ("\u{2716}", "NoConn (Q)", SchematicTool::NoConnect),
+            ];
+            for &(icon, tooltip, tool) in tools {
+                if toolbar_icon_button(ui, mode, icon, tooltip, true).clicked() {
+                    self.activate_schematic_tool_direct(tool);
+                }
+            }
 
             ui.separator();
 
-            // Zoom display
-            ui.label(StudioTheme::muted_for(mode, "Zoom"));
+            // Zoom controls
+            if canvas_toolbar_button(ui, mode, "-", true).clicked() {
+                self.viewport.zoom = (self.viewport.zoom * 0.8).max(1.0);
+            }
             ui.label(StudioTheme::accent_for(
                 mode,
                 format!("{:.0}%", self.viewport.zoom * 10.0),
             ));
+            if canvas_toolbar_button(ui, mode, "+", true).clicked() {
+                self.viewport.zoom = (self.viewport.zoom * 1.25).min(180.0);
+            }
 
             ui.separator();
 
