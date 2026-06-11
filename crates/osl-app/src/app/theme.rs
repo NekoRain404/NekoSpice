@@ -85,22 +85,23 @@ impl StudioTheme {
     pub(super) fn palette(mode: StudioThemeMode) -> StudioPalette {
         match mode {
             StudioThemeMode::Midnight => StudioPalette {
-                background: Color32::from_rgb(13, 17, 23),     // GitHub dark bg
-                panel: Color32::from_rgb(22, 27, 34),          // GitHub dark surface
-                panel_soft: Color32::from_rgb(33, 38, 45),     // GitHub dark elevated
-                panel_hover: Color32::from_rgb(48, 54, 61),    // GitHub dark hover
-                canvas: Color32::from_rgb(236, 240, 244),      // Light canvas (KiCad)
-                border: Color32::from_rgb(48, 54, 61),         // GitHub dark border
-                border_strong: Color32::from_rgb(88, 96, 105), // GitHub dark border strong
-                text: Color32::from_rgb(230, 237, 243),        // Bright text
-                text_muted: Color32::from_rgb(139, 148, 158),  // Muted text
-                accent: Color32::from_rgb(56, 139, 253),       // GitHub blue
-                accent_soft: Color32::from_rgb(24, 45, 77),    // Accent background
-                success: Color32::from_rgb(63, 185, 80),       // GitHub green
-                warning: Color32::from_rgb(210, 153, 34),      // GitHub yellow
-                danger: Color32::from_rgb(248, 81, 73),        // GitHub red
-                strip: Color32::from_rgb(13, 17, 23),
-                strip_border: Color32::from_rgb(33, 38, 45),
+                // Deep blue-teal dark theme matching reference UI
+                background: Color32::from_rgb(7, 18, 30),      // Deep blue-black
+                panel: Color32::from_rgb(11, 24, 38),          // Dark blue panel
+                panel_soft: Color32::from_rgb(15, 28, 44),     // Slightly lighter panel
+                panel_hover: Color32::from_rgb(20, 35, 52),    // Hover state
+                canvas: Color32::from_rgb(11, 24, 38),         // Canvas bg (dark for EDA)
+                border: Color32::from_rgb(28, 48, 68),         // Subtle border
+                border_strong: Color32::from_rgb(40, 65, 90),  // Stronger border
+                text: Color32::from_rgb(210, 220, 235),        // Bright text
+                text_muted: Color32::from_rgb(120, 140, 165),  // Muted text
+                accent: Color32::from_rgb(50, 130, 240),       // Bright blue accent
+                accent_soft: Color32::from_rgb(18, 42, 70),    // Accent background
+                success: Color32::from_rgb(60, 185, 100),      // Green
+                warning: Color32::from_rgb(220, 165, 45),      // Yellow
+                danger: Color32::from_rgb(235, 85, 80),        // Red
+                strip: Color32::from_rgb(7, 18, 30),           // Status strip bg
+                strip_border: Color32::from_rgb(15, 28, 44),   // Status strip border
             },
             StudioThemeMode::Graphite => StudioPalette {
                 background: Color32::from_rgb(24, 25, 28),
