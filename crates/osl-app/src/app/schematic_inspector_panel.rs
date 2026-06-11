@@ -4,9 +4,17 @@ use super::schematic_inspector_widgets::inspector_tab;
 use super::theme::StudioTheme;
 use eframe::egui;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct SchematicInspectorPanelState {
     active_tab: SchematicInspectorTab,
+}
+
+impl Default for SchematicInspectorPanelState {
+    fn default() -> Self {
+        Self {
+            active_tab: initial_schematic_inspector_tab(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -16,14 +24,16 @@ enum SchematicInspectorTab {
     Inspector,
     Libraries,
     Simulator,
+    Review,
 }
 
 impl SchematicInspectorTab {
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 5] = [
         Self::Properties,
         Self::Inspector,
         Self::Libraries,
         Self::Simulator,
+        Self::Review,
     ];
 
     fn label_key(self) -> UiText {
@@ -32,8 +42,27 @@ impl SchematicInspectorTab {
             Self::Inspector => UiText::KiCadInspector,
             Self::Libraries => UiText::Libraries,
             Self::Simulator => UiText::Simulator,
+            Self::Review => UiText::DesignReview,
         }
     }
+
+    fn from_slug(slug: &str) -> Option<Self> {
+        match slug {
+            "properties" => Some(Self::Properties),
+            "inspector" | "kicad-inspector" => Some(Self::Inspector),
+            "libraries" | "library" => Some(Self::Libraries),
+            "simulator" | "simulation" => Some(Self::Simulator),
+            "review" | "design-review" => Some(Self::Review),
+            _ => None,
+        }
+    }
+}
+
+fn initial_schematic_inspector_tab() -> SchematicInspectorTab {
+    std::env::var("NEKOSPICE_INITIAL_SCHEMATIC_INSPECTOR")
+        .ok()
+        .and_then(|value| SchematicInspectorTab::from_slug(&value))
+        .unwrap_or_default()
 }
 
 impl NekoSpiceApp {
@@ -53,6 +82,7 @@ impl NekoSpiceApp {
             SchematicInspectorTab::Inspector => self.draw_schematic_kicad_inspector_tab(ui),
             SchematicInspectorTab::Libraries => self.draw_schematic_libraries_tab(ui),
             SchematicInspectorTab::Simulator => self.draw_schematic_simulator_tab(ui),
+            SchematicInspectorTab::Review => self.draw_schematic_review_tab(ui),
         }
     }
 

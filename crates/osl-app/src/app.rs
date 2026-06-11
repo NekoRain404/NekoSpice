@@ -38,11 +38,15 @@ mod reports_workspace_preview;
 mod reports_workspace_sections;
 mod reports_workspace_state;
 mod reports_workspace_widgets;
+mod review_workspace;
+mod review_workspace_state;
+mod review_workspace_widgets;
 mod runtime;
 mod schematic_inspector_panel;
 mod schematic_inspector_sections;
 mod schematic_inspector_simulator;
 mod schematic_inspector_widgets;
+mod schematic_review_panel;
 mod schematic_tools;
 mod schematic_workspace;
 mod schematic_workspace_widgets;
@@ -73,6 +77,7 @@ use optimization_workspace_state::OptimizationWorkspaceState;
 use placement::SymbolPlacementState;
 use preferences::StudioPreferences;
 use reports_workspace_state::ReportsWorkspaceState;
+use review_workspace_state::ReviewWorkspaceState;
 pub use runtime::run_native;
 use schematic_inspector_panel::SchematicInspectorPanelState;
 use schematic_tools::SchematicToolState;
@@ -98,6 +103,7 @@ pub struct NekoSpiceApp {
     pub(super) schematic_tools: SchematicToolState,
     pub(super) simulation_panel: SimulationPanelState,
     optimization_workspace: OptimizationWorkspaceState,
+    review_workspace: ReviewWorkspaceState,
     reports_workspace: ReportsWorkspaceState,
     waveform_workspace: WaveformWorkspaceState,
     active_workspace: StudioWorkspace,
@@ -157,6 +163,7 @@ impl Default for NekoSpiceApp {
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
             optimization_workspace: OptimizationWorkspaceState::default(),
+            review_workspace: ReviewWorkspaceState::default(),
             reports_workspace: ReportsWorkspaceState::default(),
             waveform_workspace: WaveformWorkspaceState::default(),
             active_workspace: initial_workspace(),
