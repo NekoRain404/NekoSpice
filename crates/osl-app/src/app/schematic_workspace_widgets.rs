@@ -86,7 +86,7 @@ pub(super) fn toolbar_icon_button(
 /// Draw a document tab in the tab bar.
 ///
 /// Active tab uses accent fill; inactive tabs use panel background.
-pub(super) fn document_tab(ui: &mut egui::Ui, mode: StudioThemeMode, text: &str, active: bool) {
+pub(super) fn document_tab(ui: &mut egui::Ui, mode: StudioThemeMode, text: &str, active: bool) -> Response {
     let palette = StudioTheme::palette(mode);
     let fill = if active {
         palette.accent_soft
@@ -101,12 +101,12 @@ pub(super) fn document_tab(ui: &mut egui::Ui, mode: StudioThemeMode, text: &str,
     let label = RichText::new(text)
         .size(12.0)
         .color(if active { palette.accent } else { palette.text_muted });
-    let _ = ui.add(
+    ui.add(
         egui::Button::new(label)
             .fill(fill)
             .stroke(stroke)
             .corner_radius(CornerRadius::same(4)),
-    );
+    )
 }
 
 /// Draw a signal row in the waveform/signal list panel.

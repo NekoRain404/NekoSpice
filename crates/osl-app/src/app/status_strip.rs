@@ -119,6 +119,25 @@ impl NekoSpiceApp {
             ui.separator();
             ui.label(diagnostic_text(mode, snapshot.diagnostics));
             ui.separator();
+            // Zoom level display
+            ui.label(StudioTheme::muted_for(
+                mode,
+                format!("Zoom: {:.0}%", self.viewport.zoom * 10.0),
+            ));
+            ui.separator();
+            // Element count from scene
+            if let Some(scene) = &self.scene {
+                ui.label(StudioTheme::muted_for(
+                    mode,
+                    format!(
+                        "{} sym, {} wire, {} label",
+                        scene.symbols.len(),
+                        scene.wires.len(),
+                        scene.labels.len(),
+                    ),
+                ));
+                ui.separator();
+            }
             ui.label(StudioTheme::muted_for(mode, snapshot.selected_item));
             if let Some(message) = &self.status_message {
                 ui.separator();

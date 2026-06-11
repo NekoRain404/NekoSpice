@@ -165,17 +165,36 @@ impl NekoSpiceApp {
                 .and_then(|document| document.path().file_name())
                 .and_then(|name| name.to_str())
                 .unwrap_or(self.text(UiText::NoDocument));
-            document_tab(ui, mode, active_name, true);
-            // Show real sub-sheets from loaded schematic
+            if document_tab(ui, mode, active_name, true).clicked() {
+                self.status_message = Some(format!("Root schematic: {active_name}"));
+            }
+            // Show real sub-sheets from loaded schematic — clicking opens the sub-sheet file.
             if let Some(document) = &self.document {
                 let scene = document.scene();
-                for sheet in &scene.sheets {
-                    let tab_label = if sheet.file.is_empty() {
-                        &sheet.name
-                    } else {
-                        &sheet.file
-                    };
-                    document_tab(ui, mode, tab_label, false);
+                let sheets: Vec<_> = scene.sheets.iter().map(|s| {
+                    (s.name.clone(), s.file.clone())
+                }).collect();
+                for (name, file) in sheets {
+                    let tab_label = if file.is_empty() { name.clone() } else { file.clone() };
+                    if document_tab(ui, mode, &tab_label, false).clicked() {
+                        // Try to load the sub-sheet schematic
+                        if !file.is_empty() {
+                            if let Some(document) = &self.document {
+                                let base_dir = document.path().parent()
+                                    .map(|p| p.to_path_buf())
+                                    .unwrap_or_default();
+                                let sub_path = base_dir.join(&file);
+                                if sub_path.exists() {
+                                    self.load_schematic(sub_path);
+                                    self.status_message = Some(format!("Opened sub-sheet: {tab_label}"));
+                                } else {
+                                    self.status_message = Some(format!("Sub-sheet not found: {tab_label}"));
+                                }
+                            }
+                        } else {
+                            self.status_message = Some(format!("Sub-sheet: {name}"));
+                        }
+                    }
                 }
             }
             if ui.small_button("+").clicked() {
