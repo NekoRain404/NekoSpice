@@ -1,6 +1,7 @@
 use crate::canvas;
+use crate::canvas::colors::SchematicColors;
 use crate::viewport::CanvasViewport;
-use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke, StrokeKind};
+use eframe::egui::{self, Align2, FontId, Pos2, Rect, Stroke, StrokeKind};
 use osl_kicad::KicadPoint;
 
 use super::state::{SchematicTool, SchematicToolState};
@@ -11,6 +12,7 @@ pub(super) fn draw_schematic_tool_preview(
     viewport: CanvasViewport,
     tools: &SchematicToolState,
     point: KicadPoint,
+    colors: SchematicColors,
 ) {
     match tools.active {
         SchematicTool::Wire => {
@@ -21,7 +23,7 @@ pub(super) fn draw_schematic_tool_preview(
                     viewport,
                     start,
                     point,
-                    Color32::from_rgb(0, 130, 85),
+                    colors.wire,
                     1.5,
                 );
             }
@@ -34,7 +36,7 @@ pub(super) fn draw_schematic_tool_preview(
                     viewport,
                     start,
                     point,
-                    Color32::from_rgb(70, 95, 220),
+                    colors.bus,
                     2.5,
                 );
             }
@@ -50,7 +52,7 @@ pub(super) fn draw_schematic_tool_preview(
                 viewport,
                 point,
                 end,
-                Color32::from_rgb(70, 95, 220),
+                colors.bus,
                 2.0,
             );
         }
@@ -60,7 +62,7 @@ pub(super) fn draw_schematic_tool_preview(
                 Align2::LEFT_TOP,
                 &tools.label_text,
                 FontId::monospace(12.0),
-                Color32::from_rgb(0, 95, 180),
+                colors.label_local,
             );
         }
         SchematicTool::Text => {
@@ -69,7 +71,7 @@ pub(super) fn draw_schematic_tool_preview(
                 Align2::LEFT_TOP,
                 &tools.text_item,
                 FontId::monospace(12.0),
-                Color32::from_rgb(165, 45, 45),
+                colors.text_spice_directive,
             );
         }
         SchematicTool::Sheet => {
@@ -85,7 +87,7 @@ pub(super) fn draw_schematic_tool_preview(
             painter.rect_stroke(
                 sheet_rect,
                 0.0,
-                Stroke::new(1.5, Color32::from_rgb(90, 120, 190)),
+                Stroke::new(1.5, colors.sheet_border),
                 StrokeKind::Inside,
             );
             painter.text(
@@ -93,24 +95,24 @@ pub(super) fn draw_schematic_tool_preview(
                 Align2::LEFT_TOP,
                 &tools.sheet_name,
                 FontId::monospace(12.0),
-                Color32::from_rgb(50, 80, 150),
+                colors.sheet_name,
             );
         }
         SchematicTool::Junction => {
             painter.circle_filled(
                 viewport.world_to_screen(rect, point),
                 3.0,
-                Color32::from_rgb(0, 150, 72),
+                colors.junction,
             );
         }
         SchematicTool::NoConnect => {
-            draw_no_connect_preview(painter, rect, viewport.world_to_screen(rect, point));
+            draw_no_connect_preview(painter, rect, viewport.world_to_screen(rect, point), colors);
         }
         SchematicTool::Select => {}
     }
 }
 
-fn draw_no_connect_preview(painter: &egui::Painter, rect: Rect, center: Pos2) {
+fn draw_no_connect_preview(painter: &egui::Painter, rect: Rect, center: Pos2, colors: SchematicColors) {
     if !rect.contains(center) {
         return;
     }
@@ -120,13 +122,13 @@ fn draw_no_connect_preview(painter: &egui::Painter, rect: Rect, center: Pos2) {
             Pos2::new(center.x - size, center.y - size),
             Pos2::new(center.x + size, center.y + size),
         ],
-        Stroke::new(1.5, Color32::from_rgb(55, 55, 55)),
+        Stroke::new(1.5, colors.no_connect),
     );
     painter.line_segment(
         [
             Pos2::new(center.x - size, center.y + size),
             Pos2::new(center.x + size, center.y - size),
         ],
-        Stroke::new(1.5, Color32::from_rgb(55, 55, 55)),
+        Stroke::new(1.5, colors.no_connect),
     );
 }

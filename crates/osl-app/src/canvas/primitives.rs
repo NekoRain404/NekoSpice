@@ -3,7 +3,7 @@
 // wire, bus, label, junction, no-connect, and selection bounds drawing.
 
 use crate::viewport::CanvasViewport;
-use super::colors;
+use super::colors::SchematicColors;
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke, StrokeKind, Vec2};
 use osl_kicad::{
     KicadBoundingBox, KicadCanvasBusEntry, KicadCanvasGraphic, KicadCanvasSheet, KicadPoint,
@@ -19,15 +19,15 @@ use osl_kicad::{
 /// Minor lines are drawn at every 2.54mm (100mil) step.
 /// Major lines are drawn at every 12.7mm (500mil) step.
 /// Major lines use a slightly darker color and thicker stroke.
-pub(crate) fn draw_grid(painter: &egui::Painter, rect: Rect, viewport: CanvasViewport) {
+pub(crate) fn draw_grid(painter: &egui::Painter, rect: Rect, viewport: CanvasViewport, sc: SchematicColors) {
     // Minor grid step: 2.54mm in world space
     let minor_step = (2.54 * viewport.zoom).max(4.0);
     // Major grid step: 5x minor (12.7mm)
     let major_step = minor_step * 5.0;
 
     let origin = rect.center() + viewport.pan;
-    let minor_stroke = Stroke::new(0.5, colors::GRID_MINOR);
-    let major_stroke = Stroke::new(1.0, colors::GRID_MAJOR);
+    let minor_stroke = Stroke::new(0.5, sc.grid_minor);
+    let major_stroke = Stroke::new(1.0, sc.grid_major);
 
     // Draw vertical lines
     let start_x = origin.x % minor_step;
@@ -74,6 +74,7 @@ pub(crate) fn draw_sheet(
     rect: Rect,
     viewport: CanvasViewport,
     sheet: &KicadCanvasSheet,
+    sc: SchematicColors,
 ) {
     let Some(at) = sheet.at else {
         return;
@@ -90,11 +91,11 @@ pub(crate) fn draw_sheet(
         },
     );
     let sheet_rect = Rect::from_two_pos(start, end);
-    painter.rect_filled(sheet_rect, 0.0, colors::SHEET_FILL);
+    painter.rect_filled(sheet_rect, 0.0, sc.sheet_fill);
     painter.rect_stroke(
         sheet_rect,
         0.0,
-        Stroke::new(1.5, colors::SHEET_BORDER),
+        Stroke::new(1.5, sc.sheet_border),
         StrokeKind::Inside,
     );
 
@@ -104,7 +105,7 @@ pub(crate) fn draw_sheet(
         Align2::LEFT_TOP,
         &sheet.name,
         FontId::monospace(12.0),
-        colors::SHEET_NAME,
+        sc.sheet_name,
     );
 
     // Draw sheet pins (small lines + label on the sheet border)
@@ -152,7 +153,7 @@ pub(crate) fn draw_sheet(
             // Draw pin stub line
             painter.line_segment(
                 [line_start, line_end],
-                Stroke::new(1.5, colors::SHEET_PIN),
+                Stroke::new(1.5, sc.sheet_pin),
             );
 
             // Draw pin label
@@ -174,7 +175,7 @@ pub(crate) fn draw_sheet(
                 text_align,
                 &pin.name,
                 FontId::proportional(font_size),
-                colors::SHEET_PIN,
+                sc.sheet_pin,
             );
         }
     }
@@ -349,6 +350,7 @@ pub(crate) fn draw_bus_entry(
     rect: Rect,
     viewport: CanvasViewport,
     entry: &KicadCanvasBusEntry,
+    sc: SchematicColors,
 ) {
     draw_line(
         painter,
@@ -356,7 +358,7 @@ pub(crate) fn draw_bus_entry(
         viewport,
         entry.at,
         entry.end(),
-        colors::BUS_ENTRY,
+        sc.bus_entry,
         2.0,
     );
 }
@@ -377,8 +379,9 @@ pub(crate) fn draw_pin(
     rect: Rect,
     viewport: CanvasViewport,
     pin: &osl_kicad::KicadCanvasPin,
+    sc: SchematicColors,
 ) {
-    let color = colors::SYMBOL_PIN;
+    let color = sc.symbol_pin;
     let width = 1.5;
 
     // Draw the main pin line (always drawn)

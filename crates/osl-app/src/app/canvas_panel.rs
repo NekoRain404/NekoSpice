@@ -1,6 +1,6 @@
 use super::{EditNudgeDirection, NekoSpiceApp};
 use crate::canvas;
-use crate::canvas::colors;
+use crate::canvas::colors::SchematicColors;
 use eframe::egui::{self, Color32, Sense, Vec2};
 use osl_kicad::{KicadAt, KicadCanvasScene, read_kicad_schematic_with_libraries};
 use std::path::Path;
@@ -49,19 +49,20 @@ impl NekoSpiceApp {
         self.handle_canvas_context_menu(ui, rect);
 
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, self.theme_palette().canvas);
-        canvas::draw_grid(&painter, rect, self.viewport);
+        let schematic_colors = SchematicColors::for_mode(self.theme_mode());
+        painter.rect_filled(rect, 0.0, schematic_colors.canvas_bg);
+        canvas::draw_grid(&painter, rect, self.viewport, schematic_colors);
 
         if let Some(scene) = &self.scene {
             let visible_bounds = self.viewport.visible_world_bounds(rect);
-            canvas::draw_scene(&painter, rect, scene, self.viewport, visible_bounds);
+            canvas::draw_scene(&painter, rect, scene, self.viewport, visible_bounds, schematic_colors);
             if let Some(hit) = &self.selected_hit {
                 canvas::draw_bounds(
                     &painter,
                     rect,
                     self.viewport,
                     hit.bounds,
-                    colors::SELECTION,
+                    schematic_colors.selection,
                     2.0,
                 );
             }
@@ -83,7 +84,7 @@ impl NekoSpiceApp {
                     .as_ref()
                     .is_some_and(|sel| sel.bounds == hovered.bounds);
                 if !dominated_by_selection {
-                    canvas::draw_hover_highlight(&painter, rect, self.viewport, hovered.bounds);
+                    canvas::draw_hover_highlight(&painter, rect, self.viewport, hovered.bounds, schematic_colors);
                 }
             }
         }
@@ -92,8 +93,8 @@ impl NekoSpiceApp {
             && rect.contains(pointer)
         {
             let schematic_point = self.viewport.screen_to_world(rect, pointer);
-            self.draw_symbol_placement_preview(&painter, rect, schematic_point);
-            self.draw_schematic_tool_preview(&painter, rect, schematic_point);
+            self.draw_symbol_placement_preview(&painter, rect, schematic_point, schematic_colors);
+            self.draw_schematic_tool_preview(&painter, rect, schematic_point, schematic_colors);
         }
     }
 
@@ -102,6 +103,7 @@ impl NekoSpiceApp {
         painter: &egui::Painter,
         rect: egui::Rect,
         point: osl_kicad::KicadPoint,
+        schematic_colors: SchematicColors,
     ) {
         let Some(placement) = &self.placement else {
             return;
@@ -122,7 +124,7 @@ impl NekoSpiceApp {
         };
 
         let visible_bounds = self.viewport.visible_world_bounds(rect);
-        canvas::draw_scene(painter, rect, &preview.scene, self.viewport, visible_bounds);
+        canvas::draw_scene(painter, rect, &preview.scene, self.viewport, visible_bounds, schematic_colors);
         if let Some(bounds) = preview.scene.bounds {
             canvas::draw_bounds(
                 painter,

@@ -70,7 +70,7 @@ mod simulation_workspace_widgets;
 mod status_strip;
 mod studio_toolbar;
 mod symbol_placement_controls;
-mod theme;
+pub(crate) mod theme;
 mod waveform_preview;
 mod waveform_preview_primitives;
 mod waveform_workspace;

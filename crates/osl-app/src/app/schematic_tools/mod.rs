@@ -1,4 +1,5 @@
 use super::NekoSpiceApp;
+use crate::canvas::colors::SchematicColors;
 use eframe::egui::{self, Rect};
 use osl_kicad::KicadPoint;
 
@@ -16,6 +17,7 @@ impl NekoSpiceApp {
         painter: &egui::Painter,
         rect: Rect,
         point: KicadPoint,
+        schematic_colors: SchematicColors,
     ) {
         preview::draw_schematic_tool_preview(
             painter,
@@ -23,6 +25,7 @@ impl NekoSpiceApp {
             self.viewport,
             &self.schematic_tools,
             point,
+            schematic_colors,
         );
     }
 }

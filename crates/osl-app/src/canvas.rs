@@ -7,6 +7,7 @@ use eframe::egui::{self, Align2, FontId, Pos2, Rect, Stroke};
 use osl_kicad::{KicadAt, KicadBoundingBox, KicadCanvasScene, KicadPoint};
 
 pub(crate) mod colors;
+use colors::SchematicColors;
 mod primitives;
 
 pub(crate) use primitives::{draw_bounds, draw_grid, draw_line};
@@ -106,13 +107,14 @@ pub(crate) fn draw_scene(
     scene: &KicadCanvasScene,
     viewport: CanvasViewport,
     visible_bounds: KicadBoundingBox,
+    colors: SchematicColors,
 ) {
     // Layer 1: Hierarchical sheets (background fill + border)
     for sheet in &scene.sheets {
         if !item_visible(sheet.bounds, visible_bounds) {
             continue;
         }
-        primitives::draw_sheet(painter, rect, viewport, sheet);
+        primitives::draw_sheet(painter, rect, viewport, sheet, colors);
     }
 
     // Layer 2: Rule areas (translucent fill outlines)
@@ -126,7 +128,7 @@ pub(crate) fn draw_scene(
             viewport,
             &rule_area.points,
             true,
-            colors::RULE_AREA,
+            colors.rule_area,
             1.5,
         );
     }
@@ -136,7 +138,7 @@ pub(crate) fn draw_scene(
         if !item_visible(graphic.bounds(), visible_bounds) {
             continue;
         }
-        primitives::draw_graphic(painter, rect, viewport, graphic, colors::GRAPHIC);
+        primitives::draw_graphic(painter, rect, viewport, graphic, colors.graphic);
     }
 
     // Layer 4: Symbol bodies, pins, and labels
@@ -151,7 +153,7 @@ pub(crate) fn draw_scene(
                 rect,
                 viewport,
                 graphic,
-                colors::SYMBOL_BODY,
+                colors.symbol_body,
             );
         }
         // Symbol pin stubs with name and number labels
@@ -162,6 +164,7 @@ pub(crate) fn draw_scene(
                 rect,
                 viewport,
                 pin,
+                colors,
             );
 
             // Pin name near the body end (end point) of the pin
@@ -188,7 +191,7 @@ pub(crate) fn draw_scene(
                     name_align,
                     &pin.name,
                     FontId::proportional(font_size),
-                    colors::SYMBOL_PIN_NAME,
+                    colors.symbol_pin_name,
                 );
             }
 
@@ -214,7 +217,7 @@ pub(crate) fn draw_scene(
                     num_align,
                     &pin.number,
                     FontId::monospace(font_size),
-                    colors::SYMBOL_PIN_NUMBER,
+                    colors.symbol_pin_number,
                 );
             }
         }
@@ -241,7 +244,7 @@ pub(crate) fn draw_scene(
                     Align2::LEFT_TOP,
                     &symbol.reference,
                     FontId::proportional(ref_font_size),
-                    colors::SYMBOL_REFERENCE,
+                    colors.symbol_reference,
                 );
             } else if let Some(bounds) = symbol.bounds {
                 // Fallback: use bounding box position
@@ -251,7 +254,7 @@ pub(crate) fn draw_scene(
                     Align2::LEFT_BOTTOM,
                     &symbol.reference,
                     FontId::proportional(ref_font_size),
-                    colors::SYMBOL_REFERENCE,
+                    colors.symbol_reference,
                 );
             }
         }
@@ -277,7 +280,7 @@ pub(crate) fn draw_scene(
                     Align2::LEFT_TOP,
                     &symbol.value,
                     FontId::proportional(val_font_size),
-                    colors::SYMBOL_VALUE,
+                    colors.symbol_value,
                 );
             } else if let Some(bounds) = symbol.bounds {
                 // Fallback: use bounding box position
@@ -293,7 +296,7 @@ pub(crate) fn draw_scene(
                     Align2::LEFT_TOP,
                     &symbol.value,
                     FontId::proportional(val_font_size),
-                    colors::SYMBOL_VALUE,
+                    colors.symbol_value,
                 );
             }
         }
@@ -317,7 +320,7 @@ pub(crate) fn draw_scene(
             viewport,
             &wire.points,
             false,
-            colors::WIRE,
+            colors.wire,
             screen_width,
         );
     }
@@ -340,7 +343,7 @@ pub(crate) fn draw_scene(
             viewport,
             &bus.points,
             false,
-            colors::BUS,
+            colors.bus,
             screen_width,
         );
     }
@@ -350,7 +353,7 @@ pub(crate) fn draw_scene(
         if !item_visible(entry.bounds, visible_bounds) {
             continue;
         }
-        primitives::draw_bus_entry(painter, rect, viewport, entry);
+        primitives::draw_bus_entry(painter, rect, viewport, entry, colors);
     }
 
     // Layer 8: Directive labels (netclass flags with bounds box)
@@ -364,7 +367,7 @@ pub(crate) fn draw_scene(
                 rect,
                 viewport,
                 bounds,
-                colors::LABEL_DIRECTIVE_BOUNDS,
+                colors.label_directive_bounds,
                 1.0,
             );
         }
@@ -376,7 +379,7 @@ pub(crate) fn draw_scene(
                 at,
                 &label.text,
                 12.0,
-                colors::LABEL_DIRECTIVE,
+                colors.label_directive,
             );
         }
     }
@@ -388,9 +391,9 @@ pub(crate) fn draw_scene(
         }
         if let Some(at) = label.at {
             let label_color = match label.kind {
-                osl_kicad::KicadLabelKind::Local => colors::LABEL_LOCAL,
-                osl_kicad::KicadLabelKind::Global => colors::LABEL_GLOBAL,
-                osl_kicad::KicadLabelKind::Hierarchical => colors::LABEL_HIERARCHICAL,
+                osl_kicad::KicadLabelKind::Local => colors.label_local,
+                osl_kicad::KicadLabelKind::Global => colors.label_global,
+                osl_kicad::KicadLabelKind::Hierarchical => colors.label_hierarchical,
             };
             let font_size = label.effects
                 .as_ref()
@@ -417,9 +420,9 @@ pub(crate) fn draw_scene(
         }
         if let Some(at) = text.at {
             let color = if text.is_spice_directive {
-                colors::TEXT_SPICE_DIRECTIVE
+                colors.text_spice_directive
             } else {
-                colors::TEXT
+                colors.text
             };
             let font_size = text.effects
                 .as_ref()
@@ -450,7 +453,7 @@ pub(crate) fn draw_scene(
                 rect,
                 viewport,
                 bounds,
-                colors::TEXT_BOX_BORDER,
+                colors.text_box_border,
                 1.0,
             );
         }
@@ -465,7 +468,7 @@ pub(crate) fn draw_scene(
         }
         let center = viewport.world_to_screen(rect, junction.at);
         let radius = (KICAD_DEFAULT_JUNCTION_DIAM_MM as f32 * viewport.zoom * 0.5).max(2.0);
-        painter.circle_filled(center, radius, colors::JUNCTION);
+        painter.circle_filled(center, radius, colors.junction);
     }
 
     // Layer 13: No-connect markers (X marks)
@@ -482,14 +485,14 @@ pub(crate) fn draw_scene(
                 Pos2::new(center.x - size, center.y - size),
                 Pos2::new(center.x + size, center.y + size),
             ],
-            Stroke::new(1.5, colors::NO_CONNECT),
+            Stroke::new(1.5, colors.no_connect),
         );
         painter.line_segment(
             [
                 Pos2::new(center.x - size, center.y + size),
                 Pos2::new(center.x + size, center.y - size),
             ],
-            Stroke::new(1.5, colors::NO_CONNECT),
+            Stroke::new(1.5, colors.no_connect),
         );
     }
 }
@@ -504,13 +507,14 @@ pub(crate) fn draw_hover_highlight(
     rect: Rect,
     viewport: CanvasViewport,
     bounds: osl_kicad::KicadBoundingBox,
+    colors: SchematicColors,
 ) {
     primitives::draw_bounds(
         painter,
         rect,
         viewport,
         bounds,
-        colors::HOVER_HIGHLIGHT,
+        colors.hover_highlight,
         1.5,
     );
 }

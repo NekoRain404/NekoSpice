@@ -94,7 +94,7 @@ impl NekoSpiceApp {
                     .ok()
             }) {
                 Some(preview) => {
-                    draw_symbol_preview(ui, &preview.scene, self.theme_palette().canvas)
+                    draw_symbol_preview(ui, &preview.scene, self.theme_palette().canvas, mode)
                 }
                 None => {
                     ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoDocument)));

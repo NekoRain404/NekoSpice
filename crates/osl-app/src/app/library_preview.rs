@@ -1,11 +1,12 @@
 use super::library_data::spice_preview_lines;
 use super::library_widgets::code_line;
+use crate::canvas::colors::SchematicColors;
 use eframe::egui::{self, Color32, Vec2};
 use osl_kicad::{KicadCanvasScene, KicadIndexedSymbol};
 
 const SPICE_PREVIEW_LINES: usize = 16;
 
-pub(super) fn draw_symbol_preview(ui: &mut egui::Ui, scene: &KicadCanvasScene, fill: Color32) {
+pub(super) fn draw_symbol_preview(ui: &mut egui::Ui, scene: &KicadCanvasScene, fill: Color32, mode: crate::app::theme::StudioThemeMode) {
     let available_width = ui.available_width().clamp(220.0, 520.0);
     let desired_size = Vec2::new(available_width, 260.0);
     let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
@@ -20,7 +21,8 @@ pub(super) fn draw_symbol_preview(ui: &mut egui::Ui, scene: &KicadCanvasScene, f
 
     let viewport = crate::viewport::CanvasViewport::for_rect(rect, scene.bounds);
     let visible_bounds = viewport.visible_world_bounds(rect);
-    crate::canvas::draw_scene(&painter, rect, scene, viewport, visible_bounds);
+    let colors = SchematicColors::for_mode(mode);
+    crate::canvas::draw_scene(&painter, rect, scene, viewport, visible_bounds, colors);
     if let Some(bounds) = scene.bounds {
         crate::canvas::draw_bounds(
             &painter,

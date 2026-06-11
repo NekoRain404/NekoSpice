@@ -4,7 +4,7 @@ use eframe::egui::{
 };
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(super) enum StudioThemeMode {
+pub(crate) enum StudioThemeMode {
     #[default]
     Midnight,
     Graphite,
@@ -44,7 +44,7 @@ impl StudioThemeMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct StudioPalette {
+pub(crate) struct StudioPalette {
     pub(super) background: Color32,
     pub(super) panel: Color32,
     pub(super) panel_soft: Color32,
@@ -63,7 +63,7 @@ pub(super) struct StudioPalette {
     pub(super) strip_border: Color32,
 }
 
-pub(super) struct StudioTheme;
+pub(crate) struct StudioTheme;
 
 #[allow(dead_code)]
 impl StudioTheme {
@@ -82,7 +82,7 @@ impl StudioTheme {
     pub(super) const WARNING: Color32 = Color32::from_rgb(235, 174, 64);
     pub(super) const DANGER: Color32 = Color32::from_rgb(238, 91, 91);
 
-    pub(super) fn palette(mode: StudioThemeMode) -> StudioPalette {
+    pub(crate) fn palette(mode: StudioThemeMode) -> StudioPalette {
         match mode {
             StudioThemeMode::Midnight => StudioPalette {
                 // Deep blue-teal dark theme matching reference UI
