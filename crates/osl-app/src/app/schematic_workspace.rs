@@ -138,6 +138,13 @@ impl NekoSpiceApp {
                     .color(dot_color)
                     .size(12.0),
             );
+
+            // Push status message to the right
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if let Some(msg) = &self.status_message {
+                    ui.label(StudioTheme::accent_for(mode, msg));
+                }
+            });
         });
     }
 
