@@ -29,6 +29,8 @@ impl NekoSpiceApp {
                     });
                 });
                 ui.add_space(SECTION_GAP);
+                self.draw_home_command_center(ui);
+                ui.add_space(SECTION_GAP);
 
                 two_column(
                     self,

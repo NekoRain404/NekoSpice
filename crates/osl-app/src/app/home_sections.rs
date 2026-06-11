@@ -259,9 +259,9 @@ impl NekoSpiceApp {
 
         let spacing = 8.0;
         let available_width = ui.available_width();
-        let columns: usize = if available_width >= 430.0 {
+        let columns: usize = if available_width >= 620.0 {
             3
-        } else if available_width >= 286.0 {
+        } else if available_width >= 360.0 {
             2
         } else {
             1

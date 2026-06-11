@@ -9,6 +9,7 @@ use std::path::PathBuf;
 mod canvas_panel;
 mod center_workspace;
 mod diagnostics_panel;
+mod home_command_center;
 mod home_dashboard;
 mod home_insights_panel;
 mod home_project_context;
