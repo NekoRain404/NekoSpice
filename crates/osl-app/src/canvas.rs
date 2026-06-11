@@ -457,21 +457,26 @@ pub(crate) fn draw_scene(
     }
 
     // Layer 12: Junctions (filled green dots)
+    // KiCad default junction diameter is 36 mils (0.9144mm)
+    const KICAD_DEFAULT_JUNCTION_DIAM_MM: f64 = 0.9144;
     for junction in &scene.junctions {
         if !junction.bounds.intersects(visible_bounds) {
             continue;
         }
         let center = viewport.world_to_screen(rect, junction.at);
-        painter.circle_filled(center, 3.0, colors::JUNCTION);
+        let radius = (KICAD_DEFAULT_JUNCTION_DIAM_MM as f32 * viewport.zoom * 0.5).max(2.0);
+        painter.circle_filled(center, radius, colors::JUNCTION);
     }
 
     // Layer 13: No-connect markers (X marks)
+    // KiCad default no-connect size is 48 mils (1.2192mm)
+    const KICAD_DEFAULT_NOCONNECT_SIZE_MM: f64 = 1.2192;
     for marker in &scene.no_connects {
         if !marker.bounds.intersects(visible_bounds) {
             continue;
         }
         let center = viewport.world_to_screen(rect, marker.at);
-        let size = 5.0;
+        let size = (KICAD_DEFAULT_NOCONNECT_SIZE_MM as f32 * viewport.zoom * 0.5).max(3.0);
         painter.line_segment(
             [
                 Pos2::new(center.x - size, center.y - size),
