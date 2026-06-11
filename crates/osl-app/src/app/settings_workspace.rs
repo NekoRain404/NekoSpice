@@ -13,51 +13,37 @@ impl NekoSpiceApp {
                 self.text(UiText::StudioSubtitle),
             ));
             ui.add_space(10.0);
-            ui.horizontal_top(|ui| {
+            let spacing = 10.0;
+            let width = ui.available_width();
+            if width < 700.0 {
                 ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() * 0.52).max(340.0));
-                    self.draw_settings_appearance_section(ui);
+                    self.draw_settings_theme_gallery(ui);
                     ui.add_space(8.0);
                     self.draw_settings_workspace_section(ui);
-                });
-                ui.add_space(10.0);
-                ui.vertical(|ui| {
-                    ui.set_width(ui.available_width().max(260.0));
+                    ui.add_space(8.0);
                     self.draw_settings_runtime_section(ui);
                     ui.add_space(8.0);
                     self.draw_settings_localization_section(ui);
                 });
-            });
-        });
-    }
-
-    fn draw_settings_appearance_section(&mut self, ui: &mut egui::Ui) {
-        let mode = self.theme_mode();
-        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(
-                mode,
-                self.text(UiText::Appearance),
-            ));
-            ui.label(StudioTheme::muted_for(
-                mode,
-                format!(
-                    "{}: {}",
-                    self.text(UiText::CurrentTheme),
-                    self.theme_mode_label(mode)
-                ),
-            ));
-            ui.horizontal_wrapped(|ui| {
-                for candidate in StudioThemeMode::ALL {
-                    let label = self.theme_mode_label(candidate);
-                    if ui
-                        .selectable_value(&mut self.preferences.theme_mode, candidate, label)
-                        .changed()
-                    {
-                        self.status_message =
-                            Some(format!("{}: {}", self.text(UiText::Theme), label));
-                    }
-                }
-            });
+            } else {
+                let left_width = ((width - spacing) * 0.60).max(360.0);
+                let right_width = (width - left_width - spacing).max(260.0);
+                ui.horizontal_top(|ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(left_width);
+                        self.draw_settings_theme_gallery(ui);
+                        ui.add_space(8.0);
+                        self.draw_settings_workspace_section(ui);
+                    });
+                    ui.add_space(spacing);
+                    ui.vertical(|ui| {
+                        ui.set_width(right_width);
+                        self.draw_settings_runtime_section(ui);
+                        ui.add_space(8.0);
+                        self.draw_settings_localization_section(ui);
+                    });
+                });
+            }
         });
     }
 
