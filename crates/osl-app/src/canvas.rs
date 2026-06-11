@@ -206,10 +206,17 @@ pub(crate) fn draw_scene(
     }
 
     // Layer 5: Wires (green polylines)
+    // KiCad default wire width is 0.1524mm (6mil) when stroke width is None or 0.0
+    const KICAD_DEFAULT_WIRE_WIDTH_MM: f64 = 0.1524;
     for wire in &scene.wires {
         if !item_visible(wire.bounds, visible_bounds) {
             continue;
         }
+        let wire_width = wire.stroke.as_ref()
+            .and_then(|s| s.width)
+            .filter(|w| *w > 0.0)
+            .unwrap_or(KICAD_DEFAULT_WIRE_WIDTH_MM);
+        let screen_width = (wire_width as f32 * viewport.zoom).max(1.0);
         primitives::draw_polyline(
             painter,
             rect,
@@ -217,15 +224,21 @@ pub(crate) fn draw_scene(
             &wire.points,
             false,
             colors::WIRE,
-            2.0,
+            screen_width,
         );
     }
 
     // Layer 6: Buses (blue polylines)
+    // KiCad default bus width is 0.1524mm (6mil) when stroke width is None or 0.0
     for bus in &scene.buses {
         if !item_visible(bus.bounds, visible_bounds) {
             continue;
         }
+        let bus_width = bus.stroke.as_ref()
+            .and_then(|s| s.width)
+            .filter(|w| *w > 0.0)
+            .unwrap_or(KICAD_DEFAULT_WIRE_WIDTH_MM);
+        let screen_width = (bus_width as f32 * viewport.zoom).max(1.5);
         primitives::draw_polyline(
             painter,
             rect,
@@ -233,7 +246,7 @@ pub(crate) fn draw_scene(
             &bus.points,
             false,
             colors::BUS,
-            3.0,
+            screen_width,
         );
     }
 
@@ -261,11 +274,13 @@ pub(crate) fn draw_scene(
             );
         }
         if let Some(at) = label.at {
-            painter.text(
-                viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
-                Align2::LEFT_TOP,
+            primitives::draw_rotated_text(
+                painter,
+                rect,
+                viewport,
+                at,
                 &label.text,
-                FontId::proportional(12.0),
+                12.0,
                 colors::LABEL_DIRECTIVE,
             );
         }
@@ -288,11 +303,13 @@ pub(crate) fn draw_scene(
                 .map(|s| s.width as f32)
                 .unwrap_or(12.0)
                 .max(6.0);
-            painter.text(
-                viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
-                Align2::LEFT_TOP,
+            primitives::draw_rotated_text(
+                painter,
+                rect,
+                viewport,
+                at,
                 &label.text,
-                FontId::proportional(font_size),
+                font_size,
                 label_color,
             );
         }
@@ -315,11 +332,13 @@ pub(crate) fn draw_scene(
                 .map(|s| s.width as f32)
                 .unwrap_or(12.0)
                 .max(6.0);
-            painter.text(
-                viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
-                Align2::LEFT_TOP,
+            primitives::draw_rotated_text(
+                painter,
+                rect,
+                viewport,
+                at,
                 &text.text,
-                FontId::proportional(font_size),
+                font_size,
                 color,
             );
         }

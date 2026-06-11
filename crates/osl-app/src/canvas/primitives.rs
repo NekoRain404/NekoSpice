@@ -120,10 +120,28 @@ fn resolve_font_size(effects: &Option<osl_kicad::KicadTextEffects>) -> f32 {
         .max(6.0)
 }
 
+/// Resolve screen-space stroke width from KiCad stroke data.
+///
+/// KiCad uses mm units; this converts to screen pixels using the viewport zoom.
+/// Returns at least `min_width` pixels for visibility.
+fn resolve_stroke_width(
+    stroke: &Option<osl_kicad::KicadStroke>,
+    viewport: CanvasViewport,
+    min_width: f32,
+) -> f32 {
+    stroke
+        .as_ref()
+        .and_then(|s| s.width)
+        .filter(|w| *w > 0.0)
+        .map(|w| (w as f32 * viewport.zoom).max(min_width))
+        .unwrap_or(min_width)
+}
+
 /// Draw a KiCad canvas graphic element (polyline, bezier, rectangle, circle, arc, text).
 ///
 /// Supports solid fills via KiCad fill data. Filled rectangles and circles
 /// get a translucent background fill matching the KiCad rendering style.
+/// Stroke widths are resolved from KiCad data when available.
 pub(crate) fn draw_graphic(
     painter: &egui::Painter,
     rect: Rect,
@@ -132,7 +150,7 @@ pub(crate) fn draw_graphic(
     color: Color32,
 ) {
     match graphic {
-        KicadCanvasGraphic::Polyline { points, fill, .. } => {
+        KicadCanvasGraphic::Polyline { points, fill, stroke, .. } => {
             // Draw fill if present and closed
             if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) && points.len() > 2 {
                 let screen_points: Vec<Pos2> = points
@@ -145,9 +163,10 @@ pub(crate) fn draw_graphic(
                     egui::Stroke::NONE,
                 ));
             }
-            draw_polyline(painter, rect, viewport, points, false, color, 1.5);
+            let width = resolve_stroke_width(stroke, viewport, 1.0);
+            draw_polyline(painter, rect, viewport, points, false, color, width);
         }
-        KicadCanvasGraphic::Bezier { points, fill, .. } => {
+        KicadCanvasGraphic::Bezier { points, fill, stroke, .. } => {
             if points.len() >= 3 {
                 let sampled = quadratic_bezier_sample(points, 24);
                 if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) && sampled.len() > 2 {
@@ -161,12 +180,14 @@ pub(crate) fn draw_graphic(
                         egui::Stroke::NONE,
                     ));
                 }
-                draw_polyline(painter, rect, viewport, &sampled, false, color, 1.5);
+                let width = resolve_stroke_width(stroke, viewport, 1.0);
+                draw_polyline(painter, rect, viewport, &sampled, false, color, width);
             } else if !points.is_empty() {
-                draw_polyline(painter, rect, viewport, points, false, color, 1.5);
+                let width = resolve_stroke_width(stroke, viewport, 1.0);
+                draw_polyline(painter, rect, viewport, points, false, color, width);
             }
         }
-        KicadCanvasGraphic::Rectangle { start, end, fill, .. } => {
+        KicadCanvasGraphic::Rectangle { start, end, fill, stroke, .. } => {
             let s = viewport.world_to_screen(rect, *start);
             let e = viewport.world_to_screen(rect, *end);
             let r = Rect::from_two_pos(s, e);
@@ -174,35 +195,32 @@ pub(crate) fn draw_graphic(
             if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) {
                 painter.rect_filled(r, 0.0, Color32::from_rgba_premultiplied(200, 200, 200, 30));
             }
-            painter.rect_stroke(r, 0.0, Stroke::new(1.5, color), StrokeKind::Inside);
+            let width = resolve_stroke_width(stroke, viewport, 1.0);
+            painter.rect_stroke(r, 0.0, Stroke::new(width, color), StrokeKind::Inside);
         }
-        KicadCanvasGraphic::Circle { center, radius, fill, .. } => {
+        KicadCanvasGraphic::Circle { center, radius, fill, stroke, .. } => {
             let center_screen = viewport.world_to_screen(rect, *center);
             let radius_screen = (*radius as f32 * viewport.zoom).abs();
             // Draw fill if present
             if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) {
                 painter.circle_filled(center_screen, radius_screen, Color32::from_rgba_premultiplied(200, 200, 200, 30));
             }
-            painter.circle_stroke(center_screen, radius_screen, Stroke::new(1.5, color));
+            let width = resolve_stroke_width(stroke, viewport, 1.0);
+            painter.circle_stroke(center_screen, radius_screen, Stroke::new(width, color));
         }
         KicadCanvasGraphic::Arc {
-            start, mid, end, ..
+            start, mid, end, stroke, ..
         } => {
             let sampled = sample_kicad_arc_points(*start, *mid, *end);
-            draw_polyline(painter, rect, viewport, &sampled, false, color, 1.5);
+            let width = resolve_stroke_width(stroke, viewport, 1.0);
+            draw_polyline(painter, rect, viewport, &sampled, false, color, width);
         }
         KicadCanvasGraphic::Text {
             text, at, effects, ..
         } => {
             if let Some(at) = at {
                 let font_size = resolve_font_size(effects);
-                painter.text(
-                    viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
-                    Align2::LEFT_TOP,
-                    text,
-                    FontId::proportional(font_size),
-                    color,
-                );
+                draw_rotated_text(painter, rect, viewport, *at, text, font_size, color);
             }
         }
     }
@@ -303,7 +321,7 @@ pub(crate) fn draw_pin(
     let ny = dy / dist;
 
     // Decorator radius (relative to pin length)
-    let radius = (dist * 0.25).min(1.5).max(0.5);
+    let radius = (dist * 0.25).clamp(0.5, 1.5);
     let triangle_size = radius * 1.5;
 
     match pin.shape.as_str() {
@@ -417,6 +435,78 @@ pub(crate) fn draw_pin(
         _ => {
             // "line" or unknown — already drawn as a plain line above
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rotated text
+// ---------------------------------------------------------------------------
+
+/// Draw text with rotation support.
+///
+/// KiCad text can have arbitrary rotation angles. Since egui doesn't support
+/// rotated text natively, we use a character-by-character approach that maps
+/// each character position through a 2D rotation transform.
+///
+/// Cardinal angles (0, 90, 180, 270) are optimized to use the native
+/// `painter.text()` call with adjusted alignment for clean rendering.
+pub(crate) fn draw_rotated_text(
+    painter: &egui::Painter,
+    rect: Rect,
+    viewport: CanvasViewport,
+    at: osl_kicad::KicadAt,
+    text: &str,
+    font_size: f32,
+    color: Color32,
+) {
+    let rotation = ((at.rotation % 360.0) + 360.0) % 360.0;
+    let screen_pos = viewport.world_to_screen(
+        rect,
+        osl_kicad::KicadPoint { x: at.x, y: at.y },
+    );
+
+    // Near-zero rotation: direct native rendering
+    if rotation.abs() < 0.1 || (rotation - 360.0).abs() < 0.1 {
+        painter.text(
+            screen_pos,
+            Align2::LEFT_TOP,
+            text,
+            FontId::proportional(font_size),
+            color,
+        );
+        return;
+    }
+
+    // Cardinal rotation 180°: flip alignment
+    if (rotation - 180.0).abs() < 0.1 {
+        painter.text(
+            screen_pos,
+            Align2::RIGHT_BOTTOM,
+            text,
+            FontId::proportional(font_size),
+            color,
+        );
+        return;
+    }
+
+    // Character-by-character rotated rendering for 90°, 270° and arbitrary angles
+    let char_spacing = font_size * 0.65;
+    let radians = -rotation.to_radians();
+    let cos = radians.cos() as f32;
+    let sin = radians.sin() as f32;
+
+    for (i, ch) in text.chars().enumerate() {
+        let local_x = i as f32 * char_spacing;
+        let rotated_x = local_x * cos;
+        let rotated_y = local_x * sin;
+        let char_pos = screen_pos + Vec2::new(rotated_x, rotated_y);
+        painter.text(
+            char_pos,
+            Align2::LEFT_TOP,
+            ch.to_string(),
+            FontId::proportional(font_size),
+            color,
+        );
     }
 }
 

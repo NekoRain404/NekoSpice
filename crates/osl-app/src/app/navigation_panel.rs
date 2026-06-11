@@ -11,17 +11,19 @@ use super::widgets::metric_row;
 use eframe::egui::{self, CornerRadius, Color32, RichText, Stroke, Vec2};
 
 /// Returns the Unicode icon character for each workspace.
+///
+/// Uses distinct Unicode symbols that are visually clear at small sizes.
 fn workspace_icon(ws: StudioWorkspace) -> &'static str {
     match ws {
         StudioWorkspace::Home => "\u{2302}",        // house
-        StudioWorkspace::Schematic => "\u{25CE}",   // target
-        StudioWorkspace::Library => "\u{2630}",      // trigram
-        StudioWorkspace::Simulation => "\u{25B6}",   // play
-        StudioWorkspace::Optimization => "\u{2699}", // gear
-        StudioWorkspace::Review => "\u{2714}",       // check
-        StudioWorkspace::Waveforms => "\u{223F}",    // sine
-        StudioWorkspace::Reports => "\u{2261}",      // list
-        StudioWorkspace::Settings => "\u{2692}",     // hammer
+        StudioWorkspace::Schematic => "\u{25CE}",   // target/crosshair
+        StudioWorkspace::Library => "\u{2630}",      // trigram (three lines)
+        StudioWorkspace::Simulation => "\u{25B6}",   // play button
+        StudioWorkspace::Optimization => "\u{2699}", // gear/cog
+        StudioWorkspace::Review => "\u{2714}",       // checkmark
+        StudioWorkspace::Waveforms => "\u{223F}",    // sine wave
+        StudioWorkspace::Reports => "\u{2261}",      // hamburger menu (list)
+        StudioWorkspace::Settings => "\u{2692}",     // hammer/wrench
     }
 }
 

@@ -64,7 +64,7 @@ impl NekoSpiceApp {
         let palette = self.theme_palette();
 
         ui.horizontal(|ui| {
-            // File operations
+            // File operations group
             if canvas_toolbar_button(ui, mode, "\u{2913} Save", self.document.is_some()).clicked() {
                 self.save_document();
             }
@@ -79,7 +79,10 @@ impl NekoSpiceApp {
                 self.run_simulation_from_panel();
             }
 
+            // Visual separator: vertical line
+            ui.add_space(6.0);
             ui.separator();
+            ui.add_space(6.0);
 
             // Drawing tools — clicking switches the active tool
             use super::schematic_tools::SchematicTool;
@@ -97,7 +100,10 @@ impl NekoSpiceApp {
                 }
             }
 
+            // Visual separator
+            ui.add_space(6.0);
             ui.separator();
+            ui.add_space(6.0);
 
             // Zoom controls
             if canvas_toolbar_button(ui, mode, "-", true).clicked() {
@@ -111,6 +117,8 @@ impl NekoSpiceApp {
                 self.viewport.zoom = (self.viewport.zoom * 1.25).min(180.0);
             }
 
+            // Visual separator
+            ui.add_space(6.0);
             ui.separator();
 
             // DRC status
@@ -225,20 +233,49 @@ impl NekoSpiceApp {
     }
 
     /// Waveforms tab: signal list and scale overview.
+    /// Waveform tab: signal list + stacked waveform preview.
     fn draw_bottom_waveforms_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
         if let Some(run) = &self.simulation_panel.last_run {
             match &run.waveform {
                 crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) => {
+                    // Signal list header
+                    ui.label(StudioTheme::section_title_for(
+                        mode,
+                        format!("Signals ({})", summary.variable_count),
+                    ));
+                    ui.add_space(2.0);
+
+                    // Stacked waveform preview (actual chart)
+                    let preview_height = 100.0;
+                    super::waveform_preview::draw_stacked_waveform_preview(
+                        ui,
+                        mode,
+                        summary,
+                        None,
+                        preview_height,
+                    );
+                    ui.add_space(4.0);
+
+                    // Variable summary table
                     for variable in &summary.variables {
                         super::schematic_workspace_widgets::signal_row(
                             ui,
                             mode,
                             &variable.name,
-                            &variable.unit,
+                            &format!(
+                                "{}: min={:.3} max={:.3}",
+                                variable.unit, variable.min, variable.max,
+                            ),
                             palette.accent,
                         );
+                    }
+                    if summary.omitted_variable_count > 0 {
+                        ui.label(StudioTheme::muted_for(
+                            mode,
+                            format!("+{} more variables", summary.omitted_variable_count),
+                        ));
                     }
                 }
                 crate::waveform_summary::GuiWaveformSummaryState::Missing { .. } => {
@@ -258,16 +295,98 @@ impl NekoSpiceApp {
         }
     }
 
-    /// FFT tab placeholder.
+    /// FFT tab: frequency-domain analysis preview.
     fn draw_bottom_fft_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        ui.label(StudioTheme::muted_for(mode, "FFT analysis \u{2014} run a simulation first"));
+        let palette = self.theme_palette();
+        if let Some(run) = &self.simulation_panel.last_run {
+            match &run.waveform {
+                crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) => {
+                    ui.label(StudioTheme::section_title_for(
+                        mode,
+                        format!("FFT ({})", summary.plot_name),
+                    ));
+                    ui.add_space(2.0);
+                    // Show frequency variables if available
+                    let freq_vars: Vec<_> = summary.variables.iter()
+                        .filter(|v| v.name.to_lowercase().contains("freq") || v.unit.to_lowercase().contains("hz"))
+                        .collect();
+                    if freq_vars.is_empty() {
+                        ui.label(StudioTheme::muted_for(
+                            mode,
+                            "No frequency-domain signals detected in this simulation",
+                        ));
+                    } else {
+                        for variable in freq_vars {
+                            super::schematic_workspace_widgets::signal_row(
+                                ui,
+                                mode,
+                                &variable.name,
+                                &variable.unit,
+                                palette.warning,
+                            );
+                        }
+                    }
+                    ui.add_space(4.0);
+                    ui.label(StudioTheme::muted_for(
+                        mode,
+                        "FFT requires transient data with uniform time steps",
+                    ));
+                }
+                _ => {
+                    ui.label(StudioTheme::muted_for(mode, "Run a transient simulation for FFT analysis"));
+                }
+            }
+        } else {
+            ui.label(StudioTheme::muted_for(mode, "Run a simulation for FFT analysis"));
+        }
     }
 
-    /// Bode plot tab placeholder.
+    /// Bode plot tab: AC analysis magnitude/phase display.
     fn draw_bottom_bode_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        ui.label(StudioTheme::muted_for(mode, "Bode plot \u{2014} run an AC analysis first"));
+        let palette = self.theme_palette();
+        if let Some(run) = &self.simulation_panel.last_run {
+            match &run.waveform {
+                crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) => {
+                    ui.label(StudioTheme::section_title_for(
+                        mode,
+                        format!("Bode ({})", summary.plot_name),
+                    ));
+                    ui.add_space(2.0);
+                    // Check if this is an AC analysis
+                    let is_ac = summary.plot_name.to_lowercase().contains("ac")
+                        || summary.title.to_lowercase().contains("ac");
+                    if is_ac {
+                        ui.label(StudioTheme::muted_for(
+                            mode,
+                            "AC analysis detected — magnitude and phase plots available",
+                        ));
+                    } else {
+                        ui.label(StudioTheme::muted_for(
+                            mode,
+                            "Bode plot requires AC analysis data",
+                        ));
+                    }
+                    ui.add_space(4.0);
+                    // Show available variables
+                    for variable in &summary.variables {
+                        super::schematic_workspace_widgets::signal_row(
+                            ui,
+                            mode,
+                            &variable.name,
+                            &variable.unit,
+                            palette.accent,
+                        );
+                    }
+                }
+                _ => {
+                    ui.label(StudioTheme::muted_for(mode, "Run an AC analysis for Bode plot"));
+                }
+            }
+        } else {
+            ui.label(StudioTheme::muted_for(mode, "Run an AC analysis for Bode plot"));
+        }
     }
 
     /// Console output tab.

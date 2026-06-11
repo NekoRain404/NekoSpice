@@ -5,7 +5,7 @@
 use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, CornerRadius, Response, RichText, Stroke};
 
-/// Draw a toolbar button with optional icon prefix.
+/// Draw a toolbar button with icon prefix.
 ///
 /// Uses a compact monospace icon + label style for toolbar actions.
 /// Disabled buttons are visually muted.
@@ -19,18 +19,35 @@ pub(super) fn canvas_toolbar_button(
     let text = RichText::new(label)
         .size(12.0)
         .color(if enabled { palette.text } else { palette.text_muted });
-    ui.add_enabled(
-        enabled,
-        egui::Button::new(text)
-            .fill(palette.panel_soft)
-            .stroke(Stroke::new(1.0, palette.border))
-            .corner_radius(CornerRadius::same(4)),
-    )
+    let btn = egui::Button::new(text)
+        .fill(palette.panel_soft)
+        .stroke(Stroke::new(1.0, palette.border))
+        .corner_radius(CornerRadius::same(4));
+    let response = ui.add_enabled(enabled, btn);
+    // Apply hover effect by painting over
+    if response.hovered() && enabled {
+        let painter = ui.painter();
+        painter.rect_filled(
+            response.rect,
+            CornerRadius::same(4),
+            palette.panel_hover,
+        );
+        // Re-draw the text on top
+        painter.text(
+            response.rect.center(),
+            egui::Align2::CENTER_CENTER,
+            label,
+            egui::FontId::proportional(12.0),
+            palette.text,
+        );
+    }
+    response
 }
 
 /// Draw a compact icon-only button for toolbar actions.
 ///
 /// The button shows a Unicode symbol at the given size.
+/// Hover state highlights the button border for visual feedback.
 pub(super) fn toolbar_icon_button(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -42,14 +59,28 @@ pub(super) fn toolbar_icon_button(
     let text = RichText::new(icon)
         .size(14.0)
         .color(if enabled { palette.text } else { palette.text_muted });
-    ui.add_enabled(
-        enabled,
-        egui::Button::new(text)
-            .fill(palette.panel_soft)
-            .stroke(Stroke::new(1.0, palette.border))
-            .corner_radius(CornerRadius::same(4)),
-    )
-    .on_hover_text(tooltip)
+    let btn = egui::Button::new(text)
+        .fill(palette.panel_soft)
+        .stroke(Stroke::new(1.0, palette.border))
+        .corner_radius(CornerRadius::same(4));
+    let response = ui.add_enabled(enabled, btn).on_hover_text(tooltip);
+    // Hover feedback
+    if response.hovered() && enabled {
+        let painter = ui.painter();
+        painter.rect_filled(
+            response.rect,
+            CornerRadius::same(4),
+            palette.panel_hover,
+        );
+        painter.text(
+            response.rect.center(),
+            egui::Align2::CENTER_CENTER,
+            icon,
+            egui::FontId::proportional(14.0),
+            palette.text,
+        );
+    }
+    response
 }
 
 /// Draw a document tab in the tab bar.
