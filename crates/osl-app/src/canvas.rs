@@ -277,12 +277,23 @@ pub(crate) fn draw_scene(
             continue;
         }
         if let Some(at) = label.at {
+            let label_color = match label.kind {
+                osl_kicad::KicadLabelKind::Local => colors::LABEL_LOCAL,
+                osl_kicad::KicadLabelKind::Global => colors::LABEL_GLOBAL,
+                osl_kicad::KicadLabelKind::Hierarchical => colors::LABEL_HIERARCHICAL,
+            };
+            let font_size = label.effects
+                .as_ref()
+                .and_then(|e| e.font_size)
+                .map(|s| s.width as f32)
+                .unwrap_or(12.0)
+                .max(6.0);
             painter.text(
                 viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
                 Align2::LEFT_TOP,
                 &label.text,
-                FontId::proportional(12.0),
-                colors::LABEL_LOCAL,
+                FontId::proportional(font_size),
+                label_color,
             );
         }
     }
@@ -298,11 +309,17 @@ pub(crate) fn draw_scene(
             } else {
                 colors::TEXT
             };
+            let font_size = text.effects
+                .as_ref()
+                .and_then(|e| e.font_size)
+                .map(|s| s.width as f32)
+                .unwrap_or(12.0)
+                .max(6.0);
             painter.text(
                 viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
                 Align2::LEFT_TOP,
                 &text.text,
-                FontId::proportional(12.0),
+                FontId::proportional(font_size),
                 color,
             );
         }
