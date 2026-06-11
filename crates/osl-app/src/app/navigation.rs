@@ -1,6 +1,6 @@
 use super::localization::StudioLocale;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub(super) enum StudioWorkspace {
     #[default]
     Home,
@@ -58,6 +58,7 @@ impl StudioWorkspace {
         }
     }
 
+    #[allow(dead_code)]
     pub(super) fn icon(self) -> &'static str {
         match self {
             Self::Home => "HME",
@@ -72,6 +73,7 @@ impl StudioWorkspace {
         }
     }
 
+    #[allow(dead_code)]
     pub(super) fn caption(self) -> &'static str {
         match self {
             Self::Home => "Project dashboard and engineering shortcuts",
@@ -86,6 +88,7 @@ impl StudioWorkspace {
         }
     }
 
+    #[allow(dead_code)]
     pub(super) fn localized_caption(self, locale: StudioLocale) -> &'static str {
         match locale {
             StudioLocale::English => self.caption(),

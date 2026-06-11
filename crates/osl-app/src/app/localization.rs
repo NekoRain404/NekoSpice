@@ -38,6 +38,7 @@ impl StudioLocale {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(super) enum UiText {
     ActiveProject,
     AiAssistant,

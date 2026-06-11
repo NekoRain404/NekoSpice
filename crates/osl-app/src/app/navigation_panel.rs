@@ -1,9 +1,96 @@
+/// Navigation panel: workspace switcher with icons and system info.
+///
+/// Uses Unicode symbols as icons for each workspace. The panel includes
+/// a branding header, workspace buttons with active/hover states,
+/// and a compact system info footer.
+
 use super::NekoSpiceApp;
 use super::localization::UiText;
 use super::navigation::StudioWorkspace;
-use super::theme::StudioTheme;
+use super::theme::{StudioTheme, StudioThemeMode};
 use super::widgets::metric_row;
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, CornerRadius, Color32, RichText, Stroke, Vec2};
+
+/// Returns the Unicode icon character for each workspace.
+fn workspace_icon(ws: StudioWorkspace) -> &'static str {
+    match ws {
+        StudioWorkspace::Home => "\u{2302}",        // house
+        StudioWorkspace::Schematic => "\u{25CE}",   // target
+        StudioWorkspace::Library => "\u{2630}",      // trigram
+        StudioWorkspace::Simulation => "\u{25B6}",   // play
+        StudioWorkspace::Optimization => "\u{2699}", // gear
+        StudioWorkspace::Review => "\u{2714}",       // check
+        StudioWorkspace::Waveforms => "\u{223F}",    // sine
+        StudioWorkspace::Reports => "\u{2261}",      // list
+        StudioWorkspace::Settings => "\u{2692}",     // hammer
+    }
+}
+
+/// Draw a single workspace button with icon and label.
+///
+/// Active state uses accent fill with a left bar indicator.
+/// Hovered state lightens the background.
+fn draw_workspace_button(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    ws: StudioWorkspace,
+    selected: bool,
+    label: &str,
+) -> bool {
+    let palette = StudioTheme::palette(mode);
+    let icon = workspace_icon(ws);
+    let width = ui.available_width();
+    let height = 36.0;
+
+    let fg = if selected {
+        palette.accent
+    } else {
+        palette.text
+    };
+
+    let response = ui.allocate_ui_with_layout(
+        Vec2::new(width, height),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(icon)
+                    .color(if selected { palette.accent } else { palette.text_muted })
+                    .strong()
+                    .size(15.0),
+            );
+            ui.add_space(6.0);
+            ui.label(RichText::new(label).color(fg).size(13.0));
+        },
+    );
+
+    let rect = response.response.rect;
+    let click = ui.interact(rect, egui::Id::new(("nav_ws", ws)), egui::Sense::click());
+
+    let painter = ui.painter();
+    let corner = CornerRadius::same(6);
+
+    if click.hovered() && !selected {
+        painter.rect_filled(rect, corner, palette.panel_hover);
+    }
+
+    if selected {
+        let bar = eframe::egui::Rect::from_min_size(
+            rect.left_top(),
+            Vec2::new(3.0, rect.height()),
+        );
+        painter.rect_filled(bar, CornerRadius::same(0), palette.accent);
+    }
+
+    painter.rect_stroke(
+        rect,
+        corner,
+        Stroke::new(1.0, if selected { palette.accent } else { Color32::TRANSPARENT }),
+        eframe::egui::StrokeKind::Inside,
+    );
+
+    click.clicked()
+}
 
 impl NekoSpiceApp {
     pub(super) fn draw_workspace_navigation(&mut self, ui: &mut egui::Ui) {
@@ -11,52 +98,53 @@ impl NekoSpiceApp {
         let palette = self.theme_palette();
         let locale = self.locale();
 
-        ui.heading(self.text(UiText::StudioTitle));
-        ui.label(StudioTheme::muted_for(
-            mode,
-            self.text(UiText::StudioSubtitle),
-        ));
+        // Branding header with logo icon
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("\u{25CE}")
+                    .color(palette.accent)
+                    .size(22.0)
+                    .strong(),
+            );
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(self.text(UiText::StudioTitle))
+                        .color(palette.text)
+                        .size(16.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(self.text(UiText::StudioSubtitle))
+                        .color(palette.text_muted)
+                        .size(10.0),
+                );
+            });
+        });
+
         ui.add_space(12.0);
 
         for workspace in StudioWorkspace::ALL {
             let selected = self.active_workspace == workspace;
-            let label = format!(
-                "{}  {}",
-                workspace.icon(),
-                workspace.localized_label(locale)
-            );
-            let response = ui
-                .add_sized(
-                    [ui.available_width(), 34.0],
-                    egui::Button::new(RichText::new(label).strong())
-                        .fill(if selected {
-                            palette.accent_soft
-                        } else {
-                            palette.panel_soft
-                        })
-                        .stroke(egui::Stroke::new(
-                            1.0,
-                            if selected {
-                                palette.accent
-                            } else {
-                                palette.border
-                            },
-                        ))
-                        .corner_radius(6),
-                )
-                .on_hover_text(workspace.localized_caption(locale));
-            if response.clicked() {
+            let label = workspace.localized_label(locale);
+            if draw_workspace_button(ui, mode, workspace, selected, label) {
                 self.active_workspace = workspace;
             }
-            ui.add_space(4.0);
+            ui.add_space(2.0);
         }
 
-        ui.add_space(10.0);
+        // Push system info to the bottom
+        let remaining = ui.available_height();
+        if remaining > 130.0 {
+            ui.add_space(remaining - 130.0);
+        }
+
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(
                 mode,
                 self.text(UiText::System),
             ));
+            ui.add_space(4.0);
             metric_row(ui, mode, self.text(UiText::Renderer), "wgpu");
             metric_row(ui, mode, self.text(UiText::Solver), "ngspice");
             let dirty = self.text(UiText::Dirty);

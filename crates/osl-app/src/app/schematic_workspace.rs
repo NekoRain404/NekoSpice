@@ -1,15 +1,16 @@
-// Schematic workspace: canvas, toolbar, document tabs, and bottom dock.
-// The bottom dock switches between Waveforms, FFT, Bode, Console, Netlist,
-// ERC, and Inspector views based on the active tab.
+/// Schematic workspace: canvas, toolbar, document tabs, and bottom dock.
+///
+/// The bottom dock switches between Waveforms, FFT, Bode, Console, Netlist,
+/// ERC, and Inspector views based on the active tab.
 
 use super::NekoSpiceApp;
 use super::SchematicBottomTab;
 use super::localization::UiText;
 use super::schematic_workspace_widgets::{
-    bottom_console_line, canvas_toolbar_button, document_tab, signal_row,
+    bottom_console_line, canvas_toolbar_button, document_tab, toolbar_icon_button,
 };
 use super::theme::StudioTheme;
-use eframe::egui::{self, Vec2};
+use eframe::egui::{self, CornerRadius, Stroke, Vec2};
 
 impl NekoSpiceApp {
     /// Main entry point for the schematic center workspace.
@@ -31,35 +32,61 @@ impl NekoSpiceApp {
         });
     }
 
-    /// Toolbar row: save, fit, run, drawing tools, zoom, DRC status.
+    /// Toolbar row: file ops, drawing tools, zoom, DRC status.
     fn draw_schematic_workspace_toolbar(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
-        ui.horizontal_wrapped(|ui| {
-            canvas_toolbar_button(ui, mode, self.text(UiText::Save), self.document.is_some());
-            if canvas_toolbar_button(ui, mode, self.text(UiText::Fit), true).clicked() {
+
+        ui.horizontal(|ui| {
+            // File operations
+            canvas_toolbar_button(ui, mode, "Save", self.document.is_some());
+            ui.add_space(2.0);
+            if canvas_toolbar_button(ui, mode, "Fit", true).clicked() {
                 self.viewport
                     .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
             }
-            if canvas_toolbar_button(ui, mode, self.text(UiText::Run), self.document.is_some())
+            if canvas_toolbar_button(ui, mode, "Run", self.document.is_some())
                 .clicked()
             {
                 self.run_simulation_from_panel();
             }
+
             ui.separator();
-            canvas_toolbar_button(ui, mode, self.text(UiText::Wires), true);
-            canvas_toolbar_button(ui, mode, self.text(UiText::Labels), true);
-            canvas_toolbar_button(ui, mode, self.text(UiText::Buses), true);
-            canvas_toolbar_button(ui, mode, self.text(UiText::Sheets), true);
+
+            // Drawing tools
+            toolbar_icon_button(ui, mode, "\u{250C}", "Wire Tool", true);
+            toolbar_icon_button(ui, mode, "\u{2190}", "Net Label", true);
+            toolbar_icon_button(ui, mode, "\u{2550}", "Bus Tool", true);
+            toolbar_icon_button(ui, mode, "\u{25A3}", "Sheet Symbol", true);
+
             ui.separator();
-            ui.label(StudioTheme::muted_for(mode, self.text(UiText::Zoom)));
+
+            // Zoom display
+            ui.label(StudioTheme::muted_for(mode, "Zoom"));
             ui.label(StudioTheme::accent_for(
                 mode,
                 format!("{:.0}%", self.viewport.zoom * 10.0),
             ));
+
             ui.separator();
-            ui.label(StudioTheme::muted_for(mode, self.text(UiText::Drc)));
-            ui.colored_label(palette.success, self.text(UiText::Ready));
+
+            // DRC status
+            ui.label(StudioTheme::muted_for(mode, "DRC"));
+            let report = self
+                .document
+                .as_ref()
+                .map(|doc| doc.check_report());
+            let (dot_color, drc_text) = match report {
+                Some(r) if r.error_count() > 0 => (palette.danger, format!("{} errors", r.error_count())),
+                Some(r) if r.warning_count() > 0 => (palette.warning, format!("{} warnings", r.warning_count())),
+                Some(_) => (palette.success, "Clean".to_string()),
+                None => (palette.text_muted, "No doc".to_string()),
+            };
+            ui.label(
+                egui::RichText::new(format!("\u{25CF} {drc_text}"))
+                    .color(dot_color)
+                    .size(12.0),
+            );
         });
     }
 
@@ -67,10 +94,6 @@ impl NekoSpiceApp {
     fn draw_schematic_document_tabs(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.horizontal_wrapped(|ui| {
-            ui.label(StudioTheme::muted_for(
-                mode,
-                self.text(UiText::SchematicTabs),
-            ));
             let active_name = self
                 .document
                 .as_ref()
@@ -88,17 +111,16 @@ impl NekoSpiceApp {
 
     /// Bottom dock panel with tab switching between views.
     fn draw_schematic_bottom_dock(&mut self, ui: &mut egui::Ui) {
-        let mode = self.theme_mode();
         let palette = self.theme_palette();
         let current_tab = self.schematic_bottom_tab;
 
         egui::Frame::new()
             .fill(palette.panel_soft)
-            .stroke(egui::Stroke::new(1.0, palette.border))
-            .corner_radius(6)
+            .stroke(Stroke::new(1.0, palette.border))
+            .corner_radius(CornerRadius::same(6))
             .inner_margin(egui::Margin::same(8))
             .show(ui, |ui| {
-                // Tab bar: clicking a tab switches the active view
+                // Tab bar
                 ui.horizontal_wrapped(|ui| {
                     let tab_defs: &[(SchematicBottomTab, &str)] = &[
                         (SchematicBottomTab::Waveforms, self.text(UiText::Waveforms)),
@@ -111,128 +133,101 @@ impl NekoSpiceApp {
                     ];
                     for &(tab, label) in tab_defs {
                         let is_active = current_tab == tab;
-                        let btn = egui::Button::new(if is_active {
-                            StudioTheme::accent_for(mode, label)
-                        } else {
-                            StudioTheme::muted_for(mode, label)
-                        })
-                        .fill(if is_active {
+                        let fill = if is_active {
                             palette.accent_soft
                         } else {
-                            palette.panel
-                        })
-                        .stroke(egui::Stroke::new(1.0, palette.border))
-                        .corner_radius(4);
-                        if ui.add(btn).clicked() {
+                            egui::Color32::TRANSPARENT
+                        };
+                        let text_color = if is_active {
+                            palette.accent
+                        } else {
+                            palette.text_muted
+                        };
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new(label)
+                                        .size(12.0)
+                                        .color(text_color),
+                                )
+                                .fill(fill)
+                                .stroke(if is_active {
+                                    Stroke::new(1.0, palette.accent)
+                                } else {
+                                    Stroke::NONE
+                                })
+                                .corner_radius(CornerRadius::same(4)),
+                            )
+                            .clicked()
+                        {
                             self.schematic_bottom_tab = tab;
                         }
                     }
                 });
-                ui.separator();
 
-                // Content area based on active tab
-                match self.schematic_bottom_tab {
-                    SchematicBottomTab::Waveforms => {
-                        self.draw_bottom_waveforms_tab(ui);
-                    }
-                    SchematicBottomTab::Fft => {
-                        self.draw_bottom_fft_tab(ui);
-                    }
-                    SchematicBottomTab::Bode => {
-                        self.draw_bottom_bode_tab(ui);
-                    }
-                    SchematicBottomTab::Console => {
-                        self.draw_bottom_console_tab(ui);
-                    }
-                    SchematicBottomTab::Netlist => {
-                        self.draw_bottom_netlist_tab(ui);
-                    }
-                    SchematicBottomTab::Erc => {
-                        self.draw_bottom_erc_tab(ui);
-                    }
-                    SchematicBottomTab::Inspector => {
-                        self.draw_bottom_inspector_tab(ui);
-                    }
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(4.0);
+
+                match current_tab {
+                    SchematicBottomTab::Waveforms => self.draw_bottom_waveforms_tab(ui),
+                    SchematicBottomTab::Fft => self.draw_bottom_fft_tab(ui),
+                    SchematicBottomTab::Bode => self.draw_bottom_bode_tab(ui),
+                    SchematicBottomTab::Console => self.draw_bottom_console_tab(ui),
+                    SchematicBottomTab::Netlist => self.draw_bottom_netlist_tab(ui),
+                    SchematicBottomTab::Erc => self.draw_bottom_erc_tab(ui),
+                    SchematicBottomTab::Inspector => self.draw_bottom_inspector_tab(ui),
                 }
             });
     }
 
-    // -- Bottom dock tab content views --
-
-    /// Waveforms tab: signal list from loaded schematic.
+    /// Waveforms tab: signal list and scale overview.
     fn draw_bottom_waveforms_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
-        ui.horizontal_top(|ui| {
-            ui.vertical(|ui| {
-                ui.set_width((ui.available_width() * 0.30).max(180.0));
-                if let Some(document) = &self.document {
-                    let scene = document.scene();
-                    let mut signal_count = 0;
-                    for symbol in &scene.symbols {
-                        if !symbol.reference.is_empty() {
-                            signal_count += 1;
-                            let label = format!("V({})", symbol.reference);
-                            let color = match signal_count % 4 {
-                                0 => palette.accent,
-                                1 => palette.success,
-                                2 => palette.warning,
-                                _ => palette.danger,
-                            };
-                            signal_row(ui, mode, &label, "auto", color);
-                        }
+        if let Some(run) = &self.simulation_panel.last_run {
+            match &run.waveform {
+                crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) => {
+                    for variable in &summary.variables {
+                        super::schematic_workspace_widgets::signal_row(
+                            ui,
+                            mode,
+                            &variable.name,
+                            &variable.unit,
+                            palette.accent,
+                        );
                     }
-                    if signal_count == 0 {
-                        ui.label(StudioTheme::muted_for(mode, "No signals detected"));
-                    }
-                } else {
-                    signal_row(ui, mode, "V(IN)", "1.000 V/div", palette.accent);
-                    signal_row(ui, mode, "V(OUT)", "1.000 V/div", palette.success);
                 }
-            });
-            ui.separator();
-            ui.vertical(|ui| {
-                if let Some(msg) = &self.status_message {
-                    bottom_console_line(ui, mode, msg, palette.success);
+                crate::waveform_summary::GuiWaveformSummaryState::Missing { .. } => {
+                    ui.label(StudioTheme::muted_for(mode, "No waveform data loaded"));
                 }
-                if let Some(error) = &self.simulation_panel.last_error {
-                    bottom_console_line(ui, mode, error, palette.danger);
-                }
-                if let Some(run) = &self.simulation_panel.last_run {
+                crate::waveform_summary::GuiWaveformSummaryState::Error { message, .. } => {
                     bottom_console_line(
                         ui,
                         mode,
-                        &format!(
-                            "Last run: {} — {} ms",
-                            run.metadata.status.as_str(),
-                            run.metadata.duration_ms
-                        ),
-                        palette.text_muted,
+                        &format!("Waveform error: {message}"),
+                        palette.danger,
                     );
                 }
-            });
-        });
+            }
+        } else {
+            ui.label(StudioTheme::muted_for(mode, "Run a simulation to view waveforms"));
+        }
     }
 
-    /// FFT tab: placeholder for future FFT visualization.
+    /// FFT tab placeholder.
     fn draw_bottom_fft_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        ui.label(StudioTheme::muted_for(
-            mode,
-            "FFT analysis — run a transient simulation first",
-        ));
+        ui.label(StudioTheme::muted_for(mode, "FFT analysis \u{2014} run a simulation first"));
     }
 
-    /// Bode tab: placeholder for future Bode plot.
+    /// Bode plot tab placeholder.
     fn draw_bottom_bode_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        ui.label(StudioTheme::muted_for(
-            mode,
-            "Bode plot — run an AC simulation first",
-        ));
+        ui.label(StudioTheme::muted_for(mode, "Bode plot \u{2014} run an AC analysis first"));
     }
 
-    /// Console tab: simulation status, errors, and log output.
+    /// Console output tab.
     fn draw_bottom_console_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
@@ -352,7 +347,7 @@ impl NekoSpiceApp {
                 ui,
                 mode,
                 &format!(
-                    "Bounds: ({:.1}, {:.1}) — ({:.1}, {:.1})",
+                    "Bounds: ({:.1}, {:.1}) \u{2014} ({:.1}, {:.1})",
                     hit.bounds.min.x, hit.bounds.min.y, hit.bounds.max.x, hit.bounds.max.y
                 ),
                 palette.text_muted,
