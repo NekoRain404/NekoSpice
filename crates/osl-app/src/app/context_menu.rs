@@ -95,6 +95,9 @@ impl NekoSpiceApp {
 }
 
 /// Helper to draw a context menu item with label and shortcut.
+///
+/// Renders a horizontal row with label on the left and shortcut hint on the right.
+/// Includes hover highlighting for visual feedback.
 fn context_menu_item(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -106,17 +109,34 @@ fn context_menu_item(
 ) {
     let palette = StudioTheme::palette(mode);
     ui.add_enabled_ui(enabled, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(label).size(13.0).color(palette.text));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new(shortcut).size(11.0).color(palette.text_muted));
-            });
-        });
-        // Make the entire row clickable
-        let response = ui.interact(
-            ui.clip_rect(),
-            egui::Id::new(("ctx", label)),
+        let (rect, response) = ui.allocate_exact_size(
+            egui::Vec2::new(ui.available_width(), 24.0),
             egui::Sense::click(),
+        );
+        // Hover background
+        if response.hovered() {
+            let painter = ui.painter();
+            painter.rect_filled(
+                rect,
+                egui::CornerRadius::same(4),
+                palette.panel_hover,
+            );
+        }
+        // Label and shortcut text
+        let painter = ui.painter();
+        painter.text(
+            rect.left_center() + egui::Vec2::new(8.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::FontId::proportional(13.0),
+            palette.text,
+        );
+        painter.text(
+            rect.right_center() + egui::Vec2::new(-8.0, 0.0),
+            egui::Align2::RIGHT_CENTER,
+            shortcut,
+            egui::FontId::proportional(11.0),
+            palette.text_muted,
         );
         if response.clicked() {
             on_click(action);
