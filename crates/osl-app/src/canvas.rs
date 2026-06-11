@@ -70,14 +70,32 @@ pub(crate) fn draw_scene(
             );
         }
         if let Some(bounds) = symbol.bounds {
-            let label_pos = viewport.world_to_screen(rect, bounds.min);
+            // Reference label (e.g. R1, C2, U3) above the symbol
+            let ref_pos = viewport.world_to_screen(rect, bounds.min);
             painter.text(
-                label_pos,
+                ref_pos,
                 Align2::LEFT_BOTTOM,
                 &symbol.reference,
-                FontId::monospace(12.0),
+                FontId::proportional(12.0),
                 Color32::from_rgb(25, 25, 25),
             );
+            // Value label (e.g. 10k, 100nF) below the symbol
+            if !symbol.value.is_empty() && symbol.value != symbol.reference {
+                let val_pos = viewport.world_to_screen(
+                    rect,
+                    KicadPoint {
+                        x: bounds.min.x,
+                        y: bounds.max.y + 2.0,
+                    },
+                );
+                painter.text(
+                    val_pos,
+                    Align2::LEFT_TOP,
+                    &symbol.value,
+                    FontId::proportional(11.0),
+                    Color32::from_rgb(80, 80, 80),
+                );
+            }
         }
     }
     for wire in &scene.wires {
@@ -133,7 +151,7 @@ pub(crate) fn draw_scene(
                 viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
                 Align2::LEFT_TOP,
                 &label.text,
-                FontId::monospace(12.0),
+                FontId::proportional(12.0),
                 Color32::from_rgb(150, 65, 20),
             );
         }
@@ -147,7 +165,7 @@ pub(crate) fn draw_scene(
                 viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
                 Align2::LEFT_TOP,
                 &label.text,
-                FontId::monospace(12.0),
+                FontId::proportional(12.0),
                 Color32::from_rgb(0, 95, 180),
             );
         }
@@ -166,7 +184,7 @@ pub(crate) fn draw_scene(
                 viewport.world_to_screen(rect, KicadPoint { x: at.x, y: at.y }),
                 Align2::LEFT_TOP,
                 &text.text,
-                FontId::monospace(12.0),
+                FontId::proportional(12.0),
                 color,
             );
         }
