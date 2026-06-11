@@ -78,6 +78,9 @@ impl NekoSpiceApp {
         });
     }
 
+    /// Bottom dock panel: signal list, console output, and tab bar.
+    /// Dynamically shows signals from the loaded schematic's labels and
+    /// status messages from the most recent simulation run.
     fn draw_schematic_bottom_dock(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
@@ -87,6 +90,7 @@ impl NekoSpiceApp {
             .corner_radius(6)
             .inner_margin(egui::Margin::same(8))
             .show(ui, |ui| {
+                // Tab bar for bottom panels
                 ui.horizontal_wrapped(|ui| {
                     bottom_tab(ui, mode, self.text(UiText::Waveforms), true);
                     bottom_tab(ui, mode, "FFT", false);
@@ -97,34 +101,68 @@ impl NekoSpiceApp {
                     bottom_tab(ui, mode, self.text(UiText::Inspector), false);
                 });
                 ui.separator();
+
+                // Two-column layout: signal list (left) + console (right)
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
                         ui.set_width((ui.available_width() * 0.30).max(180.0));
-                        signal_row(ui, mode, "V(IN)", "1.000 V/div", palette.accent);
-                        signal_row(ui, mode, "V(OUT)", "1.000 V/div", palette.success);
-                        signal_row(ui, mode, "V(+15V)", "5.00 V/div", palette.warning);
-                        signal_row(ui, mode, "V(-15V)", "5.00 V/div", palette.danger);
+                        // Show dynamic signals from loaded schematic labels
+                        if let Some(document) = &self.document {
+                            let scene = document.scene();
+                            let mut signal_count = 0;
+                            for symbol in &scene.symbols {
+                                if !symbol.reference.is_empty() {
+                                    signal_count += 1;
+                                    let label = format!("V({})", symbol.reference);
+                                    let color = match signal_count % 4 {
+                                        0 => palette.accent,
+                                        1 => palette.success,
+                                        2 => palette.warning,
+                                        _ => palette.danger,
+                                    };
+                                    signal_row(ui, mode, &label, "auto", color);
+                                }
+                            }
+                            if signal_count == 0 {
+                                ui.label(StudioTheme::muted_for(mode, "No signals detected"));
+                            }
+                        } else {
+                            // Fallback: show placeholder signals
+                            signal_row(ui, mode, "V(IN)", "1.000 V/div", palette.accent);
+                            signal_row(ui, mode, "V(OUT)", "1.000 V/div", palette.success);
+                        }
                     });
                     ui.separator();
                     ui.vertical(|ui| {
-                        bottom_console_line(
-                            ui,
-                            mode,
-                            "[ngspice] transient analysis ready",
-                            palette.success,
-                        );
-                        bottom_console_line(
-                            ui,
-                            mode,
-                            "Samples: 5001 | Step: 2.00 us | Stop: 10.00 ms",
-                            palette.text_muted,
-                        );
-                        bottom_console_line(
-                            ui,
-                            mode,
-                            "Warning: C10 capacitance may affect stability",
-                            palette.warning,
-                        );
+                        // Show actual status messages and simulation results
+                        if let Some(msg) = &self.status_message {
+                            bottom_console_line(ui, mode, msg, palette.success);
+                        }
+                        if let Some(error) = &self.simulation_panel.last_error {
+                            bottom_console_line(ui, mode, error, palette.danger);
+                        }
+                        if let Some(run) = &self.simulation_panel.last_run {
+                            bottom_console_line(
+                                ui,
+                                mode,
+                                &format!(
+                                    "Last run: {} — {} ms",
+                                    run.metadata.status.as_str(),
+                                    run.metadata.duration_ms
+                                ),
+                                palette.text_muted,
+                            );
+                        }
+                        // Show netlist directive count from loaded schematic
+                        if let Some(document) = &self.document {
+                            let dir_count = document.simulation_directives().len();
+                            bottom_console_line(
+                                ui,
+                                mode,
+                                &format!("Directives: {dir_count}"),
+                                palette.text_muted,
+                            );
+                        }
                     });
                 });
             });

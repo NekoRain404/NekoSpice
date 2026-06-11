@@ -1,7 +1,9 @@
-//! Right column of the simulation profile editor:
-//! - Simulation Options (temperature, iterations, tolerances)
-//! - Run Status summary
-//! - Recent runs list
+//! Right column of the simulation profile editor — three sections:
+//!
+//! 1. **Simulation Options** — temperature, max iterations, min timestep,
+//!    SPICE integration method, and solver tolerances (RELTOL, ABSTOL, VNTOL).
+//! 2. **Run Status** — current run state, duration, exit code, and error messages.
+//! 3. **Recent Runs** — last simulation run summary with pass/fail indicator.
 
 use super::NekoSpiceApp;
 use super::localization::UiText;
@@ -12,7 +14,25 @@ use eframe::egui;
 use osl_kicad::KicadDiagnosticSeverity;
 use osl_core::RunStatus;
 
-/// Draw the full right-column options panel.
+/// SPICE integration method options displayed in the profile editor.
+/// These correspond to ngspice `.options method=...` settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpiceMethod {
+    Gear,
+    Trap,
+}
+
+impl SpiceMethod {
+    /// Display label for the method selector button.
+    fn label(self) -> &'static str {
+        match self {
+            Self::Gear => "Gear",
+            Self::Trap => "Trap",
+        }
+    }
+}
+
+/// Draw the complete right-column options panel.
 pub(super) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     let mode = app.theme_mode();
     draw_simulation_options(app, ui, mode);
@@ -22,14 +42,15 @@ pub(super) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     draw_recent_runs(app, ui, mode);
 }
 
-/// Simulation Options: temperature, max iterations, min timestep, tolerances.
+/// Simulation Options panel: temperature, max iterations, min timestep,
+/// SPICE method selector, and solver tolerances.
 fn draw_simulation_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui, mode: StudioThemeMode) {
+    let palette = StudioTheme::palette(mode);
     StudioTheme::panel_frame_for(mode).show(ui, |ui| {
         section_header(ui, mode, app.text(UiText::SimulationOptions));
         ui.add_space(4.0);
 
-        
-
+        // Primary simulation parameters grid
         egui::Grid::new("sim_options_grid")
             .num_columns(2)
             .spacing([8.0, 6.0])
@@ -56,8 +77,38 @@ fn draw_simulation_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui, mode: Stud
                 ui.end_row();
             });
 
+        // SPICE integration method selector
         ui.add_space(6.0);
-        ui.label(StudioTheme::section_title_for(mode, "Tolerances"));
+        ui.label(StudioTheme::section_title_for(mode, "Integration Method"));
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            for method in [SpiceMethod::Gear, SpiceMethod::Trap] {
+                let active = app.simulation_profile_editor.options.method == method.label();
+                let btn = if active {
+                    egui::Button::new(
+                        egui::RichText::new(method.label())
+                            .strong()
+                            .color(palette.text),
+                    )
+                    .fill(palette.accent_soft)
+                    .stroke(egui::Stroke::new(1.0, palette.accent))
+                } else {
+                    egui::Button::new(
+                        egui::RichText::new(method.label())
+                            .color(palette.text_muted),
+                    )
+                    .fill(palette.panel_soft)
+                    .stroke(egui::Stroke::new(1.0, palette.border))
+                };
+                if ui.add(btn).clicked() {
+                    app.simulation_profile_editor.options.method = method.label().to_string();
+                }
+            }
+        });
+
+        // Solver tolerances section
+        ui.add_space(6.0);
+        ui.label(StudioTheme::section_title_for(mode, "Solver Tolerances"));
         ui.add_space(4.0);
 
         egui::Grid::new("tolerances_grid")
@@ -95,8 +146,8 @@ fn draw_run_status_summary(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: StudioTh
         section_header(ui, mode, app.text(UiText::RunStatus));
         ui.add_space(4.0);
 
-        // Current status indicator
         if app.simulation_panel.active_task.is_some() {
+            // Simulation is currently running — show animated status
             ui.horizontal(|ui| {
                 ui.colored_label(palette.accent, "●");
                 ui.label(StudioTheme::muted_for(mode, "Status:"));
@@ -107,6 +158,7 @@ fn draw_run_status_summary(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: StudioTh
                 );
             });
         } else if let Some(run) = &app.simulation_panel.last_run {
+            // Show last run result with color-coded pass/fail
             let (color, label) = match run.metadata.status {
                 RunStatus::Passed => (palette.success, "Passed"),
                 RunStatus::Failed => (palette.danger, "Failed"),
@@ -125,6 +177,7 @@ fn draw_run_status_summary(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: StudioTh
                 ui.label(format!("{:?}", run.metadata.exit_code));
             });
         } else if let Some(error) = &app.simulation_panel.last_error {
+            // Show error state
             ui.horizontal(|ui| {
                 ui.colored_label(
                     severity_color(mode, KicadDiagnosticSeverity::Error),
@@ -144,7 +197,7 @@ fn draw_run_status_summary(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: StudioTh
     });
 }
 
-/// Recent runs list: shows the last few simulation runs.
+/// Recent runs list: shows the last simulation run with pass/fail indicator.
 fn draw_recent_runs(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: StudioThemeMode) {
     let palette = StudioTheme::palette(mode);
     StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -156,6 +209,7 @@ fn draw_recent_runs(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: StudioThemeMode
                 RunStatus::Passed => (palette.success, "Passed"),
                 RunStatus::Failed => (palette.danger, "Failed"),
             };
+            // Rendered as a card with status indicator
             egui::Frame::new()
                 .fill(palette.panel_soft)
                 .corner_radius(4)
