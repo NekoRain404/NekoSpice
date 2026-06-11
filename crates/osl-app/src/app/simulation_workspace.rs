@@ -1,6 +1,19 @@
+//! Simulation workspace — center panel for the simulation workspace.
+//!
+//! The simulation workspace provides two sub-views accessible via tabs:
+//!
+//! 1. **Overview** — High-level solver metrics (engine, status, netlist directives,
+//!    last run duration), analysis mode setup (.tran/.ac/.dc/.op), netlist preview,
+//!    and run output with diagnostics.
+//!
+//! 2. **Profile Editor** — Three-column layout for detailed parameter editing:
+//!    - Left: Analysis setup, component parameters, model parameters
+//!    - Center: Parameter definitions editor
+//!    - Right: Simulation options, tolerances, run status, recent runs
+
 use super::NekoSpiceApp;
-use super::localization::UiText;
 use super::localization::StudioLocale;
+use super::localization::UiText;
 use super::simulation_profile_editor::SimulationSubView;
 use super::simulation_workspace_widgets::solver_metric_card;
 use super::theme::StudioTheme;
@@ -8,6 +21,8 @@ use eframe::egui;
 use osl_core::RunStatus;
 
 impl NekoSpiceApp {
+    /// Main entry point for drawing the simulation center workspace.
+    /// Polls for running tasks and dispatches to the active sub-view.
     pub(super) fn draw_simulation_center_workspace(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
         let mode = self.theme_mode();
@@ -19,7 +34,7 @@ impl NekoSpiceApp {
             self.draw_simulation_sub_view_tabs(ui);
             ui.add_space(8.0);
 
-            // Dispatch to active sub-view
+            // Dispatch to the active sub-view
             let sub_view = self.simulation_profile_editor.sub_view;
             match sub_view {
                 SimulationSubView::Overview => self.draw_simulation_overview(ui),
@@ -29,6 +44,7 @@ impl NekoSpiceApp {
     }
 
     /// Tab bar for switching between simulation workspace sub-views.
+    /// Uses locale-aware labels and active state highlighting.
     fn draw_simulation_sub_view_tabs(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = StudioTheme::palette(mode);
@@ -60,6 +76,7 @@ impl NekoSpiceApp {
     }
 
     /// Overview sub-view: solver metrics + analysis setup + netlist + run output.
+    /// Two-column layout with analysis setup on the left and run output on the right.
     fn draw_simulation_overview(&mut self, ui: &mut egui::Ui) {
         self.draw_simulation_solver_metrics(ui);
         ui.add_space(8.0);
@@ -79,6 +96,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// Workspace header with title, caption, and run button.
     fn draw_simulation_workspace_header(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.horizontal_top(|ui| {
@@ -104,6 +122,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// Four metric cards showing solver engine, status, netlist directives, and last run.
     fn draw_simulation_solver_metrics(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let status = self.simulation_status_label();
@@ -143,6 +162,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// Returns the current simulation status label based on task and run state.
     fn simulation_status_label(&self) -> &'static str {
         if self.simulation_panel.active_task.is_some() {
             return self.text(UiText::Running);
@@ -159,6 +179,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// Returns a human-readable label for the last run duration.
     fn last_run_duration_label(&self) -> String {
         self.simulation_panel
             .last_run

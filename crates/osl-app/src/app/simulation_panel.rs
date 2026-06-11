@@ -1,3 +1,9 @@
+//! Simulation right panel — manages simulation directives, run execution,
+//! and displays results (netlist preview, run output, diagnostics, waveforms).
+//!
+//! This panel is used in the right sidebar of the schematic workspace and
+//! provides the primary interface for running ngspice simulations.
+
 use super::NekoSpiceApp;
 use super::localization::UiText;
 use super::simulation_artifacts_panel::draw_simulation_artifacts_panel;
@@ -12,16 +18,29 @@ use osl_kicad::{KicadDiagnosticSeverity, KicadSimulationDirective, KicadSimulati
 use std::path::Path;
 use std::time::Duration;
 
+/// Number of netlist lines to display in the preview panel.
 const NETLIST_PREVIEW_LINES: usize = 18;
 
+/// Persistent state for the simulation right panel.
+///
+/// Tracks the current directive kind/body, whether to show the netlist preview,
+/// the last completed run, any error, the currently running task, and the
+/// selected waveform signal for display.
 #[derive(Debug)]
 pub(crate) struct SimulationPanelState {
+    /// Currently selected analysis directive kind (.tran, .ac, .dc, .op).
     pub(super) directive_kind: KicadSimulationDirectiveKind,
+    /// Directive body text (e.g., "1u 1m" for .tran).
     pub(super) directive_body: String,
+    /// Whether to show the netlist preview section.
     pub(super) show_netlist: bool,
+    /// Last completed simulation run result.
     pub(super) last_run: Option<GuiSimulationRun>,
+    /// Error message from the last failed run.
     pub(super) last_error: Option<String>,
+    /// Currently running simulation task (if any).
     pub(super) active_task: Option<GuiSimulationTask>,
+    /// Currently selected waveform signal for display in previews.
     pub(super) selected_waveform_signal: Option<String>,
 }
 
@@ -40,6 +59,8 @@ impl Default for SimulationPanelState {
 }
 
 impl NekoSpiceApp {
+    /// Draw the full simulation right panel: directive editor, run button,
+    /// netlist preview, diagnostics, run results, and waveform summary.
     pub(super) fn draw_simulation_panel(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
         ui.heading(self.text(UiText::SimulationWorkspace));
@@ -47,6 +68,7 @@ impl NekoSpiceApp {
 
         let is_running = self.simulation_panel.active_task.is_some();
         if is_running {
+            // Keep the UI repainting while simulation is in progress
             ui.ctx().request_repaint_after(Duration::from_millis(100));
         }
         ui.horizontal(|ui| {
@@ -108,6 +130,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// Directive editor: analysis type selector (.tran/.ac/.dc/.op) and body text input.
     pub(in crate::app) fn draw_simulation_directive_editor(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             for (kind, label) in [
@@ -134,6 +157,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// Apply the current directive editor state to the loaded document.
     pub(in crate::app) fn apply_simulation_directive_edit(&mut self) {
         let Some(document) = &mut self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());
@@ -154,6 +178,8 @@ impl NekoSpiceApp {
         }
     }
 
+    /// Launch a simulation from the current panel state.
+    /// Creates a ngspice job from the loaded document and spawns it.
     pub(super) fn run_simulation_from_panel(&mut self) {
         let Some(document) = &self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());
@@ -174,6 +200,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// Poll the active simulation task for completion and update state.
     pub(in crate::app) fn poll_simulation_task(&mut self) {
         let Some(task) = &self.simulation_panel.active_task else {
             return;
@@ -201,6 +228,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// Draw the run status section: current task state, errors, and last run info.
     pub(in crate::app) fn draw_simulation_run_status(&mut self, ui: &mut egui::Ui) {
         if self.simulation_panel.active_task.is_some() {
             ui.label(self.text(UiText::Running));
@@ -239,6 +267,8 @@ impl NekoSpiceApp {
         }
     }
 
+    /// Sync the selected waveform signal with the latest run's available signals.
+    /// Keeps the current selection if it's still valid, otherwise picks the default.
     pub(in crate::app) fn sync_selected_waveform_signal(
         &mut self,
         waveform: &GuiWaveformSummaryState,
@@ -259,6 +289,7 @@ impl NekoSpiceApp {
     }
 }
 
+/// Draw the list of simulation directives from the loaded schematic.
 fn draw_simulation_directives(ui: &mut egui::Ui, directives: &[KicadSimulationDirective]) {
     ui.label(format!("{} directives", directives.len()));
     for directive in directives {
