@@ -79,6 +79,7 @@ mod waveform_workspace_widgets;
 mod widgets;
 mod workspace_panel;
 mod context_menu;
+mod history;
 mod tool_palette;
 
 pub(crate) use context_menu::ContextMenuAction;
@@ -120,6 +121,8 @@ pub struct NekoSpiceApp {
     pub(super) library: Option<KicadGuiLibrary>,
     pub(super) scene: Option<KicadCanvasScene>,
     pub(super) selected_hit: Option<KicadCanvasHit>,
+    /// Currently hovered canvas item for hover-highlight feedback.
+    pub(super) hovered_hit: Option<KicadCanvasHit>,
     pub(super) selected_symbol_id: Option<String>,
     pub(super) selected_symbol_placement: SymbolPlacementConfig,
     pub(crate) placement: Option<SymbolPlacementState>,
@@ -141,6 +144,7 @@ pub struct NekoSpiceApp {
     pub(super) library_error: Option<String>,
     pub(super) status_message: Option<String>,
     pub(super) viewport: CanvasViewport,
+    pub(super) history: history::EditHistory,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -183,6 +187,7 @@ impl Default for NekoSpiceApp {
             library: None,
             scene: None,
             selected_hit: None,
+            hovered_hit: None,
             selected_symbol_id: None,
             selected_symbol_placement: SymbolPlacementConfig::default(),
             placement: None,
@@ -203,6 +208,7 @@ impl Default for NekoSpiceApp {
             library_error: None,
             status_message: None,
             viewport: CanvasViewport::default(),
+            history: history::EditHistory::default(),
         };
         app.load_schematic(PathBuf::from(DEFAULT_SCHEMATIC));
         app.load_symbol_library(PathBuf::from(DEFAULT_SYMBOL_LIBRARY_TABLE));
@@ -247,6 +253,7 @@ impl NekoSpiceApp {
                 self.clear_property_editor();
                 self.schematic_tools.clear_pending();
                 self.load_error = None;
+                self.history.clear();
                 self.status_message = Some("Loaded schematic".to_string());
             }
             Err(error) => {
@@ -291,6 +298,9 @@ impl NekoSpiceApp {
             return;
         };
 
+        // Snapshot before edit for undo support
+        self.history.push(document.snapshot());
+
         match document.delete_item(&uuid) {
             Ok(summary) => {
                 let scene = document.scene();
@@ -301,6 +311,7 @@ impl NekoSpiceApp {
                 self.load_error = None;
                 self.status_message =
                     Some(format!("Deleted {} {}", summary.operation, summary.target));
+                self.history.clear_redo();
             }
             Err(error) => {
                 self.status_message = Some(error.to_string());
@@ -318,6 +329,9 @@ impl NekoSpiceApp {
             return;
         };
 
+        // Snapshot before edit for undo support
+        self.history.push(document.snapshot());
+
         match document.move_item(&uuid, delta) {
             Ok(summary) => {
                 let scene = document.scene();
@@ -327,6 +341,7 @@ impl NekoSpiceApp {
                 self.load_error = None;
                 self.status_message =
                     Some(format!("Moved {} {}", summary.operation, summary.target));
+                self.history.clear_redo();
             }
             Err(error) => {
                 self.status_message = Some(error.to_string());
@@ -336,6 +351,76 @@ impl NekoSpiceApp {
 
     pub(super) fn nudge_selected(&mut self, direction: EditNudgeDirection) {
         self.move_selected(direction.delta());
+    }
+
+    pub(super) fn rotate_selected(&mut self) {
+        let Some(uuid) = self.selected_hit.as_ref().and_then(|hit| hit.uuid.clone()) else {
+            self.status_message = Some("Selected item has no KiCad UUID".to_string());
+            return;
+        };
+        let Some(document) = &mut self.document else {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+
+        // Snapshot before edit for undo support
+        self.history.push(document.snapshot());
+
+        match document.rotate_item(&uuid, 90.0) {
+            Ok(summary) => {
+                let scene = document.scene();
+                self.selected_hit = scene.item_hit_by_uuid(&uuid);
+                self.scene = Some(scene);
+                self.sync_property_editor_from_selection();
+                self.load_error = None;
+                self.status_message =
+                    Some(format!("Rotated {} {}", summary.operation, summary.target));
+                self.history.clear_redo();
+            }
+            Err(error) => {
+                self.status_message = Some(error.to_string());
+            }
+        }
+    }
+
+    /// Restore the schematic to the previous undo state.
+    pub(super) fn undo(&mut self) {
+        let Some(document) = &mut self.document else {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+        let current = document.snapshot();
+        let Some(previous) = self.history.undo(current) else {
+            self.status_message = Some("Nothing to undo".to_string());
+            return;
+        };
+        document.restore_snapshot(previous);
+        let scene = document.scene();
+        self.viewport.fit_scene(scene.bounds);
+        self.scene = Some(scene);
+        self.selected_hit = None;
+        self.clear_property_editor();
+        self.status_message = Some("Undo".to_string());
+    }
+
+    /// Re-apply the most recently undone edit.
+    pub(super) fn redo(&mut self) {
+        let Some(document) = &mut self.document else {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+        let current = document.snapshot();
+        let Some(next) = self.history.redo(current) else {
+            self.status_message = Some("Nothing to redo".to_string());
+            return;
+        };
+        document.restore_snapshot(next);
+        let scene = document.scene();
+        self.viewport.fit_scene(scene.bounds);
+        self.scene = Some(scene);
+        self.selected_hit = None;
+        self.clear_property_editor();
+        self.status_message = Some("Redo".to_string());
     }
 
     pub(super) fn save_document(&mut self) {

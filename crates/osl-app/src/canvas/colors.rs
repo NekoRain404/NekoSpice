@@ -119,6 +119,9 @@ pub(crate) const GRAPHIC: Color32 = Color32::from_rgb(90, 90, 90);
 // Selection and interaction
 // ---------------------------------------------------------------------------
 
+/// Hover highlight color (semi-transparent blue for hover feedback).
+pub(crate) const HOVER_HIGHLIGHT: Color32 = Color32::from_rgba_premultiplied(20, 120, 220, 80);
+
 /// Selection highlight color.
 pub(crate) const SELECTION: Color32 = Color32::from_rgb(20, 120, 220);
 

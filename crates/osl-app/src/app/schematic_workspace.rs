@@ -69,6 +69,13 @@ impl NekoSpiceApp {
                 self.save_document();
             }
             ui.add_space(2.0);
+            if canvas_toolbar_button(ui, mode, "\u{21B6} Undo", self.history.can_undo()).clicked() {
+                self.undo();
+            }
+            if canvas_toolbar_button(ui, mode, "\u{21B7} Redo", self.history.can_redo()).clicked() {
+                self.redo();
+            }
+            ui.add_space(2.0);
             if canvas_toolbar_button(ui, mode, "\u{2316} Fit", true).clicked() {
                 self.viewport
                     .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));

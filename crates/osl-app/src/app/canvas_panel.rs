@@ -65,6 +65,27 @@ impl NekoSpiceApp {
                     2.0,
                 );
             }
+
+            // Hover highlight: perform a hover hit-test and draw a subtle
+            // glow around the hovered item (KiCad-style hover feedback).
+            if let Some(pointer) = ui.input(|input| input.pointer.hover_pos())
+                && rect.contains(pointer)
+            {
+                let schematic_point = self.viewport.screen_to_world(rect, pointer);
+                self.hovered_hit = scene.hit_test(schematic_point).hits.into_iter().next();
+            } else {
+                self.hovered_hit = None;
+            }
+            // Draw hover highlight only if it differs from the current selection.
+            if let Some(hovered) = &self.hovered_hit {
+                let dominated_by_selection = self
+                    .selected_hit
+                    .as_ref()
+                    .is_some_and(|sel| sel.bounds == hovered.bounds);
+                if !dominated_by_selection {
+                    canvas::draw_hover_highlight(&painter, rect, self.viewport, hovered.bounds);
+                }
+            }
         }
 
         if let Some(pointer) = ui.input(|input| input.pointer.hover_pos())
@@ -156,10 +177,14 @@ impl NekoSpiceApp {
         if ui.input(|input| input.key_pressed(egui::Key::Delete)) {
             self.delete_selected();
         }
+        if ui.input(|input| input.key_pressed(egui::Key::R)) {
+            self.rotate_selected();
+        }
         if ui.input(|input| input.key_pressed(egui::Key::F)) {
             self.viewport
                 .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
         }
+
 
         // Arrow key nudging
         if ui.input(|input| input.key_pressed(egui::Key::ArrowLeft)) {
@@ -174,6 +199,19 @@ impl NekoSpiceApp {
         if ui.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
             self.nudge_selected(EditNudgeDirection::Down);
         }
+
+        // Undo / Redo
+        if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::Z)) {
+            if ui.input(|input| input.modifiers.shift) {
+                self.redo();
+            } else {
+                self.undo();
+            }
+        }
+        // Ctrl+Y as alternative redo shortcut
+        if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::Y)) {
+            self.redo();
+        }
     }
 
     /// Handle right-click context menu on the canvas.
@@ -185,7 +223,7 @@ impl NekoSpiceApp {
             match action {
                 super::ContextMenuAction::DeleteSelected => self.delete_selected(),
                 super::ContextMenuAction::RotateSelected => {
-                    self.status_message = Some("Rotate not yet implemented".to_string());
+                    self.rotate_selected();
                 }
                 super::ContextMenuAction::CutSelected => {
                     self.status_message = Some("Cut to clipboard".to_string());

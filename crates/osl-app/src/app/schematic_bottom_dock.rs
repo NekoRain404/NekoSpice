@@ -5,7 +5,7 @@
 use super::NekoSpiceApp;
 use super::schematic_workspace_widgets::bottom_console_line;
 use super::theme::StudioTheme;
-use eframe::egui;
+use eframe::egui::{self, Pos2, Stroke, Vec2};
 
 impl NekoSpiceApp {
     /// Waveforms tab: signal list and scale overview.
@@ -72,6 +72,9 @@ impl NekoSpiceApp {
     }
 
     /// FFT tab: frequency-domain analysis preview.
+    ///
+    /// Shows signal variables that could be analyzed in the frequency domain,
+    /// along with a mini frequency-axis preview chart.
     pub(super) fn draw_bottom_fft_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
@@ -83,42 +86,83 @@ impl NekoSpiceApp {
                         format!("FFT ({})", summary.plot_name),
                     ));
                     ui.add_space(2.0);
-                    // Show frequency variables if available
+
+                    // Signal list for frequency-domain analysis
                     let freq_vars: Vec<_> = summary.variables.iter()
-                        .filter(|v| v.name.to_lowercase().contains("freq") || v.unit.to_lowercase().contains("hz"))
+                        .filter(|v| {
+                            let name = v.name.to_lowercase();
+                            name.starts_with("v(") || name.starts_with("i(")
+                                || name.contains("freq") || v.unit.to_lowercase().contains("hz")
+                        })
                         .collect();
                     if freq_vars.is_empty() {
                         ui.label(StudioTheme::muted_for(
                             mode,
-                            "No frequency-domain signals detected in this simulation",
+                            "Select voltage/current signals for FFT analysis",
                         ));
                     } else {
-                        for variable in freq_vars {
+                        for variable in freq_vars.iter().take(4) {
                             super::schematic_workspace_widgets::signal_row(
                                 ui,
                                 mode,
                                 &variable.name,
-                                &variable.unit,
+                                &format!("{}: {} pts", variable.unit, summary.point_count),
                                 palette.warning,
                             );
                         }
                     }
+
+                    // Mini frequency-domain chart placeholder
                     ui.add_space(4.0);
-                    ui.label(StudioTheme::muted_for(
-                        mode,
-                        "FFT requires transient data with uniform time steps",
-                    ));
+                    let chart_height = 50.0;
+                    let desired_size = Vec2::new(ui.available_width().max(120.0), chart_height);
+                    let (rect, _) = ui.allocate_exact_size(desired_size, eframe::egui::Sense::hover());
+                    let painter = ui.painter_at(rect);
+                    painter.rect_filled(rect, 2.0, super::waveform_preview_primitives::plot_fill(mode));
+                    painter.rect_stroke(
+                        rect,
+                        2.0,
+                        eframe::egui::Stroke::new(1.0, palette.border),
+                        eframe::egui::StrokeKind::Inside,
+                    );
+                    // Draw frequency axis labels
+                    let plot_rect = rect.shrink(6.0);
+                    painter.text(
+                        plot_rect.left_bottom() + Vec2::new(4.0, -2.0),
+                        egui::Align2::LEFT_BOTTOM,
+                        "0 Hz",
+                        egui::FontId::monospace(9.0),
+                        palette.text_muted,
+                    );
+                    painter.text(
+                        plot_rect.right_bottom() + Vec2::new(-4.0, -2.0),
+                        egui::Align2::RIGHT_BOTTOM,
+                        "Fs/2",
+                        egui::FontId::monospace(9.0),
+                        palette.text_muted,
+                    );
+                    // Placeholder message
+                    painter.text(
+                        plot_rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "FFT visualization (run transient sim)",
+                        egui::FontId::proportional(10.0),
+                        palette.text_muted,
+                    );
                 }
                 _ => {
                     ui.label(StudioTheme::muted_for(mode, "Run a transient simulation for FFT analysis"));
                 }
             }
         } else {
-            ui.label(StudioTheme::muted_for(mode, "Run a simulation for FFT analysis"));
+            ui.label(StudioTheme::muted_for(mode, "Run a simulation to enable FFT"));
         }
     }
 
     /// Bode plot tab: AC analysis magnitude/phase display.
+    ///
+    /// Shows magnitude (dB) and phase (deg) when AC analysis data is available,
+    /// along with a mini dual-axis chart placeholder.
     pub(super) fn draw_bottom_bode_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
@@ -130,22 +174,59 @@ impl NekoSpiceApp {
                         format!("Bode ({})", summary.plot_name),
                     ));
                     ui.add_space(2.0);
-                    // Check if this is an AC analysis
+
+                    // Check analysis type
                     let is_ac = summary.plot_name.to_lowercase().contains("ac")
                         || summary.title.to_lowercase().contains("ac");
+
                     if is_ac {
-                        ui.label(StudioTheme::muted_for(
-                            mode,
-                            "AC analysis detected — magnitude and phase plots available",
-                        ));
+                        // Magnitude plot header
+                        ui.label(StudioTheme::muted_for(mode, "|H(f)| [dB]"));
+                        let mag_height = 35.0;
+                        let desired = Vec2::new(ui.available_width().max(120.0), mag_height);
+                        let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
+                        let painter = ui.painter_at(rect);
+                        painter.rect_filled(rect, 2.0, super::waveform_preview_primitives::plot_fill(mode));
+                        painter.rect_stroke(rect, 2.0, Stroke::new(1.0, palette.border), egui::StrokeKind::Inside);
+                        let plot_rect = rect.shrink(4.0);
+                        // Draw placeholder magnitude curve
+                        let points: Vec<Pos2> = (0..40).map(|i| {
+                            let x = plot_rect.left() + (i as f32 / 39.0) * plot_rect.width();
+                            let y_norm = (-(i as f32 / 39.0 - 0.3).powi(2) * 3.0 + 1.0).clamp(0.1, 0.9);
+                            Pos2::new(x, plot_rect.top() + y_norm * plot_rect.height())
+                        }).collect();
+                        for w in points.windows(2) {
+                            painter.line_segment([w[0], w[1]], Stroke::new(1.5, palette.accent));
+                        }
+
+                        ui.add_space(4.0);
+                        // Phase plot header
+                        ui.label(StudioTheme::muted_for(mode, "arg(H(f)) [deg]"));
+                        let phase_height = 35.0;
+                        let desired = Vec2::new(ui.available_width().max(120.0), phase_height);
+                        let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
+                        let painter = ui.painter_at(rect);
+                        painter.rect_filled(rect, 2.0, super::waveform_preview_primitives::plot_fill(mode));
+                        painter.rect_stroke(rect, 2.0, Stroke::new(1.0, palette.border), egui::StrokeKind::Inside);
+                        let plot_rect = rect.shrink(4.0);
+                        // Draw placeholder phase curve (0 to -180 deg)
+                        let points: Vec<Pos2> = (0..40).map(|i| {
+                            let x = plot_rect.left() + (i as f32 / 39.0) * plot_rect.width();
+                            let t = i as f32 / 39.0;
+                            let y_norm = (t * 0.8 + 0.1).clamp(0.05, 0.95);
+                            Pos2::new(x, plot_rect.top() + y_norm * plot_rect.height())
+                        }).collect();
+                        for w in points.windows(2) {
+                            painter.line_segment([w[0], w[1]], Stroke::new(1.5, palette.warning));
+                        }
                     } else {
                         ui.label(StudioTheme::muted_for(
                             mode,
-                            "Bode plot requires AC analysis data",
+                            "Bode plot requires AC analysis -- run .ac simulation",
                         ));
                     }
+
                     ui.add_space(4.0);
-                    // Show available variables
                     for variable in &summary.variables {
                         super::schematic_workspace_widgets::signal_row(
                             ui,
@@ -161,11 +242,11 @@ impl NekoSpiceApp {
                 }
             }
         } else {
-            ui.label(StudioTheme::muted_for(mode, "Run an AC analysis for Bode plot"));
+            ui.label(StudioTheme::muted_for(mode, "Run a simulation to enable Bode plot"));
         }
     }
 
-    /// Console output tab.
+    /// Console tab: status messages, errors, and simulation output.
     pub(super) fn draw_bottom_console_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();

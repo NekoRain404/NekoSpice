@@ -75,6 +75,9 @@ impl KicadSchematic {
                 at,
                 uuid,
             }),
+            KicadSchematicEdit::RotateItem { uuid, angle } => {
+                self.rotate_item_by_uuid(&uuid, angle)
+            }
         }
     }
 
@@ -281,6 +284,87 @@ impl KicadSchematic {
 
         Err(OslError::InvalidInput(format!(
             "KiCad schematic item UUID '{uuid}' was not found"
+        )))
+    }
+
+    /// Rotate an item identified by UUID by the given angle in degrees.
+    ///
+    /// For symbols this adds to their existing rotation; for other items it
+    /// only rotates those that carry an explicit rotation field (labels, text).
+    pub fn rotate_item_by_uuid(
+        &mut self,
+        uuid: &str,
+        angle: f64,
+    ) -> OslResult<KicadEditSummary> {
+        let uuid = uuid.trim();
+        if uuid.is_empty() {
+            return Err(OslError::InvalidInput(
+                "KiCad rotate-item UUID must not be empty".to_string(),
+            ));
+        }
+
+        // Symbols: add to the rotation in their `at` field
+        if let Some(symbol) = self
+            .symbols
+            .iter_mut()
+            .find(|symbol| symbol.uuid.as_deref() == Some(uuid))
+        {
+            if let Some(at) = &mut symbol.at {
+                at.rotation = (at.rotation + angle) % 360.0;
+            }
+            return Ok(KicadEditSummary {
+                operation: "rotate-symbol".to_string(),
+                target: uuid.to_string(),
+            });
+        }
+
+        // Labels: rotate their `at` field
+        if let Some(label) = self
+            .labels
+            .iter_mut()
+            .find(|label| label.uuid.as_deref() == Some(uuid))
+        {
+            if let Some(at) = &mut label.at {
+                at.rotation = (at.rotation + angle) % 360.0;
+            }
+            return Ok(KicadEditSummary {
+                operation: "rotate-label".to_string(),
+                target: uuid.to_string(),
+            });
+        }
+
+        // Text items: rotate their `at` field
+        if let Some(text) = self
+            .text_items
+            .iter_mut()
+            .find(|text| text.uuid.as_deref() == Some(uuid))
+        {
+            if let Some(at) = &mut text.at {
+                at.rotation = (at.rotation + angle) % 360.0;
+            }
+            return Ok(KicadEditSummary {
+                operation: "rotate-text".to_string(),
+                target: uuid.to_string(),
+            });
+        }
+
+        // Sheets: rotate their `at` field
+        if let Some(sheet) = self
+            .sheets
+            .iter_mut()
+            .find(|sheet| sheet.uuid.as_deref() == Some(uuid))
+        {
+            if let Some(at) = &mut sheet.at {
+                at.rotation = (at.rotation + angle) % 360.0;
+            }
+            return Ok(KicadEditSummary {
+                operation: "rotate-sheet".to_string(),
+                target: uuid.to_string(),
+            });
+        }
+
+        Err(OslError::InvalidInput(format!(
+            "KiCad schematic item UUID '{uuid}' was not found or does not support rotation"
         )))
     }
 

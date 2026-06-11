@@ -75,6 +75,17 @@ impl KicadGuiDocument {
         })
     }
 
+    pub(crate) fn rotate_item(
+        &mut self,
+        uuid: &str,
+        angle: f64,
+    ) -> Result<KicadEditSummary, String> {
+        self.apply_edit(KicadSchematicEdit::RotateItem {
+            uuid: uuid.to_string(),
+            angle,
+        })
+    }
+
     pub(crate) fn set_symbol_property(
         &mut self,
         reference: String,
@@ -223,6 +234,19 @@ impl KicadGuiDocument {
                 self.dirty = false;
             })
             .map_err(|error| error.to_string())
+    }
+
+    /// Return a deep copy of the current schematic for undo/redo storage.
+    pub(crate) fn snapshot(&self) -> KicadSchematic {
+        self.schematic.clone()
+    }
+
+    /// Replace the current schematic with a previously saved snapshot.
+    ///
+    /// Marks the document dirty so the next save will write the restored state.
+    pub(crate) fn restore_snapshot(&mut self, snapshot: KicadSchematic) {
+        self.schematic = snapshot;
+        self.dirty = true;
     }
 
     fn apply_edit(&mut self, edit: KicadSchematicEdit) -> Result<KicadEditSummary, String> {

@@ -84,6 +84,11 @@ pub enum KicadSchematicEdit {
         at: KicadAt,
         uuid: Option<String>,
     },
+    /// Rotate an item by the given angle (degrees, typically 90).
+    RotateItem {
+        uuid: String,
+        angle: f64,
+    },
     SetSimulationDirective {
         kind: KicadSimulationDirectiveKind,
         body: String,

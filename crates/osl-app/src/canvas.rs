@@ -493,3 +493,25 @@ pub(crate) fn draw_scene(
         );
     }
 }
+
+
+/// Draw a semi-transparent hover highlight around a hovered item's bounding box.
+///
+/// Uses a lighter, translucent color compared to the solid selection highlight,
+/// giving the user subtle visual feedback before clicking.
+pub(crate) fn draw_hover_highlight(
+    painter: &egui::Painter,
+    rect: Rect,
+    viewport: CanvasViewport,
+    bounds: osl_kicad::KicadBoundingBox,
+) {
+    primitives::draw_bounds(
+        painter,
+        rect,
+        viewport,
+        bounds,
+        colors::HOVER_HIGHLIGHT,
+        1.5,
+    );
+}
+
