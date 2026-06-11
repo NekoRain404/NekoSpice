@@ -39,6 +39,7 @@ mod reports_workspace_preview;
 mod reports_workspace_sections;
 mod reports_workspace_state;
 mod reports_workspace_widgets;
+mod review_checklist;
 mod review_workspace;
 mod review_workspace_state;
 mod review_workspace_widgets;

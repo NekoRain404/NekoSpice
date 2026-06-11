@@ -24,19 +24,34 @@ impl NekoSpiceApp {
             .id_salt("review_center_scroll")
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
+                let spacing = 10.0;
+                let width = ui.available_width();
+                if width < 560.0 {
                     ui.vertical(|ui| {
-                        ui.set_width(ui.available_width() * 0.42);
                         self.draw_review_score_overview(ui);
-                    });
-                    ui.vertical(|ui| {
-                        ui.set_width(ui.available_width());
+                        ui.add_space(spacing);
                         self.draw_review_action_queue(ui);
                     });
-                });
+                } else {
+                    let score_width = ((width - spacing) * 0.42).max(280.0);
+                    let action_width = (width - score_width - spacing).max(320.0);
+                    ui.horizontal_top(|ui| {
+                        ui.vertical(|ui| {
+                            ui.set_width(score_width);
+                            self.draw_review_score_overview(ui);
+                        });
+                        ui.add_space(spacing);
+                        ui.vertical(|ui| {
+                            ui.set_width(action_width);
+                            self.draw_review_action_queue(ui);
+                        });
+                    });
+                }
 
                 ui.add_space(8.0);
                 self.draw_review_risk_summary(ui);
+                ui.add_space(8.0);
+                self.draw_review_checklist_board(ui);
                 ui.add_space(8.0);
                 self.draw_review_recommendation_board(ui);
                 ui.add_space(8.0);
