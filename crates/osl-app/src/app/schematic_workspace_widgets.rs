@@ -38,25 +38,6 @@ pub(super) fn document_tab(ui: &mut egui::Ui, mode: StudioThemeMode, text: &str,
     );
 }
 
-pub(super) fn bottom_tab(ui: &mut egui::Ui, mode: StudioThemeMode, text: &str, active: bool) {
-    let palette = StudioTheme::palette(mode);
-    let text = if active {
-        StudioTheme::accent_for(mode, text)
-    } else {
-        StudioTheme::muted_for(mode, text)
-    };
-    let _ = ui.add(
-        egui::Button::new(text)
-            .fill(if active {
-                palette.accent_soft
-            } else {
-                palette.panel
-            })
-            .stroke(egui::Stroke::new(1.0, palette.border))
-            .corner_radius(4),
-    );
-}
-
 pub(super) fn signal_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

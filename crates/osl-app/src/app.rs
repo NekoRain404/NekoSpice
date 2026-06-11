@@ -95,6 +95,19 @@ use waveform_workspace::WaveformWorkspaceState;
 
 const EDIT_NUDGE_MM: f64 = 2.54;
 
+/// Active tab in the schematic workspace bottom dock.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum SchematicBottomTab {
+    #[default]
+    Waveforms,
+    Fft,
+    Bode,
+    Console,
+    Netlist,
+    Erc,
+    Inspector,
+}
+
 #[derive(Debug)]
 pub struct NekoSpiceApp {
     pub(super) schematic_path: String,
@@ -118,6 +131,8 @@ pub struct NekoSpiceApp {
     active_workspace: StudioWorkspace,
     preferences: StudioPreferences,
     pub(super) symbol_search: String,
+    /// Active tab in the schematic bottom dock panel.
+    pub(super) schematic_bottom_tab: SchematicBottomTab,
     pub(super) load_error: Option<String>,
     pub(super) library_error: Option<String>,
     pub(super) status_message: Option<String>,
@@ -179,6 +194,7 @@ impl Default for NekoSpiceApp {
             active_workspace: initial_workspace(),
             preferences: StudioPreferences::default(),
             symbol_search: String::new(),
+            schematic_bottom_tab: SchematicBottomTab::Waveforms,
             load_error: None,
             library_error: None,
             status_message: None,
