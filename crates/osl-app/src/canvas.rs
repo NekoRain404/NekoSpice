@@ -323,7 +323,8 @@ pub(crate) fn draw_scene(
     }
 
     // Layer 6: Buses (blue polylines)
-    // KiCad default bus width is 0.1524mm (6mil) when stroke width is None or 0.0
+    // KiCad default bus width is 0.3048mm (12mil) when stroke width is None or 0.0
+    const KICAD_DEFAULT_BUS_WIDTH_MM: f64 = 0.3048;
     for bus in &scene.buses {
         if !item_visible(bus.bounds, visible_bounds) {
             continue;
@@ -331,7 +332,7 @@ pub(crate) fn draw_scene(
         let bus_width = bus.stroke.as_ref()
             .and_then(|s| s.width)
             .filter(|w| *w > 0.0)
-            .unwrap_or(KICAD_DEFAULT_WIRE_WIDTH_MM);
+            .unwrap_or(KICAD_DEFAULT_BUS_WIDTH_MM);
         let screen_width = (bus_width as f32 * viewport.zoom).max(1.5);
         primitives::draw_polyline(
             painter,
