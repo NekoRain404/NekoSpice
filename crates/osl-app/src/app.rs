@@ -51,6 +51,7 @@ mod schematic_inspector_widgets;
 mod schematic_review_panel;
 mod schematic_tools;
 mod schematic_workspace;
+mod schematic_bottom_dock;
 mod schematic_workspace_widgets;
 mod selection_properties;
 mod settings_theme_preview;
