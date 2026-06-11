@@ -114,18 +114,54 @@ impl NekoSpiceApp {
         }
     }
 
+    /// Handle keyboard shortcuts for the schematic canvas.
+    ///
+    /// Tool shortcuts: V=Select, W=Wire, L=Label, B=Bus, S=Sheet,
+    /// J=Junction, Q=NoConnect, R=Rotate, F=Fit, Del=Delete, Esc=Cancel.
     fn handle_canvas_shortcuts(&mut self, ui: &egui::Ui) {
         if ui.ctx().text_edit_focused() {
             return;
         }
 
+        // Tool switching shortcuts
+        use super::schematic_tools::SchematicTool;
+        if ui.input(|input| input.key_pressed(egui::Key::V)) {
+            self.activate_schematic_tool_direct(SchematicTool::Select);
+        }
+        if ui.input(|input| input.key_pressed(egui::Key::W)) {
+            self.activate_schematic_tool_direct(SchematicTool::Wire);
+        }
+        if ui.input(|input| input.key_pressed(egui::Key::L)) {
+            self.activate_schematic_tool_direct(SchematicTool::Label);
+        }
+        if ui.input(|input| input.key_pressed(egui::Key::B)) {
+            self.activate_schematic_tool_direct(SchematicTool::Bus);
+        }
+        if ui.input(|input| input.key_pressed(egui::Key::S)) {
+            self.activate_schematic_tool_direct(SchematicTool::Sheet);
+        }
+        if ui.input(|input| input.key_pressed(egui::Key::J)) {
+            self.activate_schematic_tool_direct(SchematicTool::Junction);
+        }
+        if ui.input(|input| input.key_pressed(egui::Key::Q)) {
+            self.activate_schematic_tool_direct(SchematicTool::NoConnect);
+        }
+
+        // Action shortcuts
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.cancel_symbol_placement();
             self.cancel_schematic_tool_pending();
+            self.activate_schematic_tool_direct(SchematicTool::Select);
         }
         if ui.input(|input| input.key_pressed(egui::Key::Delete)) {
             self.delete_selected();
         }
+        if ui.input(|input| input.key_pressed(egui::Key::F)) {
+            self.viewport
+                .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
+        }
+
+        // Arrow key nudging
         if ui.input(|input| input.key_pressed(egui::Key::ArrowLeft)) {
             self.nudge_selected(EditNudgeDirection::Left);
         }
