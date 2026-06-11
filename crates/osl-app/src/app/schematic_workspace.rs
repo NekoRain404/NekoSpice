@@ -152,8 +152,18 @@ impl NekoSpiceApp {
                 .and_then(|name| name.to_str())
                 .unwrap_or(self.text(UiText::NoDocument));
             document_tab(ui, mode, active_name, true);
-            document_tab(ui, mode, "bias_network.kicad_sch", false);
-            document_tab(ui, mode, "protections.kicad_sch", false);
+            // Show real sub-sheets from loaded schematic
+            if let Some(document) = &self.document {
+                let scene = document.scene();
+                for sheet in &scene.sheets {
+                    let tab_label = if sheet.file.is_empty() {
+                        &sheet.name
+                    } else {
+                        &sheet.file
+                    };
+                    document_tab(ui, mode, tab_label, false);
+                }
+            }
             if ui.small_button("+").clicked() {
                 self.status_message = Some(self.text(UiText::NewSchematic).to_string());
             }
