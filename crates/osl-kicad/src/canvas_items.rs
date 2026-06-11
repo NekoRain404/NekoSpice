@@ -8,6 +8,14 @@ pub struct KicadCanvasSymbol {
     pub lib_id: String,
     pub reference: String,
     pub value: String,
+    /// Position from the Reference property in the schematic
+    pub reference_at: Option<KicadAt>,
+    /// Font size from the Reference property effects
+    pub reference_effects: Option<KicadTextEffects>,
+    /// Position from the Value property in the schematic
+    pub value_at: Option<KicadAt>,
+    /// Font size from the Value property effects
+    pub value_effects: Option<KicadTextEffects>,
     pub at: KicadAt,
     pub mirror: Option<String>,
     pub graphics: Vec<KicadCanvasGraphic>,

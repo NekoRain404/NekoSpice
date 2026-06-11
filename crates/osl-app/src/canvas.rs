@@ -4,7 +4,7 @@
 
 use crate::viewport::{CanvasViewport, item_visible};
 use eframe::egui::{self, Align2, FontId, Pos2, Rect, Stroke};
-use osl_kicad::{KicadBoundingBox, KicadCanvasScene, KicadPoint};
+use osl_kicad::{KicadAt, KicadBoundingBox, KicadCanvasScene, KicadPoint};
 
 pub(crate) mod colors;
 mod primitives;
@@ -54,6 +54,48 @@ fn pin_text_offsets(
             if perp_y > 0.0 { Align2::CENTER_BOTTOM } else { Align2::CENTER_TOP }
         };
         (-perp_x * offset, -perp_y * offset, align)
+    }
+}
+
+/// Transform a property point through a symbol's position and mirror.
+///
+/// This mirrors the KiCad coordinate transform: first apply mirror,
+/// then rotate by the symbol rotation, then translate to the symbol position.
+fn transform_property_point(
+    local: KicadPoint,
+    symbol_at: KicadAt,
+    mirror: Option<&str>,
+) -> KicadPoint {
+    // Apply mirror first
+    let mut mirrored = local;
+    if let Some(mirror_str) = mirror {
+        if mirror_str.contains('x') {
+            mirrored.y = -mirrored.y;
+        }
+        if mirror_str.contains('y') {
+            mirrored.x = -mirrored.x;
+        }
+    }
+    // Apply rotation
+    let rotation = symbol_at.rotation % 360.0;
+    let normalized = if rotation < 0.0 { rotation + 360.0 } else { rotation };
+    let rotated = match normalized.round() as i32 {
+        0 => mirrored,
+        90 => KicadPoint { x: -mirrored.y, y: mirrored.x },
+        180 => KicadPoint { x: -mirrored.x, y: -mirrored.y },
+        270 => KicadPoint { x: mirrored.y, y: -mirrored.x },
+        _ => {
+            let radians = rotation.to_radians();
+            KicadPoint {
+                x: mirrored.x * radians.cos() - mirrored.y * radians.sin(),
+                y: mirrored.x * radians.sin() + mirrored.y * radians.cos(),
+            }
+        }
+    };
+    // Translate to symbol position
+    KicadPoint {
+        x: symbol_at.x + rotated.x,
+        y: symbol_at.y + rotated.y,
     }
 }
 
@@ -177,16 +219,68 @@ pub(crate) fn draw_scene(
             }
         }
         // Symbol reference and value labels
-        if let Some(bounds) = symbol.bounds {
-            let ref_pos = viewport.world_to_screen(rect, bounds.min);
-            painter.text(
-                ref_pos,
-                Align2::LEFT_BOTTOM,
-                &symbol.reference,
-                FontId::proportional(12.0),
-                colors::SYMBOL_REFERENCE,
-            );
-            if !symbol.value.is_empty() && symbol.value != symbol.reference {
+        // Use property positions when available, otherwise fall back to bounding box
+        if !symbol.reference.is_empty() {
+            let ref_font_size = symbol.reference_effects
+                .as_ref()
+                .and_then(|e| e.font_size)
+                .map(|s| s.width as f32)
+                .unwrap_or(12.0)
+                .max(6.0);
+
+            if let Some(ref_at) = symbol.reference_at {
+                // Transform property position through symbol's at/mirror
+                let prop_point = transform_property_point(
+                    KicadPoint { x: ref_at.x, y: ref_at.y },
+                    symbol.at,
+                    symbol.mirror.as_deref(),
+                );
+                let screen_pos = viewport.world_to_screen(rect, prop_point);
+                painter.text(
+                    screen_pos,
+                    Align2::LEFT_TOP,
+                    &symbol.reference,
+                    FontId::proportional(ref_font_size),
+                    colors::SYMBOL_REFERENCE,
+                );
+            } else if let Some(bounds) = symbol.bounds {
+                // Fallback: use bounding box position
+                let ref_pos = viewport.world_to_screen(rect, bounds.min);
+                painter.text(
+                    ref_pos,
+                    Align2::LEFT_BOTTOM,
+                    &symbol.reference,
+                    FontId::proportional(ref_font_size),
+                    colors::SYMBOL_REFERENCE,
+                );
+            }
+        }
+
+        if !symbol.value.is_empty() && symbol.value != symbol.reference {
+            let val_font_size = symbol.value_effects
+                .as_ref()
+                .and_then(|e| e.font_size)
+                .map(|s| s.width as f32)
+                .unwrap_or(11.0)
+                .max(6.0);
+
+            if let Some(val_at) = symbol.value_at {
+                // Transform property position through symbol's at/mirror
+                let prop_point = transform_property_point(
+                    KicadPoint { x: val_at.x, y: val_at.y },
+                    symbol.at,
+                    symbol.mirror.as_deref(),
+                );
+                let screen_pos = viewport.world_to_screen(rect, prop_point);
+                painter.text(
+                    screen_pos,
+                    Align2::LEFT_TOP,
+                    &symbol.value,
+                    FontId::proportional(val_font_size),
+                    colors::SYMBOL_VALUE,
+                );
+            } else if let Some(bounds) = symbol.bounds {
+                // Fallback: use bounding box position
                 let val_pos = viewport.world_to_screen(
                     rect,
                     KicadPoint {
@@ -198,7 +292,7 @@ pub(crate) fn draw_scene(
                     val_pos,
                     Align2::LEFT_TOP,
                     &symbol.value,
-                    FontId::proportional(11.0),
+                    FontId::proportional(val_font_size),
                     colors::SYMBOL_VALUE,
                 );
             }

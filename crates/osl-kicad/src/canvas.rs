@@ -104,6 +104,10 @@ impl KicadCanvasScene {
                     .filter(|value| !value.is_empty())
                     .unwrap_or_else(|| symbol.local_name())
                     .to_string(),
+                reference_at: None,
+                reference_effects: None,
+                value_at: None,
+                value_effects: None,
                 at,
                 mirror: None,
                 graphics,
@@ -160,11 +164,27 @@ impl KicadCanvasScene {
                     bounds.include_box(symbol_bounds);
                 }
 
+                // Extract property positions for reference and value labels
+                let (reference_at, reference_effects, value_at, value_effects) = {
+                    let ref_prop = symbol.properties.iter().find(|p| p.name == "Reference");
+                    let val_prop = symbol.properties.iter().find(|p| p.name == "Value");
+                    (
+                        ref_prop.and_then(|p| p.at),
+                        ref_prop.and_then(|p| p.effects.clone()),
+                        val_prop.and_then(|p| p.at),
+                        val_prop.and_then(|p| p.effects.clone()),
+                    )
+                };
+
                 Some(KicadCanvasSymbol {
                     uuid: symbol.uuid.clone(),
                     lib_id: symbol.lib_id.clone(),
                     reference: symbol.reference().unwrap_or_default().to_string(),
                     value: symbol.value().unwrap_or_default().to_string(),
+                    reference_at,
+                    reference_effects,
+                    value_at,
+                    value_effects,
                     at,
                     mirror: symbol.mirror.clone(),
                     graphics,
