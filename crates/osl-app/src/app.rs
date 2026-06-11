@@ -77,7 +77,10 @@ mod waveform_workspace_sections;
 mod waveform_workspace_widgets;
 mod widgets;
 mod workspace_panel;
+mod context_menu;
+mod tool_palette;
 
+pub(crate) use context_menu::ContextMenuAction;
 pub use canvas_panel::load_canvas_scene;
 use navigation::StudioWorkspace;
 use optimization_workspace_state::OptimizationWorkspaceState;

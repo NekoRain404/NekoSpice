@@ -1,7 +1,7 @@
 use osl_kicad::{KicadPoint, KicadSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum SchematicTool {
+pub(crate) enum SchematicTool {
     Select,
     Wire,
     Bus,
@@ -49,7 +49,7 @@ impl SchematicTool {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct SchematicToolState {
-    pub(super) active: SchematicTool,
+    pub(crate) active: SchematicTool,
     pub(super) label_text: String,
     pub(super) text_item: String,
     pub(super) sheet_name: String,

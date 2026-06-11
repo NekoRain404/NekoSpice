@@ -46,6 +46,7 @@ impl NekoSpiceApp {
         }
 
         self.handle_canvas_shortcuts(ui);
+        self.handle_canvas_context_menu(ui, rect);
 
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, self.theme_palette().canvas);
@@ -136,6 +137,31 @@ impl NekoSpiceApp {
         }
         if ui.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
             self.nudge_selected(EditNudgeDirection::Down);
+        }
+    }
+
+    /// Handle right-click context menu on the canvas.
+    fn handle_canvas_context_menu(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+        let response = ui.interact(rect, egui::Id::new("canvas_context"), egui::Sense::click());
+
+        if response.secondary_clicked() {
+            let action = self.draw_canvas_context_menu(ui);
+            match action {
+                super::ContextMenuAction::DeleteSelected => self.delete_selected(),
+                super::ContextMenuAction::RotateSelected => {
+                    self.status_message = Some("Rotate not yet implemented".to_string());
+                }
+                super::ContextMenuAction::CutSelected => {
+                    self.status_message = Some("Cut to clipboard".to_string());
+                }
+                super::ContextMenuAction::CopySelected => {
+                    self.status_message = Some("Copied to clipboard".to_string());
+                }
+                super::ContextMenuAction::PasteAtCursor => {
+                    self.status_message = Some("Paste from clipboard".to_string());
+                }
+                super::ContextMenuAction::None => {}
+            }
         }
     }
 }

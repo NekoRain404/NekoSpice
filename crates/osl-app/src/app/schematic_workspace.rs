@@ -23,8 +23,18 @@ impl NekoSpiceApp {
             let canvas_height = (ui.available_height() - 220.0).max(280.0);
             ui.allocate_ui_with_layout(
                 Vec2::new(ui.available_width(), canvas_height),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| self.draw_canvas(ui),
+                egui::Layout::left_to_right(egui::Align::Min),
+                |ui| {
+                    // Vertical tool palette on the left
+                    let _palette_width = self.draw_tool_palette(ui);
+                    // Main canvas area
+                    let canvas_width = ui.available_width();
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(canvas_width, canvas_height),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| self.draw_canvas(ui),
+                    );
+                },
             );
             ui.add_space(6.0);
             self.draw_schematic_bottom_dock(ui);

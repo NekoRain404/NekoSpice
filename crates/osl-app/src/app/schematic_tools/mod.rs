@@ -5,9 +5,10 @@ use osl_kicad::KicadPoint;
 mod controls;
 mod editing;
 mod preview;
-mod state;
+pub(crate) mod state;
 
 pub(crate) use state::SchematicToolState;
+pub(crate) use state::SchematicTool;
 
 impl NekoSpiceApp {
     pub(super) fn draw_schematic_tool_preview(

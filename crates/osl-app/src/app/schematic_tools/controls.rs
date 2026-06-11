@@ -91,4 +91,10 @@ impl NekoSpiceApp {
         }
         self.status_message = Some(format!("Tool: {}", tool.label()));
     }
+
+    /// Activate a tool directly from the context menu or tool palette.
+    /// This is a public entry point for external UI elements to switch tools.
+    pub(in crate::app) fn activate_schematic_tool_direct(&mut self, tool: SchematicTool) {
+        self.activate_schematic_tool(tool);
+    }
 }
