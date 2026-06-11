@@ -269,6 +269,157 @@ pub(crate) fn draw_bus_entry(
     );
 }
 
+/// Draw a schematic pin with its shape decoration.
+///
+/// KiCad pin shapes:
+/// - `line`: plain straight line (default)
+/// - `inverted`: line + circle at body end (active-low input)
+/// - `clock`: line + triangle at pin root (clock input)
+/// - `inverted_clock`: line + triangle + circle at body end
+/// - `input_low`: line + bar at body end
+/// - `clock_low`: line + triangle + bar at body end
+/// - `falling_edge_clock`: line + triangle at body end
+/// - `non_logic`: line + X at body end
+pub(crate) fn draw_pin(
+    painter: &egui::Painter,
+    rect: Rect,
+    viewport: CanvasViewport,
+    pin: &osl_kicad::KicadCanvasPin,
+) {
+    let color = colors::SYMBOL_PIN;
+    let width = 1.5;
+
+    // Draw the main pin line (always drawn)
+    draw_line(painter, rect, viewport, pin.start, pin.end, color, width);
+
+    // Compute direction vector from start to end (pin root to connection point)
+    let dx = pin.end.x - pin.start.x;
+    let dy = pin.end.y - pin.start.y;
+    let dist = (dx * dx + dy * dy).sqrt();
+    if dist < 1e-6 {
+        return;
+    }
+    let nx = dx / dist;
+    let ny = dy / dist;
+
+    // Decorator radius (relative to pin length)
+    let radius = (dist * 0.25).min(1.5).max(0.5);
+    let triangle_size = radius * 1.5;
+
+    match pin.shape.as_str() {
+        "inverted" => {
+            // Circle at the body end (start point) indicating active-low
+            let center = viewport.world_to_screen(rect, pin.start);
+            let r = radius as f32 * viewport.zoom;
+            painter.circle_stroke(center, r, Stroke::new(width, color));
+        }
+        "clock" => {
+            // Triangle at the pin root pointing toward the connection
+            let center = viewport.world_to_screen(rect, pin.start);
+            let r = triangle_size as f32 * viewport.zoom;
+            // Triangle vertices pointing in pin direction
+            let tip = Pos2::new(
+                center.x + nx as f32 * r,
+                center.y + ny as f32 * r,
+            );
+            let base1 = Pos2::new(
+                center.x - ny as f32 * r * 0.5,
+                center.y + nx as f32 * r * 0.5,
+            );
+            let base2 = Pos2::new(
+                center.x + ny as f32 * r * 0.5,
+                center.y - nx as f32 * r * 0.5,
+            );
+            painter.line_segment([tip, base1], Stroke::new(width, color));
+            painter.line_segment([base1, base2], Stroke::new(width, color));
+            painter.line_segment([base2, tip], Stroke::new(width, color));
+        }
+        "inverted_clock" => {
+            // Triangle + circle
+            let center = viewport.world_to_screen(rect, pin.start);
+            let r = triangle_size as f32 * viewport.zoom;
+            let tip = Pos2::new(
+                center.x + nx as f32 * r,
+                center.y + ny as f32 * r,
+            );
+            let base1 = Pos2::new(
+                center.x - ny as f32 * r * 0.5,
+                center.y + nx as f32 * r * 0.5,
+            );
+            let base2 = Pos2::new(
+                center.x + ny as f32 * r * 0.5,
+                center.y - nx as f32 * r * 0.5,
+            );
+            painter.line_segment([tip, base1], Stroke::new(width, color));
+            painter.line_segment([base1, base2], Stroke::new(width, color));
+            painter.line_segment([base2, tip], Stroke::new(width, color));
+            // Circle at body end
+            let circle_r = radius as f32 * viewport.zoom;
+            painter.circle_stroke(center, circle_r, Stroke::new(width, color));
+        }
+        "input_low" => {
+            // Bar at body end
+            let center = viewport.world_to_screen(rect, pin.start);
+            let r = radius as f32 * viewport.zoom;
+            let bar1 = Pos2::new(
+                center.x - ny as f32 * r,
+                center.y + nx as f32 * r,
+            );
+            let bar2 = Pos2::new(
+                center.x + ny as f32 * r,
+                center.y - nx as f32 * r,
+            );
+            painter.line_segment([bar1, bar2], Stroke::new(width, color));
+        }
+        "clock_low" | "falling_edge_clock" => {
+            // Triangle at body end
+            let center = viewport.world_to_screen(rect, pin.start);
+            let r = triangle_size as f32 * viewport.zoom;
+            let tip = Pos2::new(
+                center.x + nx as f32 * r,
+                center.y + ny as f32 * r,
+            );
+            let base1 = Pos2::new(
+                center.x - ny as f32 * r * 0.5,
+                center.y + nx as f32 * r * 0.5,
+            );
+            let base2 = Pos2::new(
+                center.x + ny as f32 * r * 0.5,
+                center.y - nx as f32 * r * 0.5,
+            );
+            painter.line_segment([tip, base1], Stroke::new(width, color));
+            painter.line_segment([base1, base2], Stroke::new(width, color));
+            painter.line_segment([base2, tip], Stroke::new(width, color));
+        }
+        "non_logic" => {
+            // X at body end
+            let center = viewport.world_to_screen(rect, pin.start);
+            let r = radius as f32 * viewport.zoom;
+            let p1 = Pos2::new(
+                center.x - r,
+                center.y - r,
+            );
+            let p2 = Pos2::new(
+                center.x + r,
+                center.y + r,
+            );
+            let p3 = Pos2::new(
+                center.x + r,
+                center.y - r,
+            );
+            let p4 = Pos2::new(
+                center.x - r,
+                center.y + r,
+            );
+            painter.line_segment([p1, p2], Stroke::new(width, color));
+            painter.line_segment([p3, p4], Stroke::new(width, color));
+        }
+        _ => {
+            // "line" or unknown — already drawn as a plain line above
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Selection bounds
 // ---------------------------------------------------------------------------

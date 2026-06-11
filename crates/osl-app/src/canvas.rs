@@ -114,14 +114,12 @@ pub(crate) fn draw_scene(
         }
         // Symbol pin stubs with name and number labels
         for pin in &symbol.pins {
-            primitives::draw_line(
+            // Draw pin shape based on pin type
+            primitives::draw_pin(
                 painter,
                 rect,
                 viewport,
-                pin.start,
-                pin.end,
-                colors::SYMBOL_PIN,
-                1.5,
+                pin,
             );
 
             // Pin name near the body end (end point) of the pin
