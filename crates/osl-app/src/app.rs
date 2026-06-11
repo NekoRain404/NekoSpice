@@ -54,6 +54,7 @@ mod schematic_workspace;
 mod schematic_bottom_dock;
 mod schematic_workspace_widgets;
 mod selection_properties;
+mod shortcuts_overlay;
 mod settings_theme_preview;
 mod settings_workspace;
 mod simulation_artifacts_panel;
@@ -123,6 +124,8 @@ pub struct NekoSpiceApp {
     pub(super) selected_hit: Option<KicadCanvasHit>,
     /// Currently hovered canvas item for hover-highlight feedback.
     pub(super) hovered_hit: Option<KicadCanvasHit>,
+    /// Whether the keyboard shortcut help overlay is visible.
+    pub(super) show_shortcuts_overlay: bool,
     pub(super) selected_symbol_id: Option<String>,
     pub(super) selected_symbol_placement: SymbolPlacementConfig,
     pub(crate) placement: Option<SymbolPlacementState>,
@@ -188,6 +191,7 @@ impl Default for NekoSpiceApp {
             scene: None,
             selected_hit: None,
             hovered_hit: None,
+            show_shortcuts_overlay: false,
             selected_symbol_id: None,
             selected_symbol_placement: SymbolPlacementConfig::default(),
             placement: None,

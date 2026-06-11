@@ -89,6 +89,11 @@ impl NekoSpiceApp {
             }
         }
 
+        // Draw keyboard shortcut help overlay if visible
+        if self.show_shortcuts_overlay {
+            self.draw_shortcuts_overlay(&painter, rect, schematic_colors);
+        }
+
         if let Some(pointer) = ui.input(|input| input.pointer.hover_pos())
             && rect.contains(pointer)
         {
@@ -178,6 +183,10 @@ impl NekoSpiceApp {
         }
         if ui.input(|input| input.key_pressed(egui::Key::Delete)) {
             self.delete_selected();
+        }
+        // ? key toggles keyboard shortcut help overlay
+        if ui.input(|input| input.key_pressed(egui::Key::Slash) && input.modifiers.shift) {
+            self.show_shortcuts_overlay = !self.show_shortcuts_overlay;
         }
         if ui.input(|input| input.key_pressed(egui::Key::R)) {
             self.rotate_selected();
