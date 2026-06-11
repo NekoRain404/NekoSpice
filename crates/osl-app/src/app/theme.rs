@@ -65,6 +65,7 @@ pub(super) struct StudioPalette {
 
 pub(super) struct StudioTheme;
 
+#[allow(dead_code)]
 impl StudioTheme {
     pub(super) const BACKGROUND: Color32 = Color32::from_rgb(6, 16, 28);
     pub(super) const PANEL: Color32 = Color32::from_rgb(10, 25, 42);

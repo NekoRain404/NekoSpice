@@ -11,6 +11,52 @@ mod primitives;
 
 pub(crate) use primitives::{draw_bounds, draw_grid, draw_line};
 
+/// Compute text offset and alignment for pin name or number based on pin direction.
+///
+/// `is_name=true` positions at the body end; `is_name=false` at the external end.
+/// Returns (offset_x, offset_y, alignment).
+fn pin_text_offsets(
+    start: &KicadPoint,
+    end: &KicadPoint,
+    is_name: bool,
+) -> (f64, f64, Align2) {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let dist = (dx * dx + dy * dy).sqrt();
+
+    if dist < 1e-6 {
+        return (1.0, -1.5, Align2::LEFT_TOP);
+    }
+
+    // Normalize direction
+    let nx = dx / dist;
+    let ny = dy / dist;
+
+    // Perpendicular offset for text placement (always to the "right" of pin direction)
+    let perp_x = ny;   // rotate 90 degrees
+    let perp_y = -nx;
+
+    let offset = if is_name { 0.8 } else { 0.8 };
+
+    if is_name {
+        // Name at body end, offset perpendicular to pin direction
+        let align = if perp_x.abs() > perp_y.abs() {
+            if perp_x > 0.0 { Align2::LEFT_CENTER } else { Align2::RIGHT_CENTER }
+        } else {
+            if perp_y > 0.0 { Align2::CENTER_TOP } else { Align2::CENTER_BOTTOM }
+        };
+        (perp_x * offset, perp_y * offset, align)
+    } else {
+        // Number at external end, offset perpendicular on opposite side
+        let align = if perp_x.abs() > perp_y.abs() {
+            if perp_x > 0.0 { Align2::RIGHT_CENTER } else { Align2::LEFT_CENTER }
+        } else {
+            if perp_y > 0.0 { Align2::CENTER_BOTTOM } else { Align2::CENTER_TOP }
+        };
+        (-perp_x * offset, -perp_y * offset, align)
+    }
+}
+
 /// Render the full schematic scene into the canvas area.
 pub(crate) fn draw_scene(
     painter: &egui::Painter,
@@ -77,37 +123,57 @@ pub(crate) fn draw_scene(
                 colors::SYMBOL_PIN,
                 1.5,
             );
-            // Pin name near the body end of the pin
+
+            // Pin name near the body end (end point) of the pin
+            // Position based on pin direction for correct placement
             if !pin.name.is_empty() {
+                let (name_offset_x, name_offset_y, name_align) =
+                    pin_text_offsets(&pin.start, &pin.end, true);
                 let name_pos = viewport.world_to_screen(
                     rect,
                     KicadPoint {
-                        x: pin.end.x + 1.0,
-                        y: pin.end.y - 1.5,
+                        x: pin.end.x + name_offset_x,
+                        y: pin.end.y + name_offset_y,
                     },
                 );
+                // Use font size from name_effects if available
+                let font_size = pin.name_effects
+                    .as_ref()
+                    .and_then(|e| e.font_size)
+                    .map(|s| s.width as f32)
+                    .unwrap_or(8.0)
+                    .max(5.0);
                 painter.text(
                     name_pos,
-                    Align2::LEFT_TOP,
+                    name_align,
                     &pin.name,
-                    FontId::proportional(8.0),
+                    FontId::proportional(font_size),
                     colors::SYMBOL_PIN_NAME,
                 );
             }
-            // Pin number near the external end of the pin
+
+            // Pin number near the external end (start point) of the pin
             if !pin.number.is_empty() {
+                let (num_offset_x, num_offset_y, num_align) =
+                    pin_text_offsets(&pin.start, &pin.end, false);
                 let num_pos = viewport.world_to_screen(
                     rect,
                     KicadPoint {
-                        x: pin.start.x + 1.0,
-                        y: pin.start.y + 1.5,
+                        x: pin.start.x + num_offset_x,
+                        y: pin.start.y + num_offset_y,
                     },
                 );
+                let font_size = pin.number_effects
+                    .as_ref()
+                    .and_then(|e| e.font_size)
+                    .map(|s| s.width as f32)
+                    .unwrap_or(7.0)
+                    .max(5.0);
                 painter.text(
                     num_pos,
-                    Align2::LEFT_BOTTOM,
+                    num_align,
                     &pin.number,
-                    FontId::proportional(7.0),
+                    FontId::monospace(font_size),
                     colors::SYMBOL_PIN_NUMBER,
                 );
             }
