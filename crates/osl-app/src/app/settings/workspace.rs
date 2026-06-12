@@ -1,10 +1,19 @@
+//! Settings workspace — application configuration center.
+//!
+//! Organized sections:
+//! - Theme gallery (left/top)
+//! - Workspace paths (document, library)
+//! - Runtime / Solver paths (ngspice, Xyce)
+//! - Simulation defaults summary
+//! - Localization
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::{StudioLocale, UiText};
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 
 impl NekoSpiceApp {
-    /// draw settings center workspace。
+    /// Draw settings center workspace.
     pub(crate) fn draw_settings_center_workspace(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -24,6 +33,8 @@ impl NekoSpiceApp {
                     ui.add_space(10.0);
                     self.draw_settings_runtime_section(ui);
                     ui.add_space(10.0);
+                    self.draw_settings_simulation_defaults(ui);
+                    ui.add_space(10.0);
                     self.draw_settings_localization_section(ui);
                 });
             } else {
@@ -35,6 +46,8 @@ impl NekoSpiceApp {
                         self.draw_settings_theme_gallery(ui);
                         ui.add_space(10.0);
                         self.draw_settings_workspace_section(ui);
+                        ui.add_space(10.0);
+                        self.draw_settings_simulation_defaults(ui);
                     });
                     ui.add_space(spacing);
                     ui.vertical(|ui| {
@@ -98,6 +111,44 @@ impl NekoSpiceApp {
         });
     }
 
+    /// Simulation defaults section — shows current solver options at a glance.
+    fn draw_settings_simulation_defaults(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        let opts = &self.simulation_profile_editor.options;
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(mode, "Simulation Defaults"));
+            ui.add_space(4.0);
+
+            let preset = &self.simulation_profile_editor.active_preset;
+            if preset != "default" {
+                ui.horizontal(|ui| {
+                    ui.label(StudioTheme::muted_for(mode, "Active Preset"));
+                    ui.label(egui::RichText::new(preset).strong().color(self.theme_palette().accent));
+                });
+            }
+
+            egui::Grid::new("settings_sim_defaults")
+                .num_columns(2)
+                .spacing([12.0, 4.0])
+                .show(ui, |ui| {
+                    settings_grid_row(ui, mode, "Temperature", &format!("{} °C", opts.temperature));
+                    settings_grid_row(ui, mode, "Method", &opts.method);
+                    settings_grid_row(ui, mode, "RELTOL", &opts.reltol);
+                    settings_grid_row(ui, mode, "ABSTOL", &opts.abstol);
+                    settings_grid_row(ui, mode, "VNTOL", &opts.vntol);
+                    settings_grid_row(ui, mode, "GMIN", &opts.gmin);
+                    settings_grid_row(ui, mode, "ITL1", &opts.itl1);
+                    settings_grid_row(ui, mode, "ITL4", &opts.itl4);
+                });
+
+            ui.add_space(4.0);
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Edit simulation options in the Simulation workspace Profile Editor.",
+            ));
+        });
+    }
+
     fn draw_settings_localization_section(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -143,4 +194,10 @@ fn settings_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &s
             ui.label(RichText::new(value).color(palette.text));
         });
     });
+}
+
+fn settings_grid_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
+    ui.label(StudioTheme::muted_for(mode, label));
+    ui.label(egui::RichText::new(value).monospace());
+    ui.end_row();
 }
