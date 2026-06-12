@@ -32,24 +32,33 @@ impl NekoSpiceApp {
                 self.text(UiText::DesignReview),
             ));
             ui.horizontal(|ui| {
+                let report = self.document.as_ref().map(|d| d.check_report());
+                let (err, warn, info) = report.as_ref().map(|r| (r.error_count(), r.warning_count(), r.info_count())).unwrap_or((0, 0, 0));
+                let total_issues = err + warn + info;
+                // Score: 100 minus weighted penalties (errors=-8, warnings=-3, info=-1), clamped to [0, 100]
+                let score = (100_i32 - err as i32 * 8 - warn as i32 * 3 - info as i32).max(0).min(100);
+                let score_label = if score >= 80 { "Good" } else if score >= 50 { "Fair" } else { "Needs Work" };
+                let score_color = if score >= 80 { palette.success } else if score >= 50 { palette.warning } else { palette.danger };
                 let (rect, _) =
                     ui.allocate_exact_size(egui::vec2(74.0, 74.0), egui::Sense::hover());
                 let painter = ui.painter_at(rect);
                 painter.circle_stroke(rect.center(), 30.0, egui::Stroke::new(8.0, palette.border));
-                painter.circle_stroke(rect.center(), 30.0, egui::Stroke::new(8.0, palette.success));
+                painter.circle_stroke(rect.center(), 30.0, egui::Stroke::new(8.0, score_color));
                 painter.text(
                     rect.center(),
                     egui::Align2::CENTER_CENTER,
-                    "72",
+                    &score.to_string(),
                     egui::FontId::proportional(20.0),
                     palette.text,
                 );
                 ui.vertical(|ui| {
-                    property_row(ui, mode, self.text(UiText::OverallScore), "Good");
-                    property_row(ui, mode, self.text(UiText::Critical), "3");
-                    property_row(ui, mode, self.text(UiText::Major), "5");
-                    property_row(ui, mode, self.text(UiText::Minor), "8");
-                    property_row(ui, mode, self.text(UiText::Suggestions), "2");
+                    property_row(ui, mode, self.text(UiText::OverallScore), score_label);
+                    property_row(ui, mode, self.text(UiText::Critical), &err.to_string());
+                    property_row(ui, mode, self.text(UiText::Major), &warn.to_string());
+                    property_row(ui, mode, self.text(UiText::Minor), &info.to_string());
+                    if total_issues == 0 {
+                        property_row(ui, mode, self.text(UiText::Suggestions), "none");
+                    }
                 });
             });
         });
