@@ -38,7 +38,7 @@ fn draw_workspace_button(
     let palette = StudioTheme::palette(mode);
     let icon = workspace_icon(ws);
     let width = ui.available_width();
-    let height = 40.0;
+    let height = 44.0;
 
     let fg = if selected {
         palette.accent
@@ -50,15 +50,15 @@ fn draw_workspace_button(
         Vec2::new(width, height),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            ui.add_space(10.0);
+            ui.add_space(12.0);
             ui.label(
                 RichText::new(icon)
                     .color(if selected { palette.accent } else { palette.text })
                     .strong()
-                    .size(17.0),
+                    .size(18.0),
             );
-            ui.add_space(8.0);
-            ui.label(RichText::new(label).color(fg).size(13.5).strong());
+            ui.add_space(10.0);
+            ui.label(RichText::new(label).color(fg).size(14.0).strong());
         },
     );
 

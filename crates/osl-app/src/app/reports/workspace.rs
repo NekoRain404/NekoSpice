@@ -16,11 +16,11 @@ impl NekoSpiceApp {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     self.draw_reports_workspace_header(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_reports_tabs(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_report_summary_metrics(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_reports_tab_body(ui);
                 });
         });
@@ -71,7 +71,7 @@ impl NekoSpiceApp {
                 self.text(UiText::RunOutput),
             );
         });
-        ui.add_space(8.0);
+        ui.add_space(10.0);
         ui.columns(2, |columns| {
             report_metric_card(
                 &mut columns[0],
@@ -118,31 +118,31 @@ impl NekoSpiceApp {
                 ui.vertical(|ui| {
                     ui.set_width((ui.available_width() * 0.58).max(420.0));
                     self.draw_report_measurements_section(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_report_formula_editor_section(ui);
                 });
                 ui.add_space(10.0);
                 ui.vertical(|ui| {
                     ui.set_width(ui.available_width().max(260.0));
                     self.draw_report_plot_annotation_section(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_report_details_section(ui);
                 });
             });
         } else {
             self.draw_report_measurements_section(ui);
-            ui.add_space(8.0);
+            ui.add_space(10.0);
             self.draw_report_plot_annotation_section(ui);
-            ui.add_space(8.0);
+            ui.add_space(10.0);
             self.draw_report_formula_editor_section(ui);
-            ui.add_space(8.0);
+            ui.add_space(10.0);
             self.draw_report_details_section(ui);
         }
     }
 
     fn draw_report_plot_studio(&self, ui: &mut egui::Ui) {
         self.draw_report_plot_annotation_section(ui);
-        ui.add_space(8.0);
+        ui.add_space(10.0);
         self.draw_report_measurements_section(ui);
     }
 
@@ -152,7 +152,7 @@ impl NekoSpiceApp {
                 ui.vertical(|ui| {
                     ui.set_width((ui.available_width() * 0.58).max(420.0));
                     self.draw_report_artifacts_section(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_report_export_section(ui);
                 });
                 ui.add_space(10.0);
@@ -163,9 +163,9 @@ impl NekoSpiceApp {
             });
         } else {
             self.draw_report_artifacts_section(ui);
-            ui.add_space(8.0);
+            ui.add_space(10.0);
             self.draw_report_export_section(ui);
-            ui.add_space(8.0);
+            ui.add_space(10.0);
             self.draw_report_preview_section(ui);
         }
     }

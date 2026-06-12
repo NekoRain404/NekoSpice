@@ -20,7 +20,7 @@ impl NekoSpiceApp {
             mode,
             "Triaged schematic risks, recent run context, and recommended next steps.",
         ));
-        ui.add_space(8.0);
+        ui.add_space(10.0);
         egui::ScrollArea::vertical()
             .id_salt("review_center_scroll")
             .auto_shrink([false, false])
@@ -49,13 +49,13 @@ impl NekoSpiceApp {
                     });
                 }
 
-                ui.add_space(8.0);
+                ui.add_space(10.0);
                 self.draw_review_risk_summary(ui);
-                ui.add_space(8.0);
+                ui.add_space(10.0);
                 self.draw_review_checklist_board(ui);
-                ui.add_space(8.0);
+                ui.add_space(10.0);
                 self.draw_review_recommendation_board(ui);
-                ui.add_space(8.0);
+                ui.add_space(10.0);
                 self.draw_review_waveform_board(ui);
             });
     }
@@ -70,7 +70,7 @@ impl NekoSpiceApp {
             mode,
             "Launch the schematic audit, simulation, or optimization workspace.",
         ));
-        ui.add_space(8.0);
+        ui.add_space(10.0);
 
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(mode, "Review Actions"));
@@ -102,7 +102,7 @@ impl NekoSpiceApp {
             }
         });
 
-        ui.add_space(8.0);
+        ui.add_space(10.0);
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(mode, "Risk Snapshot"));
             review_filter_row(
@@ -141,7 +141,7 @@ impl NekoSpiceApp {
             );
         });
 
-        ui.add_space(8.0);
+        ui.add_space(10.0);
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(mode, "Recent Context"));
             ui.label(StudioTheme::muted_for(

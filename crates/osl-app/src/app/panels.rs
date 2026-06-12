@@ -4,9 +4,9 @@ use super::NekoSpiceApp;
 use super::theme::StudioTheme;
 use eframe::egui::{self, Rect, UiBuilder, pos2};
 
-const TOP_STATUS_HEIGHT: f32 = 44.0;
-const BOTTOM_STATUS_HEIGHT: f32 = 28.0;
-const NAVIGATION_WIDTH: f32 = 160.0;
+const TOP_STATUS_HEIGHT: f32 = 40.0;
+const BOTTOM_STATUS_HEIGHT: f32 = 26.0;
+const NAVIGATION_WIDTH: f32 = 180.0;
 const PROJECT_CONTEXT_WIDTH: f32 = 260.0;
 const WORKSPACE_CONTEXT_WIDTH: f32 = 320.0;
 const REGION_PADDING: f32 = 8.0;

@@ -105,6 +105,7 @@ impl NekoSpiceApp {
     }
 
     /// 导入单个厂商模型文件
+    #[allow(dead_code)]
     pub(crate) fn import_vendor_model_file(&mut self, path: &str) {
         let path = std::path::PathBuf::from(path);
         if !path.is_file() {
@@ -150,6 +151,7 @@ impl NekoSpiceApp {
     }
 
     /// 搜索厂商模型
+    #[allow(dead_code)]
     pub(crate) fn filtered_vendor_models(&self) -> &osl_model::VendorModelCatalog {
         if self.vendor_search.trim().is_empty() {
             &self.vendor_catalog

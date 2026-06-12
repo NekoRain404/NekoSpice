@@ -17,9 +17,9 @@ impl NekoSpiceApp {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             self.draw_schematic_workspace_toolbar(ui);
-            ui.add_space(4.0);
+            ui.add_space(6.0);
             self.draw_schematic_document_tabs(ui);
-            ui.add_space(4.0);
+            ui.add_space(6.0);
             let canvas_height = (ui.available_height() - 220.0).max(280.0);
             let inspector_width = 280.0;
             ui.allocate_ui_with_layout(
@@ -36,7 +36,7 @@ impl NekoSpiceApp {
                         |ui| self.draw_canvas(ui),
                     );
                     // Right-side inspector panel
-                    ui.add_space(4.0);
+                    ui.add_space(6.0);
                     ui.allocate_ui_with_layout(
                         Vec2::new(inspector_width, canvas_height),
                         egui::Layout::top_down(egui::Align::Min),
@@ -276,9 +276,9 @@ impl NekoSpiceApp {
                     }
                 });
 
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 ui.separator();
-                ui.add_space(4.0);
+                ui.add_space(6.0);
 
                 match current_tab {
                     SchematicBottomTab::Waveforms => self.draw_bottom_waveforms_tab(ui),

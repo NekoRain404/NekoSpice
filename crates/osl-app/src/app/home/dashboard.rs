@@ -30,9 +30,9 @@ impl NekoSpiceApp {
                         }
                     });
                 });
-                ui.add_space(SECTION_GAP);
+                ui.add_space(SECTION_GAP + 4.0);
                 self.draw_home_command_center(ui);
-                ui.add_space(SECTION_GAP);
+                ui.add_space(SECTION_GAP + 4.0);
 
                 two_column(
                     self,
@@ -43,9 +43,9 @@ impl NekoSpiceApp {
                         app.draw_quick_actions_panel(ui);
                     },
                 );
-                ui.add_space(SECTION_GAP);
+                ui.add_space(SECTION_GAP + 4.0);
                 self.draw_template_row(ui);
-                ui.add_space(SECTION_GAP);
+                ui.add_space(SECTION_GAP + 4.0);
 
                 two_column(
                     self,
@@ -56,7 +56,7 @@ impl NekoSpiceApp {
                         app.draw_solver_health_panel(ui);
                     },
                 );
-                ui.add_space(SECTION_GAP);
+                ui.add_space(SECTION_GAP + 4.0);
                 two_column(
                     self,
                     ui,

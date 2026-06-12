@@ -28,9 +28,9 @@ impl NekoSpiceApp {
                     }
                         });
                     });
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_optimization_tabs(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     if ui.available_width() >= 820.0 {
                         ui.horizontal_top(|ui| {
                             ui.vertical(|ui| {
@@ -46,7 +46,7 @@ impl NekoSpiceApp {
                     } else {
                         ui.vertical(|ui| {
                             self.draw_optimization_main_panel(ui);
-                            ui.add_space(8.0);
+                            ui.add_space(10.0);
                             self.draw_optimization_summary_panel(ui);
                         });
                     }
@@ -62,7 +62,7 @@ impl NekoSpiceApp {
             mode,
             self.text(UiText::OptimizationCaption),
         ));
-        ui.add_space(8.0);
+        ui.add_space(10.0);
         let run_count = self.simulation_panel.last_run.as_ref()
             .map(|r| r.metadata.parameters.len().max(1).to_string())
             .unwrap_or_else(|| "0".to_string());

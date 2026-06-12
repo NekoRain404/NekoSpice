@@ -15,9 +15,9 @@ impl NekoSpiceApp {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     self.draw_library_workspace_header(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_library_filter_tabs(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
 
                     // Vendor models toggle
                     ui.horizontal(|ui| {
@@ -29,11 +29,11 @@ impl NekoSpiceApp {
 
                     if self.show_vendor_panel {
                         self.draw_vendor_model_panel(ui);
-                        ui.add_space(8.0);
+                        ui.add_space(10.0);
                     }
 
                     self.draw_library_model_status_cards(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     if ui.available_width() >= 920.0 {
                         ui.horizontal_top(|ui| {
                             ui.vertical(|ui| {
@@ -47,7 +47,7 @@ impl NekoSpiceApp {
                         });
                     } else {
                         self.draw_library_symbol_list(ui);
-                        ui.add_space(8.0);
+                        ui.add_space(10.0);
                         ui.vertical(|ui| {
                             self.draw_library_model_browser(ui);
                         });
@@ -77,7 +77,7 @@ impl NekoSpiceApp {
                 }
             });
         });
-        ui.add_space(8.0);
+        ui.add_space(10.0);
         ui.horizontal(|ui| {
             ui.label(StudioTheme::muted_for(mode, self.text(UiText::Search)));
             ui.text_edit_singleline(&mut self.symbol_search);

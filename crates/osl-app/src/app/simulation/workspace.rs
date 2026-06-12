@@ -28,7 +28,7 @@ impl NekoSpiceApp {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             self.draw_simulation_workspace_header(ui);
-            ui.add_space(6.0);
+            ui.add_space(8.0);
 
             // Sub-view tab bar: Overview | Profile Editor
             self.draw_simulation_sub_view_tabs(ui);

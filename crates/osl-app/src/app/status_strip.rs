@@ -184,9 +184,9 @@ impl NekoSpiceApp {
 
 fn status_block(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
     let palette = StudioTheme::palette(mode);
-    ui.vertical(|ui| {
+    ui.horizontal(|ui| {
         ui.label(RichText::new(label).small().color(palette.text_muted));
-        ui.label(RichText::new(value).strong().color(palette.text));
+        ui.label(RichText::new(value).small().strong().color(palette.text));
     });
 }
 

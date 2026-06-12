@@ -148,7 +148,7 @@ impl StudioTheme {
 
         // 面板样式
         style.spacing.item_spacing = Vec2::new(6.0, 4.0);
-        style.spacing.button_padding = Vec2::new(10.0, 5.0);
+        style.spacing.button_padding = Vec2::new(12.0, 6.0);
         style.spacing.window_margin = egui::Margin::same(12);
 
         // 圆角
@@ -207,14 +207,6 @@ impl StudioTheme {
     }
 
     /// 创建卡片帧样式
-    pub(crate) fn card_frame_for(mode: StudioThemeMode) -> egui::Frame {
-        let palette = Self::palette(mode);
-        egui::Frame::NONE
-            .fill(palette.panel_soft)
-            .inner_margin(egui::Margin::same(10))
-            .corner_radius(CornerRadius::same(4))
-            .stroke(Stroke::new(1.0, palette.border))
-    }
 
     /// 区段标题样式
     pub(crate) fn section_title_for(mode: StudioThemeMode, text: impl Into<String>) -> RichText {
@@ -242,18 +234,6 @@ impl StudioTheme {
         RichText::new("\u{25CF}").color(color).size(8.0)
     }
 
-    /// 工具栏按钮样式
-    pub(crate) fn toolbar_button_style(mode: StudioThemeMode) -> egui::Style {
-        let palette = Self::palette(mode);
-        let mut style = egui::Style::default();
-        style.visuals.widgets.inactive.bg_fill = Color32::TRANSPARENT;
-        style.visuals.widgets.inactive.bg_stroke = Stroke::NONE;
-        style.visuals.widgets.hovered.bg_fill = palette.panel_hover;
-        style.visuals.widgets.hovered.bg_stroke = Stroke::NONE;
-        style.visuals.override_text_color = Some(palette.text);
-        style.spacing.button_padding = Vec2::new(8.0, 4.0);
-        style
-    }
 }
 
 /// 诊断计数摘要（用于状态栏）

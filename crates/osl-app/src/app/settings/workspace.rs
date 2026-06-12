@@ -19,11 +19,11 @@ impl NekoSpiceApp {
             if width < 700.0 {
                 ui.vertical(|ui| {
                     self.draw_settings_theme_gallery(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_settings_workspace_section(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_settings_runtime_section(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_settings_localization_section(ui);
                 });
             } else {
@@ -33,14 +33,14 @@ impl NekoSpiceApp {
                     ui.vertical(|ui| {
                         ui.set_width(left_width);
                         self.draw_settings_theme_gallery(ui);
-                        ui.add_space(8.0);
+                        ui.add_space(10.0);
                         self.draw_settings_workspace_section(ui);
                     });
                     ui.add_space(spacing);
                     ui.vertical(|ui| {
                         ui.set_width(right_width);
                         self.draw_settings_runtime_section(ui);
-                        ui.add_space(8.0);
+                        ui.add_space(10.0);
                         self.draw_settings_localization_section(ui);
                     });
                 });

@@ -51,11 +51,11 @@ impl NekoSpiceApp {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     self.draw_waveform_workspace_header(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_waveform_workspace_toolbar(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_waveform_plot_section(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     self.draw_waveform_detail_sections(ui);
                 });
         });
