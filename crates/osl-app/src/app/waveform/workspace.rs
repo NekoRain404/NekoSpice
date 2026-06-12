@@ -1,3 +1,8 @@
+//! Waveform workspace — center panel for waveform analysis.
+//!
+//! Provides analysis tabs (Time Domain, Bode, FFT, Noise, Eye) and
+//! displays simulation waveform data with cursor overlay and measurements.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
@@ -22,7 +27,6 @@ impl WaveformAnalysisTab {
         Self::Eye,
     ];
 
-    /// text key。
     pub(crate) fn text_key(self) -> UiText {
         match self {
             Self::TimeDomain => UiText::TimeDomain,
@@ -30,6 +34,17 @@ impl WaveformAnalysisTab {
             Self::Fft => UiText::FftAnalysis,
             Self::Noise => UiText::NoiseAnalysis,
             Self::Eye => UiText::EyeDiagram,
+        }
+    }
+
+    /// Description of what this analysis tab shows.
+    pub(crate) fn description(self) -> &'static str {
+        match self {
+            Self::TimeDomain => "Voltage/current vs. time",
+            Self::Bode => "Magnitude and phase vs. frequency",
+            Self::Fft => "Frequency spectrum of time-domain signals",
+            Self::Noise => "Noise spectral density",
+            Self::Eye => "Eye diagram for signal integrity",
         }
     }
 }
@@ -41,7 +56,7 @@ pub(crate) struct WaveformWorkspaceState {
 }
 
 impl NekoSpiceApp {
-    /// draw waveform center workspace。
+    /// Draw waveform center workspace.
     pub(crate) fn draw_waveform_center_workspace(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
         let mode = self.theme_mode();
@@ -63,13 +78,13 @@ impl NekoSpiceApp {
 
     fn draw_waveform_workspace_header(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
+        let palette = self.theme_palette();
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 ui.heading(self.text(UiText::WaveformAnalysis));
-                ui.label(StudioTheme::muted_for(
-                    mode,
-                    self.text(UiText::WaveformAnalysisCaption),
-                ));
+                // Show analysis tab description as subtitle
+                let tab_desc = self.waveform_workspace.analysis_tab.description();
+                ui.label(StudioTheme::muted_for(mode, tab_desc));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                 let running = self.simulation_panel.active_task.is_some();
@@ -81,6 +96,18 @@ impl NekoSpiceApp {
                     .clicked()
                 {
                     self.run_simulation_from_panel();
+                }
+                // Show signal count if available
+                if let Some(run) = &self.simulation_panel.last_run {
+                    if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) =
+                        &run.waveform
+                    {
+                        ui.label(StudioTheme::muted_for(
+                            mode,
+                            format!("{} signals", summary.variable_count),
+                        ));
+                        ui.separator();
+                    }
                 }
             });
         });
