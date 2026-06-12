@@ -114,11 +114,43 @@ impl NekoSpiceApp {
     }
 
     /// draw bottom status strip。
+    /// draw bottom status strip with simulation progress and context info.
     pub(super) fn draw_bottom_status_strip(&self, ui: &mut egui::Ui) {
         let snapshot = self.studio_status_snapshot();
         let mode = self.theme_mode();
+        let palette = self.theme_palette();
         ui.horizontal(|ui| {
-            // Cursor world coordinates
+            // Simulation status (prominent when running)
+            if self.simulation_panel.active_task.is_some() {
+                ui.label(StudioTheme::status_dot(palette.warning));
+                ui.label(
+                    egui::RichText::new(format!(
+                        "Simulating ({})",
+                        self.simulation_panel.backend.label()
+                    ))
+                    .color(palette.warning)
+                    .strong(),
+                );
+                ui.separator();
+            } else if let Some(run) = &self.simulation_panel.last_run {
+                let color = match run.metadata.status {
+                    osl_core::RunStatus::Passed => palette.success,
+                    osl_core::RunStatus::Failed => palette.danger,
+                };
+                ui.label(StudioTheme::status_dot(color));
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} {}ms",
+                        run.metadata.status.as_str(),
+                        run.metadata.duration_ms,
+                    ))
+                    .color(color)
+                    .small(),
+                );
+                ui.separator();
+            }
+
+            // Cursor world coordinates (schematic workspace)
             if let Some(cursor) = self.cursor_world {
                 ui.label(StudioTheme::muted_for(
                     mode,
