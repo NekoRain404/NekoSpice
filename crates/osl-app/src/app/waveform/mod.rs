@@ -8,5 +8,6 @@ pub(crate) mod preview_primitives;
 pub(crate) mod workspace;
 pub(crate) mod workspace_sections;
 pub(crate) mod workspace_widgets;
+pub(crate) mod freq_domain_preview;
 
 pub(crate) use workspace::WaveformWorkspaceState;

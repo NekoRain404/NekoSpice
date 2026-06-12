@@ -251,7 +251,7 @@ fn analysis_modes() -> [(
     osl_kicad::KicadSimulationDirectiveKind,
     &'static str,
     &'static str,
-); 5] {
+); 7] {
     [
         (
             osl_kicad::KicadSimulationDirectiveKind::Op,
@@ -273,6 +273,16 @@ fn analysis_modes() -> [(
             osl_kicad::KicadSimulationDirectiveKind::Noise,
             ".noise",
             "noise analysis",
+        ),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Disto,
+            ".disto",
+            "distortion",
+        ),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Sens,
+            ".sens",
+            "sensitivity",
         ),
     ]
 }

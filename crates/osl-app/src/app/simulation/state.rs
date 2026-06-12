@@ -82,6 +82,22 @@ pub(crate) enum AnalysisParams {
         /// Stop frequency (Hz)
         fstop: String,
     },
+    /// `.disto fstart fstop [fstep [maxharmonic]]` — distortion analysis
+    Disto {
+        /// Start frequency (Hz)
+        fstart: String,
+        /// Stop frequency (Hz)
+        fstop: String,
+        /// Frequency step (0 = automatic)
+        fstep: String,
+        /// Maximum harmonic order (default 3)
+        maxharmonic: String,
+    },
+    /// `.sens output_variable` — DC sensitivity analysis
+    Sens {
+        /// Output variable (e.g. "V(out)")
+        output: String,
+    },
 }
 
 /// `.step` parameter sweep configuration.
@@ -179,6 +195,15 @@ impl AnalysisParams {
                 fstart: "1".to_string(),
                 fstop: "100Meg".to_string(),
             },
+            KicadSimulationDirectiveKind::Disto => Self::Disto {
+                fstart: "1".to_string(),
+                fstop: "100k".to_string(),
+                fstep: "0".to_string(),
+                maxharmonic: "3".to_string(),
+            },
+            KicadSimulationDirectiveKind::Sens => Self::Sens {
+                output: "V(out)".to_string(),
+            },
             _ => Self::default(),
         }
     }
@@ -208,6 +233,18 @@ impl AnalysisParams {
             Self::Op => String::new(),
             Self::Noise { output, input_source, sweep_type, npoints, fstart, fstop } => {
                 format!("{} {} {} {} {} {}", output.trim(), input_source.trim(), sweep_type, npoints, fstart, fstop)
+            },
+            Self::Disto { fstart, fstop, fstep, maxharmonic } => {
+                if fstep.trim().is_empty() || fstep == "0" {
+                    format!("{} {}", fstart, fstop)
+                } else if maxharmonic.trim().is_empty() || maxharmonic == "3" {
+                    format!("{} {} {}", fstart, fstop, fstep)
+                } else {
+                    format!("{} {} {} {}", fstart, fstop, fstep, maxharmonic)
+                }
+            },
+            Self::Sens { output } => {
+                output.trim().to_string()
             },
         }
     }

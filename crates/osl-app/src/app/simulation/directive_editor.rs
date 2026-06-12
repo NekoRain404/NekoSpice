@@ -35,6 +35,8 @@ impl NekoSpiceApp {
                     KicadSimulationDirectiveKind::Dc,
                     KicadSimulationDirectiveKind::Op,
                     KicadSimulationDirectiveKind::Noise,
+                    KicadSimulationDirectiveKind::Disto,
+                    KicadSimulationDirectiveKind::Sens,
                 ] {
                     let label = kind.to_string();
                     let active = self.simulation_panel.directive_kind == kind;
@@ -157,6 +159,30 @@ impl NekoSpiceApp {
                     mode,
                     "Operating point analysis — calculates DC bias conditions.",
                 ));
+            }
+            AnalysisParams::Disto { fstart, fstop, fstep, maxharmonic } => {
+                egui::Grid::new("disto_params_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
+                        labeled_edit(ui, mode, "Fstart", fstart, "1")
+                            .on_hover_text("Start frequency (Hz)");
+                        labeled_edit(ui, mode, "Fstop", fstop, "100k")
+                            .on_hover_text("Stop frequency (Hz)");
+                        labeled_edit(ui, mode, "Fstep", fstep, "auto")
+                            .on_hover_text("Frequency step (0 = automatic)");
+                        labeled_edit(ui, mode, "MaxHarm", maxharmonic, "3")
+                            .on_hover_text("Maximum harmonic order");
+                    });
+            }
+            AnalysisParams::Sens { output } => {
+                egui::Grid::new("sens_params_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
+                        labeled_edit(ui, mode, "Output", output, "V(out)")
+                            .on_hover_text("Output variable for sensitivity analysis");
+                    });
             }
             AnalysisParams::Noise { output, input_source, sweep_type, npoints, fstart, fstop } => {
                 egui::Grid::new("noise_params_grid")

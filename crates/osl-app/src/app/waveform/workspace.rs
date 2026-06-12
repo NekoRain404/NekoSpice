@@ -49,10 +49,87 @@ impl WaveformAnalysisTab {
     }
 }
 
+/// Viewport state for interactive waveform viewing.
+///
+/// Tracks the visible time/frequency range and supports zoom/pan
+/// via mouse scroll and drag interactions.
+#[derive(Debug, Clone)]
+pub(crate) struct WaveformViewport {
+    /// Left edge of the visible range (time or frequency).
+    pub(crate) x_min: f64,
+    /// Right edge of the visible range.
+    pub(crate) x_max: f64,
+    /// Bottom edge of the visible Y range.
+    pub(crate) y_min: f64,
+    /// Top edge of the visible Y range.
+    pub(crate) y_max: f64,
+    /// Whether the viewport has been user-modified from the default.
+    pub(crate) user_modified: bool,
+}
+
+impl Default for WaveformViewport {
+    fn default() -> Self {
+        Self {
+            x_min: 0.0,
+            x_max: 1.0,
+            y_min: -1.0,
+            y_max: 1.0,
+            user_modified: false,
+        }
+    }
+}
+
+impl WaveformViewport {
+    /// Zoom in/out by a factor around the given center point.
+    pub(crate) fn zoom(&mut self, factor: f64, center_x: f64) {
+        let x_range = self.x_max - self.x_min;
+        let y_range = self.y_max - self.y_min;
+        let new_x_range = x_range / factor;
+        let new_y_range = y_range / factor;
+        let x_ratio = ((center_x - self.x_min) / x_range).clamp(0.0, 1.0);
+        self.x_min = center_x - new_x_range * x_ratio;
+        self.x_max = center_x + new_x_range * (1.0 - x_ratio);
+        self.y_min = self.y_min + (y_range - new_y_range) * 0.5;
+        self.y_max = self.y_max - (y_range - new_y_range) * 0.5;
+        self.user_modified = true;
+    }
+
+    /// Pan by a fraction of the visible range.
+    pub(crate) fn pan(&mut self, dx: f64, dy: f64) {
+        let x_range = self.x_max - self.x_min;
+        let y_range = self.y_max - self.y_min;
+        self.x_min += dx * x_range;
+        self.x_max += dx * x_range;
+        self.y_min -= dy * y_range;
+        self.y_max -= dy * y_range;
+        self.user_modified = true;
+    }
+
+    /// Reset viewport to fit the given data range.
+    pub(crate) fn fit_to_data(&mut self, x_min: f64, x_max: f64, y_min: f64, y_max: f64) {
+        let x_margin = (x_max - x_min).abs() * 0.05;
+        let y_margin = (y_max - y_min).abs().max(1.0) * 0.1;
+        self.x_min = x_min - x_margin;
+        self.x_max = x_max + x_margin;
+        self.y_min = y_min - y_margin;
+        self.y_max = y_max + y_margin;
+        self.user_modified = false;
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct WaveformWorkspaceState {
     pub(crate) analysis_tab: WaveformAnalysisTab,
     pub(crate) cursor_overlay: bool,
+    /// Interactive viewport for zoom/pan.
+    pub(crate) viewport: WaveformViewport,
+    /// Cursor position in data coordinates (if cursor overlay is active).
+    pub(crate) cursor_x: Option<f64>,
+    pub(crate) cursor_y: Option<f64>,
+    /// Whether the user is currently dragging to pan.
+    pub(crate) is_panning: bool,
+    /// Drag start position for pan calculation.
+    pub(crate) pan_start: Option<egui::Pos2>,
 }
 
 impl NekoSpiceApp {

@@ -43,11 +43,12 @@ NekoSpice/
 │   │       ├── netlist.rs        # 网表验证与转换
 │   │       └── ...
 │   │
-│   ├── osl-waveform/             # 波形数据解析（raw/csv）
+│   ├── osl-waveform/             # 波形数据解析（raw/csv/FFT）
 │   │   └── src/
-│   │       ├── lib.rs
+│   │       ├── lib.rs            # 波形数据结构、测量、CSV 导出
 │   │       ├── raw_parser.rs     # ngspice binary/ASCII raw 解析
 │   │       ├── csv_parser.rs     # CSV 波形解析
+│   │       ├── fft.rs            # FFT 计算（Cooley-Tukey）、窗函数、Bode
 │   │       └── ...
 │   │
 │   ├── osl-report/               # HTML/JSON 报告生成

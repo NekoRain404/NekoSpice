@@ -27,6 +27,9 @@ impl NekoSpiceApp {
             KicadSimulationDirectiveKind::Ac => ".ac".to_string(),
             KicadSimulationDirectiveKind::Dc => ".dc".to_string(),
             KicadSimulationDirectiveKind::Op => ".op".to_string(),
+            KicadSimulationDirectiveKind::Noise => ".noise".to_string(),
+            KicadSimulationDirectiveKind::Disto => ".disto".to_string(),
+            KicadSimulationDirectiveKind::Sens => ".sens".to_string(),
             _ => ".tran".to_string(),
         };
         let analysis_body = self.simulation_panel.analysis_params.to_body();

@@ -21,6 +21,8 @@ pub enum KicadSimulationDirectiveKind {
     Step,
     Noise,
     Measure,
+    Disto,
+    Sens,
     Other,
 }
 
@@ -43,6 +45,8 @@ impl KicadSimulationDirectiveKind {
             Self::Step => Some(".step"),
             Self::Noise => Some(".noise"),
             Self::Measure => Some(".measure"),
+            Self::Disto => Some(".disto"),
+            Self::Sens => Some(".sens"),
             Self::Other => None,
         }
     }
@@ -67,13 +71,15 @@ impl KicadSimulationDirectiveKind {
             ".step" => Self::Step,
             ".noise" => Self::Noise,
             ".measure" | ".meas" => Self::Measure,
+            ".disto" => Self::Disto,
+            ".sens" => Self::Sens,
             _ => Self::Other,
         })
     }
 
     /// is analysis。
     pub fn is_analysis(self) -> bool {
-        matches!(self, Self::Tran | Self::Ac | Self::Dc | Self::Op | Self::Noise)
+        matches!(self, Self::Tran | Self::Ac | Self::Dc | Self::Op | Self::Noise | Self::Disto | Self::Sens)
     }
 }
 
@@ -95,6 +101,8 @@ impl fmt::Display for KicadSimulationDirectiveKind {
             Self::Step => "step",
             Self::Noise => "noise",
             Self::Measure => "measure",
+            Self::Disto => "disto",
+            Self::Sens => "sens",
             Self::Other => "other",
         })
     }
@@ -125,6 +133,8 @@ impl FromStr for KicadSimulationDirectiveKind {
             "step" => Ok(Self::Step),
             "noise" => Ok(Self::Noise),
             "measure" | "meas" => Ok(Self::Measure),
+            "disto" => Ok(Self::Disto),
+            "sens" => Ok(Self::Sens),
             "other" | "raw" => Ok(Self::Other),
             _ => Err(OslError::InvalidInput(format!(
                 "unsupported KiCad simulation directive kind '{value}'"

@@ -2,6 +2,8 @@ use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use super::preview::{draw_stacked_waveform_preview, format_compact_f64};
+use super::freq_domain_preview::{draw_fft_magnitude_plot, draw_bode_plot, draw_noise_plot};
+use super::preview::draw_interactive_waveform_plot;
 use super::workspace::WaveformAnalysisTab;
 use super::workspace_widgets::{
     MeasurementTableLabels, cursor_row, measurement_table, run_stat_row, trace_chip,
@@ -43,22 +45,69 @@ impl NekoSpiceApp {
         });
     }
 
-    /// draw waveform plot section。
+    /// Draw waveform plot section, dispatching to the correct visualization
+    /// based on the currently selected analysis tab.
     pub(crate) fn draw_waveform_plot_section(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
+        let tab = self.waveform_workspace.analysis_tab;
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             match self.current_waveform_summary().cloned() {
                 Some(summary) => {
                     self.sync_selected_waveform_for_summary(&summary);
                     self.draw_waveform_trace_chips(ui, &summary);
                     ui.add_space(6.0);
-                    draw_stacked_waveform_preview(
-                        ui,
-                        mode,
-                        &summary,
-                        self.simulation_panel.selected_waveform_signal.as_deref(),
-                        330.0,
-                    );
+                    match tab {
+                        super::workspace::WaveformAnalysisTab::TimeDomain => {
+                            draw_interactive_waveform_plot(
+                                ui,
+                                mode,
+                                &summary,
+                                self.simulation_panel.selected_waveform_signal.as_deref(),
+                                &mut self.waveform_workspace.viewport,
+                                self.waveform_workspace.cursor_overlay,
+                                &mut self.waveform_workspace.cursor_x,
+                                &mut self.waveform_workspace.cursor_y,
+                                &mut self.waveform_workspace.is_panning,
+                                &mut self.waveform_workspace.pan_start,
+                                330.0,
+                            );
+                        }
+                        super::workspace::WaveformAnalysisTab::Fft => {
+                            draw_fft_magnitude_plot(
+                                ui,
+                                mode,
+                                &summary,
+                                self.simulation_panel.selected_waveform_signal.as_deref(),
+                            );
+                        }
+                        super::workspace::WaveformAnalysisTab::Bode => {
+                            draw_bode_plot(
+                                ui,
+                                mode,
+                                &summary,
+                                self.simulation_panel.selected_waveform_signal.as_deref(),
+                            );
+                        }
+                        super::workspace::WaveformAnalysisTab::Noise => {
+                            draw_noise_plot(
+                                ui,
+                                mode,
+                                &summary,
+                                self.simulation_panel.selected_waveform_signal.as_deref(),
+                            );
+                        }
+                        super::workspace::WaveformAnalysisTab::Eye => {
+                            // Eye diagram requires multiple periods — show time domain with note
+                            draw_stacked_waveform_preview(
+                                ui,
+                                mode,
+                                &summary,
+                                self.simulation_panel.selected_waveform_signal.as_deref(),
+                                330.0,
+                            );
+                            ui.label(StudioTheme::muted_for(mode, "Eye diagram requires multi-period data"));
+                        }
+                    }
                 }
                 None => waveform_empty_state(
                     ui,
@@ -301,12 +350,7 @@ impl NekoSpiceApp {
                     }
                 }
                 if ui.button(self.text(UiText::ExportCsv)).clicked() {
-                    if let Some(run) = &self.simulation_panel.last_run {
-                        let csv_path = run.output_dir.join("waveform.csv");
-                        self.status_message = Some(format!("CSV: {}", csv_path.display()));
-                    } else {
-                        self.status_message = Some("No simulation data to export".to_string());
-                    }
+                    self.export_waveform_csv();
                 }
                 if ui.button(self.text(UiText::ExportReport)).clicked() {
                     if let Some(run) = &self.simulation_panel.last_run {
@@ -323,5 +367,44 @@ impl NekoSpiceApp {
                 }
             });
         });
+    }
+}
+
+impl NekoSpiceApp {
+    /// Export current waveform data to CSV file using a save dialog.
+    pub(crate) fn export_waveform_csv(&mut self) {
+        let Some(run) = &self.simulation_panel.last_run else {
+            self.status_message = Some("No simulation data to export".to_string());
+            return;
+        };
+
+        // Load the raw waveform file and convert to CSV
+        let raw_path = run.output_dir.join("waveform.raw");
+        let Ok(waveform) = osl_waveform::read_ngspice_raw(&raw_path) else {
+            self.status_message = Some("Failed to read waveform data".to_string());
+            return;
+        };
+
+        let Ok(csv_content) = waveform.to_csv() else {
+            self.status_message = Some("Failed to convert waveform to CSV".to_string());
+            return;
+        };
+
+        // Show save dialog
+        let dialog = rfd::FileDialog::new()
+            .add_filter("CSV", &["csv"])
+            .set_file_name("waveform.csv");
+
+        if let Some(path) = dialog.save_file() {
+            match std::fs::write(&path, &csv_content) {
+                Ok(()) => self.status_message = Some(format!(
+                    "CSV exported: {} ({} signals, {} points)",
+                    path.display(),
+                    waveform.variables().len(),
+                    waveform.point_count(),
+                )),
+                Err(e) => self.status_message = Some(format!("Export failed: {e}")),
+            }
+        }
     }
 }

@@ -23,3 +23,5 @@ Thumbs.db
 *.swo
 *~
 docs/ui/
+docs/screenshot_current.png
+tmp/

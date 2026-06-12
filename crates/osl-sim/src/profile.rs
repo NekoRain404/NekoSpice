@@ -662,7 +662,7 @@ mod tests {
     #[test]
     fn parse_log_extracts_errors() {
         let log = "ngspice warning: singular matrix\nError: cannot find model\nDone.";
-        let (errors, warnings, summary) = parse_ngspice_log(log);
+        let (errors, warnings, _summary) = parse_ngspice_log(log);
         assert!(errors.iter().any(|e| e.contains("cannot find model")));
         assert!(warnings.iter().any(|w| w.contains("singular matrix")));
     }

@@ -1,3 +1,4 @@
+pub mod fft;
 use osl_core::{OslError, OslResult, json_escape, read_text};
 use std::fs;
 use std::path::Path;
