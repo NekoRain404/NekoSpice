@@ -214,8 +214,8 @@ impl NekoSpiceApp {
                     }
                 }
             }
-            if ui.add(egui::Button::new(egui::RichText::new("+").size(14.0).strong().color(palette.text)).fill(palette.panel_soft).stroke(egui::Stroke::new(1.0, palette.border_strong))).clicked() {
-                self.status_message = Some(self.text(UiText::NewSchematic).to_string());
+            if ui.add(egui::Button::new(egui::RichText::new("+").size(14.0).strong().color(palette.text)).fill(palette.panel_soft).stroke(egui::Stroke::new(1.0, palette.border_strong))).on_hover_text(self.text(UiText::NewSchematic)).clicked() {
+                self.open_file_dialog();
             }
         });
     }

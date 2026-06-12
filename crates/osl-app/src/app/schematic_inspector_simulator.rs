@@ -71,8 +71,26 @@ impl NekoSpiceApp {
 
 fn draw_measurement_rows(app: &NekoSpiceApp, ui: &mut egui::Ui) {
     let mode = app.theme_mode();
-    property_row(ui, mode, "V(IN)", "1.000 V");
-    property_row(ui, mode, "V(OUT)", "2.412 V");
-    property_row(ui, mode, "I(R1)", "3.20 mA");
-    property_row(ui, mode, app.text(UiText::TemperatureSweep), "27 C");
+    if let Some(run) = &app.simulation_panel.last_run {
+        if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) = &run.waveform {
+            for var in summary.variables.iter().take(6) {
+                property_row(
+                    ui,
+                    mode,
+                    &var.name,
+                    &format!("{}: {} ({:.3})", var.unit, var.name, var.max),
+                );
+            }
+            if summary.variables.is_empty() {
+                property_row(ui, mode, app.text(UiText::LiveMeasurements), "No signals");
+            }
+        } else {
+            property_row(ui, mode, app.text(UiText::LiveMeasurements), "Processing...");
+        }
+    } else {
+        property_row(ui, mode, "V(IN)", "--");
+        property_row(ui, mode, "V(OUT)", "--");
+        property_row(ui, mode, "I(R1)", "--");
+        property_row(ui, mode, app.text(UiText::TemperatureSweep), "27 C");
+    }
 }

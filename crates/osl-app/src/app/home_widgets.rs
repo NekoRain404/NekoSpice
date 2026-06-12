@@ -150,10 +150,10 @@ pub(super) fn recommendation_row(
     action: &str,
 ) {
     ui.horizontal(|ui| {
-        ui.label(StudioTheme::accent_for(mode, "RUN"));
+        ui.label(StudioTheme::accent_for(mode, "REC"));
         ui.label(title);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let _ = ui.small_button(action);
+            ui.small_button(action);
         });
     });
     ui.separator();
