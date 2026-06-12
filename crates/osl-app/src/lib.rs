@@ -7,6 +7,7 @@
 mod app;
 mod canvas;
 mod document;
+mod document_ops;
 mod library;
 mod placement_config;
 mod report_summary;
