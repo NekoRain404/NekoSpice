@@ -138,17 +138,25 @@ NekoSpice/
 │           │   │       └── widgets.rs     # 检查器组件
 │           │   │
 │           │   ├── simulation/   # ── 仿真工作区 ──
-│           │   │   ├── panel.rs           # 仿真右侧面板编排 (backend, run button, quick config)
-│           │   │   ├── state.rs           # 后端选择枚举
-│           │   │   ├── directive_editor.rs # 仿真指令编辑器
+│           │   │   ├── panel.rs           # 仿真右侧面板编排
+│           │   │   ├── state.rs           # 后端选择 + AnalysisParams 结构化参数
+│           │   │   ├── directive_editor.rs # 结构化分析参数编辑器
 │           │   │   ├── run_controller.rs  # 仿真启动与轮询
-│           │   │   ├── status_display.rs  # 运行结果/日志查看
+│           │   │   ├── status_display.rs  # 运行结果/日志/警告查看
 │           │   │   ├── workspace.rs       # 仿真中心工作区
 │           │   │   ├── workspace_sections.rs # 工作区分节
-│           │   │   ├── profile_editor.rs  # 仿真配置编辑器 (3-column, presets, .ic/.nodeset)
-│           │   │   ├── profile_editor_options.rs # 求解器选项 (5 sections: env, transient, convergence, output, .ic)
-│           │   │   ├── profile_editor_sections.rs # 配置分节
-│           │   │   └── artifacts_panel.rs # 仿真产物面板
+│           │   │   ├── profile_editor.rs  # 仿真配置编辑器 + SimOptions
+│           │   │   ├── profile_editor_options.rs # 配置编辑器编排 (35行)
+│           │   │   ├── options_environment.rs # 温度设置 (26行)
+│           │   │   ├── options_solver.rs   # 瞬态求解器+收敛+输出 (103行)
+│           │   │   ├── options_ic.rs      # 初始条件 .ic/.nodeset (61行)
+│           │   │   ├── options_status.rs  # 运行状态+最近运行 (90行)
+│           │   │   ├── profile_editor_sections.rs # 分析+组件参数
+│           │   │   ├── profile_editor_widgets.rs # 共享组件
+│           │   │   ├── waveform_panel.rs  # 波形预览面板
+│           │   │   ├── report_panel.rs    # 报告面板
+│           │   │   ├── artifacts_panel.rs # 仿真产物面板
+│           │   │   └── workspace_widgets.rs # 共享工作区组件
 │           │   │
 │           │   ├── library/      # ── 符号库工作区 ──
 │           │   │   ├── workspace.rs       # 库中心工作区
