@@ -127,12 +127,7 @@ impl NekoSpiceApp {
         }
         let palette = self.theme_palette();
         ui.painter().rect_filled(rect, 0.0, palette.background);
-        ui.painter().rect_stroke(
-            rect,
-            0.0,
-            egui::Stroke::new(1.0, palette.border),
-            egui::StrokeKind::Inside,
-        );
+        // Panel borders removed for clean layout
         let content_rect = rect.shrink(REGION_PADDING);
         let builder = UiBuilder::new().id_salt(id_salt).max_rect(content_rect);
         ui.scope_builder(builder, |ui| {
