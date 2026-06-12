@@ -258,7 +258,7 @@ crates/osl-cli/
 
 ---
 
-### osl-app — GUI 应用程序（104 个 .rs 文件）
+### osl-app — GUI 应用程序（114 个 .rs 文件）
 
 ```
 crates/osl-app/
@@ -285,132 +285,155 @@ crates/osl-app/
     ├── test_support.rs             # 测试辅助
     │
     ├── canvas.rs                   # 画布渲染管线
-    ├── canvas/
-    │   ├── colors.rs               # 主题感知颜色定义
-    │   └── primitives/             # 画布绘制图元
-    │       ├── grid.rs             # 网格渲染
-    │       ├── sheet.rs            # 图纸边界渲染
-    │       ├── symbol.rs           # 符号渲染
-    │       └── text.rs             # 文本渲染
-    │
-    ├── app.rs                      # NekoSpiceApp 主结构体
-    └── app/
-        │
-        │── [布局与面板]
-        ├── panels.rs               # 根布局：顶/底栏、导航、工作区
-        ├── runtime.rs              # eframe::App 实现
-        ├── workspace_panel.rs      # 左/右面板调度
-        ├── center_workspace.rs     # 中央工作区调度
-        ├── status_strip.rs         # 底部状态栏
-        ├── studio_toolbar.rs       # 顶部工具栏
-        ├── project_panel.rs        # 项目侧边栏
-        ├── diagnostics_panel.rs    # 诊断面板
-        │
-        │── [导航与主题]
-        ├── navigation.rs           # StudioWorkspace 枚举
-        ├── navigation_panel.rs     # 左侧导航栏
-        ├── theme.rs                # 主题系统（Midnight/Graphite/Light）
-        │
-        │── [国际化]
-        ├── localization.rs         # UiText 枚举
-        ├── localization_en_impl.rs # 英文翻译
-        ├── localization_zh_impl.rs # 中文翻译
-        │
-        │── [画布交互]
-        ├── canvas_panel.rs         # 主画布：视口、鼠标交互、渲染
-        ├── canvas_shortcuts.rs     # 键盘快捷键（V/W/L/B/S/J/Q/R/F/Del/Esc/F5/Ctrl+S）
-        ├── canvas_context_menu.rs  # 右键上下文菜单
-        ├── tool_palette.rs         # 垂直工具面板
-        ├── shortcuts_overlay.rs    # 快捷键帮助叠加层
-        │
-        │── [原理图工作区]
-        ├── schematic_workspace.rs           # 原理图视图主布局
-        ├── schematic_workspace_widgets.rs   # 工具栏按钮、文档标签
-        ├── schematic_bottom_dock.rs         # 底部停靠面板（波形/FFT/Bode/控制台/网表/ERC）
-        ├── schematic_inspector_panel.rs     # 右侧检查面板
-        ├── schematic_inspector_sections.rs  # 检查面板分区
-        ├── schematic_inspector_simulator.rs # 仿真器配置
-        ├── schematic_inspector_widgets.rs   # 检查面板组件
-        ├── schematic_review_panel.rs        # 原理图审查面板
-        │
-        │── [绘图工具状态机]
-        ├── schematic_tools/
-        │   ├── state.rs             # SchematicTool 枚举和状态
-        │   ├── controls.rs          # 工具激活和切换
-        │   ├── editing.rs           # 导线/总线/标签/图纸创建
-        │   └── preview.rs           # 工具预览渲染
-        │
-        │── [选择与放置]
-        ├── selection_properties.rs  # 选中项属性编辑器
-        ├── symbol_placement_controls.rs  # 符号放置 UI
-        ├── placement.rs             # 放置状态管理
-        ├── history.rs               # 撤销/重做历史
-        ├── file_dialog.rs           # 文件打开/保存对话框
-        ├── preferences.rs           # 用户偏好
-        ├── widgets.rs               # 共享 UI 组件
-        │
-        │── [首页工作区]
-        ├── home_dashboard.rs        # 首页仪表板
-        ├── home_command_center.rs   # 快速操作中心
-        ├── home_insights_panel.rs   # AI 助手 + 洞察 + 快捷方式
-        ├── home_project_context.rs  # 项目上下文
-        ├── home_sections.rs         # 首页分区布局
-        └── home_widgets.rs          # 首页组件
-        │
-        │── [库工作区]
-        ├── library_workspace.rs     # 符号库浏览器
-        ├── library_model_browser.rs # 模型文件浏览器
-        ├── library_model_validation.rs  # 模型验证
-        ├── library_preview.rs       # 符号预览
-        ├── library_sections.rs      # 库分区布局
-        ├── library_widgets.rs       # 库组件
-        ├── library_data.rs          # 库数据管理
-        └── library_inspector.rs     # 库检查面板
-        │
-        │── [仿真工作区]
-        ├── simulation_workspace.rs         # 仿真工作区视图
-        ├── simulation_workspace_sections.rs # 分区布局
-        ├── simulation_workspace_widgets.rs  # 组件
-        ├── simulation_panel.rs             # 仿真控制面板（含后端选择器）
-        ├── simulation_profile_editor.rs    # 配置编辑器
-        ├── simulation_profile_editor_*.rs  # 配置编辑器子模块
-        ├── simulation_artifacts_panel.rs   # 产物面板
-        ├── simulation_waveform_panel.rs    # 波形面板
-        └── simulation_report_panel.rs      # 报告面板
-        │
-        │── [波形工作区]
-        ├── waveform_workspace.rs            # 波形查看器
-        ├── waveform_workspace_sections.rs   # 分区布局
-        ├── waveform_workspace_widgets.rs    # 组件
-        ├── waveform_preview.rs              # 波形预览渲染
-        └── waveform_preview_primitives.rs   # 预览绘制图元
-        │
-        │── [报告工作区]
-        ├── reports_workspace.rs             # 报告查看器
-        ├── reports_workspace_sections.rs    # 分区布局（含导出按钮）
-        ├── reports_workspace_widgets.rs     # 组件
-        ├── reports_workspace_state.rs       # 状态管理
-        ├── reports_workspace_measurements.rs # 测量显示
-        └── reports_workspace_preview.rs     # 报告预览
-        │
-        │── [审查工作区]
-        ├── review_workspace.rs              # 设计审查
-        ├── review_workspace_state.rs        # 状态管理
-        ├── review_workspace_widgets.rs      # 组件
-        └── review_checklist.rs              # 审查清单
-        │
-        │── [优化工作区]
-        ├── optimization_workspace.rs        # 优化工作区
-        ├── optimization_workspace_state.rs  # 状态管理
-        ├── optimization_workspace_sections.rs # 分区布局
-        └── optimization_workspace_widgets.rs  # 组件
-        │
-        │── [设置工作区]
-        ├── settings_workspace.rs            # 设置/偏好
-        └── settings_theme_preview.rs        # 主题预览
+    └── canvas/
+        ├── colors.rs               # 主题感知颜色定义
+        └── primitives/             # 画布绘制图元
+            ├── grid.rs             # 网格渲染
+            ├── sheet.rs            # 图纸边界渲染
+            ├── symbol.rs           # 符号渲染
+            └── text.rs             # 文本渲染
 ```
 
----
+#### app/ — 主应用程序模块
+
+`app.rs` 定义 `NekoSpiceApp` 主结构体，子模块按工作区分组：
+
+```
+app/
+├── app.rs                      # NekoSpiceApp 结构体、编辑操作、use 声明
+│
+├── [布局与面板]                    # 跨工作区的布局基础设施
+├── panels.rs                   # 根布局：顶/底栏、导航、工作区
+├── runtime.rs                  # eframe::App 实现
+├── workspace_panel.rs          # 左/右面板调度
+├── center_workspace.rs         # 中央工作区调度（路由到各工作区）
+├── status_strip.rs             # 底部状态栏
+├── studio_toolbar.rs           # 顶部工具栏
+├── project_panel.rs            # 项目侧边栏
+├── diagnostics_panel.rs        # 诊断面板
+│
+├── [导航与主题]
+├── navigation.rs               # StudioWorkspace 枚举
+├── navigation_panel.rs         # 左侧导航栏
+├── theme.rs                    # 主题系统（Midnight/Graphite/Light）
+│
+├── [国际化]
+├── localization.rs             # UiText 枚举
+├── localization_en_impl.rs     # 英文翻译
+├── localization_zh_impl.rs     # 中文翻译
+│
+├── [画布交互]
+├── canvas_panel.rs             # 主画布：视口、鼠标交互、渲染
+├── canvas_shortcuts.rs         # 键盘快捷键处理
+├── canvas_context_menu.rs      # 右键上下文菜单
+├── tool_palette.rs             # 垂直工具面板
+├── shortcuts_overlay.rs        # 快捷键帮助叠加层
+│
+├── [放置与编辑]
+├── placement.rs                # 放置状态管理
+├── history.rs                  # 撤销/重做历史栈
+├── file_dialog.rs              # 文件打开/保存对话框
+├── preferences.rs              # 用户偏好
+├── widgets.rs                  # 共享 UI 组件（metric_row 等）
+│
+├── home/                       # 首页工作区
+│   ├── mod.rs                  # 模块声明与文档
+│   ├── dashboard.rs            # 首页仪表板
+│   ├── command_center.rs       # 快速操作中心
+│   ├── insights_panel.rs       # AI 助手 + 洞察 + 快捷方式
+│   ├── project_context.rs      # 项目上下文摘要
+│   ├── sections.rs             # 首页分区布局
+│   └── widgets.rs              # 首页专属组件
+│
+├── schematic/                  # 原理图编辑工作区
+│   ├── mod.rs                  # 模块声明与文档
+│   ├── workspace.rs            # 原理图视图主布局
+│   ├── workspace_widgets.rs    # 工具栏按钮、文档标签
+│   ├── bottom_dock.rs          # 底部停靠面板（波形/FFT/Bode/控制台/网表/ERC/检查器）
+│   ├── review_panel.rs         # 原理图审查面板
+│   ├── selection_properties.rs # 选中项属性编辑器
+│   ├── symbol_placement.rs     # 符号放置 UI 控件
+│   ├── tools/                  # 绘图工具状态机
+│   │   ├── mod.rs              # 工具模块入口与预览调度
+│   │   ├── state.rs            # SchematicTool 枚举和 SchematicToolState
+│   │   ├── controls.rs         # 工具激活和切换逻辑
+│   │   ├── editing.rs          # 导线/总线/标签/图纸创建
+│   │   └── preview.rs          # 工具预览渲染
+│   └── inspector/              # 右侧属性检查面板
+│       ├── mod.rs              # 检查器模块入口
+│       ├── panel.rs            # 检查面板主视图
+│       ├── sections.rs         # 检查面板分区渲染
+│       ├── simulator.rs        # 仿真器配置面板
+│       └── widgets.rs          # 检查面板组件
+│
+├── simulation/                 # 仿真工作区
+│   ├── mod.rs                  # 模块声明与文档
+│   ├── workspace.rs            # 仿真工作区视图
+│   ├── workspace_sections.rs   # 分区布局
+│   ├── workspace_widgets.rs    # 组件
+│   ├── panel.rs                # 仿真控制面板（含后端选择器 ngspice/Xyce）
+│   ├── profile_editor.rs       # 分析配置编辑器
+│   ├── profile_editor_options.rs # 配置选项渲染
+│   ├── profile_editor_sections.rs # 配置分区渲染
+│   ├── profile_editor_widgets.rs # 配置组件
+│   ├── artifacts_panel.rs      # 仿真产物面板
+│   ├── waveform_panel.rs       # 仿真波形面板
+│   └── report_panel.rs         # 仿真报告面板
+│
+├── library/                    # 符号库工作区
+│   ├── mod.rs                  # 模块声明与文档
+│   ├── workspace.rs            # 符号库浏览器主视图
+│   ├── data.rs                 # 库数据管理
+│   ├── inspector.rs            # 库检查面板
+│   ├── model_browser.rs        # 模型文件浏览器
+│   ├── model_validation.rs     # 模型验证
+│   ├── preview.rs              # 符号/模型预览渲染
+│   ├── sections.rs             # 库分区布局
+│   └── widgets.rs              # 库组件
+│
+├── waveform/                   # 波形查看工作区
+│   ├── mod.rs                  # 模块声明与文档
+│   ├── workspace.rs            # 波形查看器主视图
+│   ├── workspace_sections.rs   # 分区布局
+│   ├── workspace_widgets.rs    # 组件
+│   ├── preview.rs              # 波形预览渲染（堆叠/单通道）
+│   └── preview_primitives.rs   # 预览绘制图元（网格、零轴、桶渲染）
+│
+├── reports/                    # 报告工作区
+│   ├── mod.rs                  # 模块声明与文档
+│   ├── workspace.rs            # 报告查看器主视图
+│   ├── measurements.rs         # 测量数据显示
+│   ├── preview.rs              # 报告预览渲染
+│   ├── sections.rs             # 报告分区布局
+│   ├── state.rs                # ReportsTab 枚举和状态
+│   └── widgets.rs              # 报告组件
+│
+├── review/                     # 设计审查工作区
+│   ├── mod.rs                  # 模块声明与文档
+│   ├── workspace.rs            # 设计审查主视图
+│   ├── checklist.rs            # 审查清单管理
+│   ├── state.rs                # 审查状态（严重性过滤等）
+│   └── widgets.rs              # 审查组件
+│
+├── optimization/               # 参数优化工作区
+│   ├── mod.rs                  # 模块声明与文档
+│   ├── workspace.rs            # 优化工作区主视图
+│   ├── sections.rs             # 优化分区布局
+│   ├── state.rs                # OptimizationTab 枚举和状态
+│   └── widgets.rs              # 优化组件
+│
+└── settings/                   # 设置工作区
+    ├── mod.rs                  # 模块声明与文档
+    ├── workspace.rs            # 设置/偏好主视图
+    └── theme_preview.rs        # 主题预览渲染器
+```
+
+**模块层次说明**：
+- `app/` 下的顶层 `.rs` 文件是跨工作区的基础设施（布局、导航、主题、画布交互等）
+- 每个工作区子目录（`home/`、`schematic/`、`simulation/` 等）有独立的 `mod.rs`
+- `schematic/tools/` 和 `schematic/inspector/` 是原理图模块的二级子目录
+- 所有子目录内的方法使用 `pub(crate)` 可见性，确保从 `app.rs` 可调用
+- 子目录文件通过 `crate::app::` 路径引用跨模块类型
 
 ## docs/ — 文档
 

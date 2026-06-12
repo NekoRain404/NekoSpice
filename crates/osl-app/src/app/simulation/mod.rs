@@ -16,5 +16,5 @@ pub(crate) mod workspace;
 pub(crate) mod workspace_sections;
 pub(crate) mod workspace_widgets;
 
-pub(crate) use panel::{SimulationBackendKind, SimulationPanelState};
+pub(crate) use panel::SimulationPanelState;
 pub(crate) use profile_editor::SimulationProfileEditorState;
