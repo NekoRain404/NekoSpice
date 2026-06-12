@@ -22,10 +22,16 @@ impl NekoSpiceApp {
         let available = ui.available_size_before_wrap();
         let desired_size = Vec2::new(available.x.max(240.0), available.y.max(240.0));
         let (rect, response) = ui.allocate_exact_size(desired_size, Sense::click_and_drag());
+        self.last_canvas_rect = Some(rect);
 
         // --- Right-click drag panning ---
         let is_right_dragging = response.dragged_by(egui::PointerButton::Secondary);
         if is_right_dragging {
+            self.viewport.pan += response.drag_delta();
+        }
+        // --- Middle-click drag panning (common CAD convention) ---
+        let is_middle_dragging = response.dragged_by(egui::PointerButton::Middle);
+        if is_middle_dragging {
             self.viewport.pan += response.drag_delta();
         }
 

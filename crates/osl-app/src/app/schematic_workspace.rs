@@ -6,7 +6,7 @@ use super::NekoSpiceApp;
 use super::SchematicBottomTab;
 use super::localization::UiText;
 use super::schematic_workspace_widgets::{
-    canvas_toolbar_button, document_tab, toolbar_icon_button,
+    canvas_toolbar_button, document_tab, toolbar_icon_button_active,
 };
 use super::theme::StudioTheme;
 use eframe::egui::{self, CornerRadius, Stroke, Vec2};
@@ -105,7 +105,8 @@ impl NekoSpiceApp {
                 ("\u{2716}", "NoConn (Q)", SchematicTool::NoConnect),
             ];
             for &(icon, tooltip, tool) in tools {
-                if toolbar_icon_button(ui, mode, icon, tooltip, true).clicked() {
+                let is_active = self.schematic_tools.active == tool;
+                if toolbar_icon_button_active(ui, mode, icon, tooltip, true, is_active).clicked() {
                     self.activate_schematic_tool_direct(tool);
                 }
             }

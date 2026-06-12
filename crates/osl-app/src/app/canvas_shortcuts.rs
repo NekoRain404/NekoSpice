@@ -88,6 +88,10 @@ impl NekoSpiceApp {
         if ui.input(|input| input.key_pressed(egui::Key::F5)) {
             self.run_simulation_from_panel();
         }
+        // Ctrl+S = Save
+        if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::S)) {
+            self.save_document();
+        }
         // Ctrl+Y as alternative redo shortcut
         if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::Y)) {
             self.redo();

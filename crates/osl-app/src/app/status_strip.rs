@@ -24,6 +24,7 @@ pub(super) struct DiagnosticCounts {
 }
 
 impl DiagnosticCounts {
+    #[allow(dead_code)]
     fn total(self) -> usize {
         self.errors + self.warnings + self.info
     }
@@ -112,32 +113,27 @@ impl NekoSpiceApp {
         let snapshot = self.studio_status_snapshot();
         let mode = self.theme_mode();
         ui.horizontal(|ui| {
-            ui.label(StudioTheme::muted_for(
-                mode,
-                format!("{}: {}", self.text(UiText::Workspace), snapshot.source_path),
-            ));
-            ui.separator();
-            ui.label(diagnostic_text(mode, snapshot.diagnostics));
-            ui.separator();
-            // Zoom level display
-            ui.label(StudioTheme::muted_for(
-                mode,
-                format!("Zoom: {:.0}%", self.viewport.zoom * 10.0),
-            ));
-            ui.separator();
-            // Element count from scene
-            if let Some(scene) = &self.scene {
+            // Cursor world coordinates
+            if let Some(cursor) = self.cursor_world {
                 ui.label(StudioTheme::muted_for(
                     mode,
-                    format!(
-                        "{} sym, {} wire, {} label",
-                        scene.symbols.len(),
-                        scene.wires.len(),
-                        scene.labels.len(),
-                    ),
+                    format!("X:{:.1} Y:{:.1}", cursor.x, cursor.y),
                 ));
                 ui.separator();
             }
+            // Active tool indicator
+            ui.label(StudioTheme::muted_for(
+                mode,
+                format!("[{}]", self.schematic_tools.active.label()),
+            ));
+            ui.separator();
+            // Zoom level
+            ui.label(StudioTheme::muted_for(
+                mode,
+                format!("{:.0}%", self.viewport.zoom * 100.0),
+            ));
+            ui.separator();
+            // Element count from scene
             ui.label(StudioTheme::muted_for(mode, snapshot.selected_item));
             if let Some(message) = &self.status_message {
                 ui.separator();
@@ -189,6 +185,7 @@ fn status_block(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &s
     });
 }
 
+#[allow(dead_code)]
 fn diagnostic_text(mode: StudioThemeMode, counts: DiagnosticCounts) -> RichText {
     let palette = StudioTheme::palette(mode);
     let color = if counts.errors > 0 {

@@ -67,12 +67,17 @@ impl NekoSpiceApp {
                         .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
                 }
                 ContextMenuAction::ZoomIn => {
-                    self.viewport.zoom *= 1.25;
-                    self.viewport.zoom = self.viewport.zoom.clamp(0.5, 100.0);
+                    // Zoom around viewport center for predictable behavior
+                    if let Some(rect) = self.last_canvas_rect {
+                        let center = rect.center();
+                        self.viewport.zoom_around(rect, center, 1.25);
+                    }
                 }
                 ContextMenuAction::ZoomOut => {
-                    self.viewport.zoom /= 1.25;
-                    self.viewport.zoom = self.viewport.zoom.clamp(0.5, 100.0);
+                    if let Some(rect) = self.last_canvas_rect {
+                        let center = rect.center();
+                        self.viewport.zoom_around(rect, center, 1.0 / 1.25);
+                    }
                 }
                 ContextMenuAction::None => {}
             }

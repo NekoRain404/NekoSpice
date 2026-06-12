@@ -48,6 +48,7 @@ pub(super) fn canvas_toolbar_button(
 ///
 /// The button shows a Unicode symbol at the given size.
 /// Hover state highlights the button border for visual feedback.
+#[allow(dead_code)]
 pub(super) fn toolbar_icon_button(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -83,6 +84,51 @@ pub(super) fn toolbar_icon_button(
     response
 }
 
+
+
+/// Draw a compact icon-only button with active state highlighting.
+///
+/// Active tool gets accent color fill and border. Inactive uses standard styling.
+pub(super) fn toolbar_icon_button_active(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    icon: &str,
+    tooltip: &str,
+    enabled: bool,
+    active: bool,
+) -> Response {
+    let palette = StudioTheme::palette(mode);
+    let (fill, border, text_color) = if active {
+        (palette.accent_soft, palette.accent, palette.accent)
+    } else if enabled {
+        (palette.panel_soft, palette.border_strong, palette.text)
+    } else {
+        (palette.panel_soft, palette.border, palette.text_muted)
+    };
+    let text = RichText::new(icon).size(16.0).color(text_color);
+    let btn = egui::Button::new(text)
+        .fill(fill)
+        .stroke(Stroke::new(1.5, border))
+        .corner_radius(CornerRadius::same(4));
+    let response = ui.add_enabled(enabled, btn).on_hover_text(tooltip);
+    // Hover feedback for non-active buttons
+    if response.hovered() && enabled && !active {
+        let painter = ui.painter();
+        painter.rect_filled(
+            response.rect,
+            CornerRadius::same(4),
+            palette.panel_hover,
+        );
+        painter.text(
+            response.rect.center(),
+            egui::Align2::CENTER_CENTER,
+            icon,
+            egui::FontId::proportional(16.0),
+            palette.text,
+        );
+    }
+    response
+}
 /// Draw a document tab in the tab bar.
 ///
 /// Active tab uses accent fill; inactive tabs use panel background.

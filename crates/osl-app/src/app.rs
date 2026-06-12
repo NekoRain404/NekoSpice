@@ -149,6 +149,10 @@ pub struct NekoSpiceApp {
     pub(super) status_message: Option<String>,
     pub(super) viewport: CanvasViewport,
     pub(super) history: history::EditHistory,
+    /// Last known canvas rect, used by context menu zoom operations.
+    pub(super) last_canvas_rect: Option<eframe::egui::Rect>,
+    /// Current cursor world coordinates for status bar display.
+    pub(super) cursor_world: Option<osl_kicad::KicadPoint>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -214,6 +218,8 @@ impl Default for NekoSpiceApp {
             status_message: None,
             viewport: CanvasViewport::default(),
             history: history::EditHistory::default(),
+            last_canvas_rect: None,
+            cursor_world: None,
         };
         app.load_schematic(PathBuf::from(DEFAULT_GUI_SCHEMATIC));
         app.load_symbol_library(PathBuf::from(DEFAULT_GUI_LIBRARY_TABLE));

@@ -30,7 +30,7 @@ impl SchematicTool {
         Self::NoConnect,
     ];
 
-    pub(super) fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Select => "Select",
             Self::Wire => "Wire",
