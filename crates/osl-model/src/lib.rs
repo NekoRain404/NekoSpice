@@ -583,4 +583,7 @@ impl DiagnosticSeverity {
 }
 
 
+mod vendor_import;
+pub use vendor_import::{VendorKind, ImportedSubckt, ImportedModel, VendorImportResult, VendorModelCatalog, ModelCatalogEntry, import_spice_model_file, import_spice_model_dir, is_spice_model_file, build_model_catalog};
+
 include!("model_check_impl.rs");
