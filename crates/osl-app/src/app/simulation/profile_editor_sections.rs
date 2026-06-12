@@ -182,7 +182,7 @@ fn profile_analysis_modes() -> [(
     KicadSimulationDirectiveKind,
     &'static str,
     &'static str,
-); 4] {
+); 7] {
     [
         (
             KicadSimulationDirectiveKind::Tran,
@@ -203,6 +203,21 @@ fn profile_analysis_modes() -> [(
             KicadSimulationDirectiveKind::Op,
             ".op",
             "operating point",
+        ),
+        (
+            KicadSimulationDirectiveKind::Noise,
+            ".noise",
+            "noise",
+        ),
+        (
+            KicadSimulationDirectiveKind::Disto,
+            ".disto",
+            "distortion",
+        ),
+        (
+            KicadSimulationDirectiveKind::Sens,
+            ".sens",
+            "sensitivity",
         ),
     ]
 }

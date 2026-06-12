@@ -111,6 +111,16 @@ impl NekoSpiceApp {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
+                    // Backend engine
+                    ui.label(StudioTheme::muted_for(mode, "Backend"));
+                    ui.label(egui::RichText::new(self.simulation_panel.backend.label()).monospace());
+                    ui.end_row();
+
+                    // Analysis type
+                    ui.label(StudioTheme::muted_for(mode, "Analysis"));
+                    ui.label(egui::RichText::new(format!(".{}", self.simulation_panel.directive_kind)).monospace());
+                    ui.end_row();
+
                     ui.label(StudioTheme::muted_for(mode, "Temp"));
                     ui.label(egui::RichText::new(format!("{} °C", opts.temperature)).monospace());
                     ui.end_row();
@@ -129,6 +139,39 @@ impl NekoSpiceApp {
                             egui::RichText::new(&self.simulation_profile_editor.active_preset)
                                 .monospace()
                                 .color(self.theme_palette().accent),
+                        );
+                        ui.end_row();
+                    }
+
+                    // Step sweep status
+                    if let super::state::StepSweep::Parametric { param_name, sweep_mode, .. } = &self.simulation_panel.step_sweep {
+                        ui.label(StudioTheme::muted_for(mode, "Step"));
+                        ui.label(
+                            egui::RichText::new(format!(".step {} {}", param_name, sweep_mode))
+                                .monospace()
+                                .color(self.theme_palette().accent),
+                        );
+                        ui.end_row();
+                    }
+
+                    // Measurement count
+                    if !self.simulation_measurements.is_empty() {
+                        ui.label(StudioTheme::muted_for(mode, "Measures"));
+                        ui.label(
+                            egui::RichText::new(format!("{} directive(s)", self.simulation_measurements.len()))
+                                .monospace(),
+                        );
+                        ui.end_row();
+                    }
+
+                    // IC/Nodeset count
+                    let ic_count = self.simulation_profile_editor.initial_conditions.len()
+                        + self.simulation_profile_editor.nodesets.len();
+                    if ic_count > 0 {
+                        ui.label(StudioTheme::muted_for(mode, ".ic/.ns"));
+                        ui.label(
+                            egui::RichText::new(format!("{} entry(ies)", ic_count))
+                                .monospace(),
                         );
                         ui.end_row();
                     }
