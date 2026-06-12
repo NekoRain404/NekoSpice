@@ -133,7 +133,7 @@ impl NekoSpiceApp {
                     ui,
                     mode,
                     "1",
-                    "ngspice",
+                    self.simulation_panel.backend.label(),
                     &self.schematic_path,
                     self.text(UiText::Running),
                 );
@@ -174,8 +174,9 @@ impl NekoSpiceApp {
             } else {
                 self.text(UiText::HealthReady)
             };
-            metric_row(ui, mode, "ngspice", status);
-            metric_row(ui, mode, self.text(UiText::Threads), "8 / 16");
+            metric_row(ui, mode, self.simulation_panel.backend.label(), status);
+            let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+            metric_row(ui, mode, self.text(UiText::Threads), &format!("{threads} threads"));
             metric_row(ui, mode, self.text(UiText::Renderer), "wgpu");
             metric_row(ui, mode, self.text(UiText::Backend), "CLI");
             ui.separator();
@@ -202,12 +203,15 @@ impl NekoSpiceApp {
                     RunStatus::Failed => self.text(UiText::WaveformError),
                 };
                 measurement_row(ui, mode, "Run", run.metadata.backend.as_str(), status);
+                measurement_row(ui, mode, "Duration", "time", &format!("{} ms", run.metadata.duration_ms));
+                // Show waveform signals if available
+                if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) = &run.waveform {
+                    for var in summary.variables.iter().take(4) {
+                        measurement_row(ui, mode, &var.name, &var.unit, &format!("max={:.3}", var.max));
+                    }
+                }
             } else {
-                measurement_row(ui, mode, "DC Gain", "Av(1)", "82.45 dB");
-                measurement_row(ui, mode, self.text(UiText::Average), "v(out)", "1.64 V");
-                measurement_row(ui, mode, "Unity Gain Freq.", "fu", "3.21 MHz");
-                measurement_row(ui, mode, "Phase Margin", "PM", "68.2 deg");
-                measurement_row(ui, mode, "THD @ 1 kHz", "THD", "-92.3 dB");
+                ui.label(StudioTheme::muted_for(mode, "Run a simulation to see measurements"));
             }
         });
     }
@@ -222,30 +226,24 @@ impl NekoSpiceApp {
                 self.text(UiText::RecommendedForYou),
                 self.text(UiText::ViewAll),
             );
-            recommendation_row(
-                ui,
-                mode,
-                self.text(UiText::VerifyStability),
-                self.text(UiText::Run),
-            );
-            recommendation_row(
-                ui,
-                mode,
-                self.text(UiText::LoopStability),
-                self.text(UiText::Run),
-            );
-            recommendation_row(
-                ui,
-                mode,
-                self.text(UiText::TemperatureSweep),
-                self.text(UiText::Run),
-            );
-            recommendation_row(
-                ui,
-                mode,
-                self.text(UiText::ModelUpdateAvailable),
-                self.text(UiText::Update),
-            );
+            // Context-aware recommendations based on current state
+            if self.document.is_none() {
+                recommendation_row(ui, mode, "Open a schematic to get started", self.text(UiText::Open));
+            } else {
+                let has_run = self.simulation_panel.last_run.is_some();
+                if !has_run {
+                    recommendation_row(ui, mode, "Run a simulation to validate your design", self.text(UiText::Run));
+                }
+                let report = self.document.as_ref().map(|d| d.check_report());
+                if let Some(r) = report {
+                    if r.error_count() > 0 {
+                        recommendation_row(ui, mode, &format!("Fix {} ERC errors", r.error_count()), self.text(UiText::Run));
+                    } else if r.warning_count() > 0 {
+                        recommendation_row(ui, mode, &format!("Review {} warnings", r.warning_count()), self.text(UiText::Run));
+                    }
+                }
+                recommendation_row(ui, mode, self.text(UiText::TemperatureSweep), self.text(UiText::Run));
+            }
         });
     }
 
