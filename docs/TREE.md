@@ -39,7 +39,7 @@ NekoSpice/
 │   │       ├── lib.rs            # SimulatorBackend trait
 │   │       ├── ngspice.rs        # ngspice CLI 后端
 │   │       ├── xyce.rs           # Xyce CLI 后端
-│   │       ├── profile.rs        # SimulationProfile, 指令注入
+│   │       ├── profile.rs        # SimulationProfile (18 options, 5 presets), 指令注入, .ic/.nodeset
 │   │       ├── netlist.rs        # 网表验证与转换
 │   │       └── ...
 │   │
@@ -212,7 +212,7 @@ NekoSpiceApp (app.rs)
   ├── schematic/   — 原理图编辑
   │   ├── tools/   — 绘图工具（导线/标签/总线/连接点等）
   │   └── inspector/ — 属性检查器
-  ├── simulation/  — 仿真工作流
+  ├── simulation/  — 仿真工作流 (18 SPICE options, presets, .ic/.nodeset)
   │   ├── directive_editor  — 指令编辑
   │   ├── run_controller    — 启动/轮询
   │   ├── profile_editor    — 求解器配置
@@ -235,9 +235,14 @@ Canvas (canvas.rs)
 
 ### 仿真工作流
 ```
-UI 指令编辑 → build_simulation_profile() → inject_profile_directives()
+UI 指令编辑 (分析类型 + 参数)
+  → Preset 选择 (default/fast/accurate/high-freq/convergence-help)
+  → SimOptions 配置 (18 SPICE options: ITL1-5, TNOM, GMIN, CHGTOL, PIVTOL...)
+  → .ic / .nodeset 初始条件
+  → build_simulation_profile() → inject_profile_directives()
   → ensure_ngspice_control_exports() → ngspice/Xyce 执行
-  → parse_ngspice_log() → 结果显示
+  → parse_ngspice_log() → 结果显示 + 波形预览
+  → 设置持久化到 ~/.config/nekospice/settings.json
 ```
 
 ### 编辑工作流
