@@ -1,6 +1,9 @@
 //! Right column of the simulation profile editor — thin orchestrator.
 //!
-//! Delegates to focused sub-modules:
+//! Composes focused sub-modules and persists changes to disk whenever
+//! the user modifies any simulation option field.
+//!
+//! Delegates to:
 //! - `options_environment` — temperature, nominal temperature
 //! - `options_solver` — transient solver, convergence, output control
 //! - `options_ic` — initial conditions (.ic / .nodeset)
@@ -16,32 +19,41 @@ use super::options_ic::draw_initial_conditions_section;
 use super::options_status::{draw_run_status_summary, draw_recent_runs};
 
 /// Draw the complete right-column options panel with all sections.
+///
+/// Each section reports whether any field was changed. If so, the
+/// entire simulation settings are persisted to disk.
 pub(crate) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     let mode = app.theme_mode();
     let palette = StudioTheme::palette(mode);
+    let mut any_changed = false;
 
-    draw_environment_section(app, ui, mode);
+    // Environment (temperature, TNOM)
+    any_changed |= draw_environment_section(app, ui, mode);
     ui.add_space(8.0);
 
+    // Transient solver (method, iteration limits, timestep)
     egui::CollapsingHeader::new(egui::RichText::new("Transient Solver").color(palette.text))
         .id_salt("collapsible_transient")
         .default_open(false)
         .show(ui, |ui| {
-            draw_transient_solver_section(app, ui, mode);
+            any_changed |= draw_transient_solver_section(app, ui, mode);
         });
     ui.add_space(8.0);
 
+    // Convergence tolerances (RELTOL, ABSTOL, VNTOL, GMIN, etc.)
     egui::CollapsingHeader::new(egui::RichText::new("Convergence").color(palette.text))
         .id_salt("collapsible_convergence")
         .default_open(false)
         .show(ui, |ui| {
-            draw_convergence_section(app, ui, mode);
+            any_changed |= draw_convergence_section(app, ui, mode);
         });
     ui.add_space(8.0);
 
-    draw_output_section(app, ui, mode);
+    // Output control (NUMDGT)
+    any_changed |= draw_output_section(app, ui, mode);
     ui.add_space(8.0);
 
+    // Initial conditions (.ic / .nodeset)
     egui::CollapsingHeader::new(egui::RichText::new("Initial Conditions").color(palette.text))
         .id_salt("collapsible_ic")
         .default_open(false)
@@ -50,8 +62,13 @@ pub(crate) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
         });
     ui.add_space(8.0);
 
+    // Run status and recent runs (read-only)
     draw_run_status_summary(app, ui, mode);
     ui.add_space(8.0);
-
     draw_recent_runs(app, ui, mode);
+
+    // Persist to disk when any field was modified
+    if any_changed {
+        app.save_simulation_settings();
+    }
 }

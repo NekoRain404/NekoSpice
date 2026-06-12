@@ -1,5 +1,7 @@
 //! Shared widget helpers for the simulation profile editor.
-//! These are pure rendering functions that don't hold state.
+//!
+//! Pure rendering functions that produce UI elements. Change-aware widgets
+//! return `true` when the user modifies a field, allowing callers to persist.
 
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
@@ -79,8 +81,32 @@ pub(crate) fn status_pill(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str,
 }
 
 /// Labeled text field with consistent sizing for grid layouts.
-pub(crate) fn labeled_field(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &mut String, width: f32) {
+///
+/// Returns `true` when the user modifies the field value, so callers
+/// can trigger persistence or recalculation as needed.
+pub(crate) fn labeled_field(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    label: &str,
+    value: &mut String,
+    width: f32,
+) -> bool {
     ui.label(StudioTheme::muted_for(mode, label));
-    ui.add(egui::TextEdit::singleline(value).desired_width(width));
+    let response = ui.add(egui::TextEdit::singleline(value).desired_width(width));
     ui.end_row();
+    response.changed()
+}
+
+/// Labeled text field with a placeholder hint. Returns the response for hover text.
+pub(crate) fn labeled_edit(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    label: &str,
+    value: &mut String,
+    hint: &str,
+) -> egui::Response {
+    ui.label(StudioTheme::muted_for(mode, label));
+    let response = ui.add(egui::TextEdit::singleline(value).desired_width(120.0).hint_text(hint));
+    ui.end_row();
+    response
 }

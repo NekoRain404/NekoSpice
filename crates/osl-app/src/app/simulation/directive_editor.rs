@@ -14,6 +14,7 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 use osl_kicad::KicadSimulationDirectiveKind;
 use super::state::AnalysisParams;
+use super::profile_editor_widgets::labeled_edit;
 
 impl NekoSpiceApp {
     /// Draw the structured directive editor in the panel sidebar.
@@ -63,7 +64,7 @@ impl NekoSpiceApp {
 
             ui.add_space(6.0);
 
-            // Set Directive button
+            // Set Directive button — applies the analysis params to the schematic
             if ui
                 .add_enabled(
                     self.document.is_some(),
@@ -105,7 +106,11 @@ impl NekoSpiceApp {
                 // Sweep type selector
                 ui.label(StudioTheme::muted_for(mode, "Sweep Type"));
                 ui.horizontal(|ui| {
-                    for (st, tip) in [("dec", "Points per decade"), ("lin", "Total linear points"), ("oct", "Points per octave")] {
+                    for (st, tip) in [
+                        ("dec", "Points per decade"),
+                        ("lin", "Total linear points"),
+                        ("oct", "Points per octave"),
+                    ] {
                         let active = sweep_type.as_str() == st;
                         let btn = if active {
                             egui::Button::new(egui::RichText::new(st).strong())
@@ -177,18 +182,4 @@ impl NekoSpiceApp {
             }
         }
     }
-}
-
-/// Labeled text field with placeholder hint. Returns the response for hover text.
-fn labeled_edit(
-    ui: &mut egui::Ui,
-    mode: crate::app::theme::StudioThemeMode,
-    label: &str,
-    value: &mut String,
-    hint: &str,
-) -> egui::Response {
-    ui.label(StudioTheme::muted_for(mode, label));
-    let response = ui.add(egui::TextEdit::singleline(value).desired_width(120.0).hint_text(hint));
-    ui.end_row();
-    response
 }

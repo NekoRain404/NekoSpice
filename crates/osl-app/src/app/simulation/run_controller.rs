@@ -127,7 +127,6 @@ impl NekoSpiceApp {
                         Some(format!("Netlist issues: {}", issues.join("; ")));
                 }
                 self.simulation_panel.last_run = None;
-                self.simulation_panel.netlist_warnings.clear();
                 self.simulation_panel.last_error = None;
                 let ngspice = self.preferences.ngspice_path.clone();
                 let xyce = self.preferences.xyce_path.clone();

@@ -109,8 +109,10 @@ NekoSpice/
 │           │   ├── home/         # ── Home 工作区 ──
 │           │   │   ├── dashboard.rs       # 首页仪表板
 │           │   │   ├── command_center.rs  # 命令中心
-│           │   │   ├── sections.rs        # 最近项目/操作队列/测量/建议
+│           │   │   ├── sections.rs        # 最近项目/求解器健康/测量/建议
 │           │   │   ├── widgets.rs         # 首页专用组件
+│           │   │   ├── templates.rs      # 模板网格（启动电路）
+│           │   │   ├── quick_actions.rs  # 快捷操作按钮网格
 │           │   │   ├── project_context.rs # 项目上下文摘要
 │           │   │   └── insights_panel.rs  # 洞察面板
 │           │   │
