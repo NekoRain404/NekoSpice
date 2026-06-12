@@ -2094,6 +2094,8 @@ dependencies = [
  "osl-sim",
  "osl-waveform",
  "rfd",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -18,7 +18,21 @@ impl Default for StudioThemeMode {
 }
 
 impl StudioThemeMode {
-    pub(super) const ALL: [Self; 3] = [Self::Midnight, Self::Graphite, Self::Light];
+    /// from_str。
+    pub(super) fn from_str(s: &str) -> Self {
+        match s {
+            "Graphite" => Self::Graphite,
+            "Light" => Self::Light,
+            _ => Self::Midnight,
+        }
+    }
+
+    /// to_string。
+    pub(super) fn as_str(self) -> &'static str {
+        self.label()
+    }
+
+       pub(super) const ALL: [Self; 3] = [Self::Midnight, Self::Graphite, Self::Light];
 
     /// label。
     pub(super) fn label(self) -> &'static str {

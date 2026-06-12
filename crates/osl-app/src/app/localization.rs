@@ -8,7 +8,23 @@ pub(super) enum StudioLocale {
 }
 
 impl StudioLocale {
-    pub(super) const ALL: [Self; 2] = [Self::English, Self::SimplifiedChinese];
+    /// from_str。
+    pub(super) fn from_str(s: &str) -> Self {
+        match s {
+            "zh" | "Chinese" => Self::SimplifiedChinese,
+            _ => Self::English,
+        }
+    }
+
+    /// to_string。
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::English => "en",
+            Self::SimplifiedChinese => "zh",
+        }
+    }
+
+       pub(super) const ALL: [Self; 2] = [Self::English, Self::SimplifiedChinese];
 
     /// native name。
     pub(super) fn native_name(self) -> &'static str {

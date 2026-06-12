@@ -78,15 +78,19 @@ impl NekoSpiceApp {
                 mode,
                 self.text(UiText::System),
             ));
-            // Editable ngspice path
+            // Editable ngspice path (auto-save on change)
             ui.horizontal(|ui| {
                 ui.label(StudioTheme::muted_for(mode, "ngspice"));
-                ui.text_edit_singleline(&mut self.preferences.ngspice_path);
+                if ui.text_edit_singleline(&mut self.preferences.ngspice_path).changed() {
+                    self.preferences.save_to_disk();
+                }
             });
-            // Editable Xyce path
+            // Editable Xyce path (auto-save on change)
             ui.horizontal(|ui| {
                 ui.label(StudioTheme::muted_for(mode, "Xyce"));
-                ui.text_edit_singleline(&mut self.preferences.xyce_path);
+                if ui.text_edit_singleline(&mut self.preferences.xyce_path).changed() {
+                    self.preferences.save_to_disk();
+                }
             });
             settings_row(ui, mode, self.text(UiText::Backend), "CLI isolated");
             settings_row(ui, mode, self.text(UiText::Threads), "auto");
