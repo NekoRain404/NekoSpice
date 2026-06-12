@@ -1,7 +1,11 @@
 //! Simulation status display — shows run results, error logs, artifacts,
 //! report links, and waveform previews after a simulation completes.
+//!
+//! Includes a "View Waveforms" button that navigates to the Waveforms workspace
+//! for detailed analysis of the simulation results.
 
 use crate::app::NekoSpiceApp;
+use crate::app::navigation::StudioWorkspace;
 use eframe::egui;
 use crate::app::localization::UiText;
 use crate::app::status_strip::severity_color;
@@ -62,6 +66,16 @@ impl NekoSpiceApp {
                 ),
             );
             ui.monospace(run.output_dir.display().to_string());
+
+            // Quick action: view waveforms in dedicated workspace
+            if ui
+                .button(self.text(UiText::WaveformAnalysis))
+                .on_hover_text("Open Waveforms workspace for detailed analysis")
+                .clicked()
+            {
+                self.active_workspace = StudioWorkspace::Waveforms;
+            }
+
             draw_simulation_report_panel(ui, &run.report);
             draw_simulation_artifacts_panel(ui, run);
             draw_simulation_waveform_panel(
@@ -74,7 +88,6 @@ impl NekoSpiceApp {
     }
 
     /// Sync the selected waveform signal with the latest run's available signals.
-    /// Keeps the current selection if it's still valid, otherwise picks the default.
     pub(in crate::app) fn sync_selected_waveform_signal(
         &mut self,
         waveform: &GuiWaveformSummaryState,
