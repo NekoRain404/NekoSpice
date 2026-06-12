@@ -44,6 +44,25 @@ pub(super) fn section_header(ui: &mut egui::Ui, mode: StudioThemeMode, title: &s
     });
 }
 
+/// Section header with a clickable action link. Returns true if clicked.
+pub(super) fn section_header_clickable(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    title: &str,
+    action: &str,
+) -> bool {
+    let mut clicked = false;
+    ui.horizontal(|ui| {
+        ui.label(StudioTheme::section_title_for(mode, title));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.selectable_label(false, StudioTheme::accent_for(mode, action)).clicked() {
+                clicked = true;
+            }
+        });
+    });
+    clicked
+}
+
 pub(super) fn project_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

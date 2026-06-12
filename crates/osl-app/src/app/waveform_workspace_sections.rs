@@ -24,7 +24,13 @@ impl NekoSpiceApp {
             }
             ui.separator();
             let cursors = self.text(UiText::Cursors);
+            let prev = self.waveform_workspace.cursor_overlay;
             ui.checkbox(&mut self.waveform_workspace.cursor_overlay, cursors);
+            if self.waveform_workspace.cursor_overlay && !prev {
+                self.status_message = Some("Cursor overlay enabled".to_string());
+            } else if !self.waveform_workspace.cursor_overlay && prev {
+                self.status_message = Some("Cursor overlay disabled".to_string());
+            }
             if ui.button(self.text(UiText::AutoScale)).clicked() {
                 // AutoScale: reset viewport to fit all visible data
                 if let Some(run) = &self.simulation_panel.last_run {

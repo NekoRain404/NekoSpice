@@ -116,16 +116,24 @@ impl NekoSpiceApp {
             ui.separator();
             ui.add_space(6.0);
 
-            // Zoom controls
+            // Zoom controls — zoom around canvas center
             if canvas_toolbar_button(ui, mode, "-", true).clicked() {
-                self.viewport.zoom = (self.viewport.zoom * 0.8).max(1.0);
+                if let Some(rect) = self.last_canvas_rect {
+                    self.viewport.zoom_around(rect, rect.center(), 0.8);
+                } else {
+                    self.viewport.zoom = (self.viewport.zoom * 0.8).max(1.0);
+                }
             }
             ui.label(StudioTheme::accent_for(
                 mode,
-                format!("{:.0}%", self.viewport.zoom * 10.0),
+                format!("{:.0}%", self.viewport.zoom * 100.0),
             ));
             if canvas_toolbar_button(ui, mode, "+", true).clicked() {
-                self.viewport.zoom = (self.viewport.zoom * 1.25).min(180.0);
+                if let Some(rect) = self.last_canvas_rect {
+                    self.viewport.zoom_around(rect, rect.center(), 1.25);
+                } else {
+                    self.viewport.zoom = (self.viewport.zoom * 1.25).min(180.0);
+                }
             }
 
             // Visual separator

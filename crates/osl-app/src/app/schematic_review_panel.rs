@@ -187,7 +187,16 @@ impl NekoSpiceApp {
             status_pill(ui, mode, self.text(UiText::CanvasLinked), palette.success);
             ui.add_space(6.0);
             if ui.button(self.text(UiText::ExplainWaveform)).clicked() {
-                self.status_message = Some(self.text(UiText::ExplainWaveform).to_string());
+                if let Some(run) = &self.simulation_panel.last_run {
+                    let status = run.metadata.status.as_str();
+                    let ms = run.metadata.duration_ms;
+                    let backend = &run.metadata.backend;
+                    self.status_message = Some(
+                        format!("Last run: {} ({}ms, {})", status, ms, backend)
+                    );
+                } else {
+                    self.status_message = Some("No simulation run available".to_string());
+                }
             }
             if ui.button(self.text(UiText::FindOptimization)).clicked() {
                 self.active_workspace = super::navigation::StudioWorkspace::Optimization;

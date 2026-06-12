@@ -1,6 +1,6 @@
 use super::NekoSpiceApp;
 use super::home_widgets::{
-    measurement_row, project_row, queue_row, recommendation_row, section_header, template_card,
+    measurement_row, project_row, queue_row, recommendation_row, section_header, section_header_clickable, template_card,
 };
 use super::localization::UiText;
 use super::navigation::StudioWorkspace;
@@ -13,12 +13,14 @@ impl NekoSpiceApp {
     pub(super) fn draw_recent_projects_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            section_header(
+            if section_header_clickable(
                 ui,
                 mode,
                 self.text(UiText::RecentProjects),
                 self.text(UiText::ViewAll),
-            );
+            ) {
+                self.active_workspace = StudioWorkspace::Schematic;
+            }
             let snapshot = self.studio_status_snapshot();
             project_row(
                 ui,
@@ -58,12 +60,14 @@ impl NekoSpiceApp {
 
     pub(super) fn draw_template_row(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        section_header(
+        if section_header_clickable(
             ui,
             mode,
             self.text(UiText::StartTemplate),
             self.text(UiText::ViewAll),
-        );
+        ) {
+            self.active_workspace = StudioWorkspace::Schematic;
+        }
         ui.add_space(4.0);
         let spacing = 10.0;
         let available_width = ui.available_width();

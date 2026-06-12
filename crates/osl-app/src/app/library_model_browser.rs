@@ -63,7 +63,10 @@ impl NekoSpiceApp {
                         self.selected_symbol_id = Some(symbol.id.clone());
                         self.start_symbol_placement();
                     }
-                    let _ = ui.button(self.text(UiText::Compare));
+                    if ui.button(self.text(UiText::Compare)).clicked() {
+                        self.active_workspace = super::navigation::StudioWorkspace::Reports;
+                        self.status_message = Some("Compare mode: view reports".to_string());
+                    }
                 });
             });
             ui.add_space(6.0);
@@ -164,11 +167,22 @@ impl NekoSpiceApp {
 
     fn draw_library_model_status_card(&self, ui: &mut egui::Ui, index: usize) {
         let mode = self.theme_mode();
+        let (symbol_count, lib_count, diag_count) = self.library.as_ref().map(|l| {
+            let idx = l.index();
+            (idx.symbols.len(), idx.libraries.len(), idx.diagnostics.len())
+        }).unwrap_or((0, 0, 0));
         match index {
-            0 => library_metric_card(ui, mode, self.text(UiText::ModelLibrary), "1,248", "models"),
-            1 => library_metric_card(ui, mode, self.text(UiText::Verified), "892", "verified"),
-            2 => library_metric_card(ui, mode, self.text(UiText::Validation), "Passed", "syntax"),
-            _ => library_metric_card(ui, mode, self.text(UiText::VendorUpdates), "24", "updates"),
+            0 => library_metric_card(ui, mode, self.text(UiText::ModelLibrary),
+                &symbol_count.to_string(), "symbols"),
+            1 => library_metric_card(ui, mode, self.text(UiText::Verified),
+                &lib_count.to_string(), "libraries"),
+            2 => {
+                let label = if diag_count == 0 { "Passed" } else { "Issues" };
+                library_metric_card(ui, mode, self.text(UiText::Validation),
+                    label, &format!("{} diagnostics", diag_count))
+            }
+            _ => library_metric_card(ui, mode, self.text(UiText::VendorUpdates),
+                &diag_count.to_string(), "diagnostics"),
         }
     }
 }
