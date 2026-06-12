@@ -65,6 +65,13 @@ impl NekoSpiceApp {
                 {
                     self.save_document();
                 }
+                if ui
+                    .button(self.text(UiText::Open))
+                    .on_hover_text(self.text(UiText::OpenHint))
+                    .clicked()
+                {
+                    self.open_file_dialog();
+                }
             });
         });
     }

@@ -156,7 +156,11 @@ ui.horizontal(|ui| {
         ui.separator();
         ui.checkbox(&mut self.simulation_panel.show_netlist, "Netlist preview");
         if self.simulation_panel.show_netlist {
-            match document.spice_netlist_preview() {
+            let profile = self.build_simulation_profile();
+            let preview = document.spice_netlist_preview().map(|netlist| {
+                osl_sim::inject_profile_directives(&netlist, &profile)
+            });
+            match preview {
                 Ok(netlist) => {
                     egui::ScrollArea::vertical()
                         .id_salt("simulation_netlist_preview")
@@ -218,12 +222,15 @@ ui.horizontal(|ui| {
             self.status_message = Some("No editable schematic loaded".to_string());
             return;
         };
+        // Snapshot before edit for undo support
+        self.history.push(document.snapshot());
         let kind = self.simulation_panel.directive_kind;
         let body = self.simulation_panel.directive_body.clone();
         match document.set_simulation_directive(kind, body, None) {
             Ok(summary) => {
                 self.scene = Some(document.scene());
                 self.load_error = None;
+                self.history.clear_redo();
                 self.status_message =
                     Some(format!("Edited {} {}", summary.operation, summary.target));
             }

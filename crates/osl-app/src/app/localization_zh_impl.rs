@@ -111,6 +111,8 @@ impl UiText {
             Self::Netlist => "网表",
             Self::NetlistPreview => "网表预览",
             Self::NextSteps => "下一步",
+            Self::Open => "打开",
+            Self::OpenHint => "打开文件 (Ctrl+O)",
             Self::OpenSchematic => "打开原理图",
             Self::OpenIssues => "待处理问题",
             Self::OpenProject => "打开项目",

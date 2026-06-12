@@ -113,6 +113,8 @@ impl UiText {
             Self::Netlist => "Netlist",
             Self::NetlistPreview => "Netlist Preview",
             Self::NextSteps => "Next Steps",
+            Self::Open => "Open",
+            Self::OpenHint => "Open file (Ctrl+O)",
             Self::OpenSchematic => "Open Schematic",
             Self::OpenIssues => "Open Issues",
             Self::OpenProject => "Open Project",

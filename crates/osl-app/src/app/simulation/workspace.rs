@@ -110,10 +110,19 @@ impl NekoSpiceApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                 let running = self.simulation_panel.active_task.is_some();
 
-                // Run button
-                if ui
+                // Run button (or Cancel if running)
+                if running {
+                    if ui
+                        .button("Stop")
+                        .on_hover_text("Cancel running simulation")
+                        .clicked()
+                    {
+                        self.simulation_panel.active_task = None;
+                        self.status_message = Some("Simulation cancelled".to_string());
+                    }
+                } else if ui
                     .add_enabled(
-                        self.document.is_some() && !running,
+                        self.document.is_some(),
                         egui::Button::new(self.text(UiText::RunSimulation)),
                     )
                     .clicked()

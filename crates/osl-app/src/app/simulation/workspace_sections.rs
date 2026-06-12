@@ -51,8 +51,11 @@ impl NekoSpiceApp {
                 ));
                 return;
             };
-            // Apply Xyce-specific processing if Xyce backend is selected
+            // Build profile and inject directives to show the ACTUAL netlist
+            // that will be sent to the solver (not just the raw schematic netlist)
+            let profile = self.build_simulation_profile();
             let netlist_result = document.spice_netlist_preview().map(|netlist| {
+                let netlist = osl_sim::inject_profile_directives(&netlist, &profile);
                 if self.simulation_panel.backend == super::panel::SimulationBackendKind::Xyce {
                     osl_sim::prepare_xyce_netlist_display(&netlist)
                 } else {
@@ -100,35 +103,25 @@ impl NekoSpiceApp {
         });
     }
 
-    fn draw_simulation_profile_grid(&self, ui: &mut egui::Ui) {
+    fn draw_simulation_profile_grid(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.label(StudioTheme::section_title_for(
             mode,
             self.text(UiText::SimulationProfile),
         ));
-        profile_row(ui, mode, self.text(UiText::StopTime), "1 ms", "tran");
-        profile_row(ui, mode, self.text(UiText::StepSize), "1 us", "max");
-        profile_row(ui, mode, self.text(UiText::Tolerance), "1e-6", "solver");
-        profile_row(
-            ui,
-            mode,
-            self.text(UiText::TemperatureSweep),
-            "27 C",
-            "nominal",
-        );
-        profile_row(
-            ui,
-            mode,
-            self.text(UiText::OutputArtifacts),
-            "raw/csv/html",
-            "on",
-        );
+        // Show actual profile state instead of hardcoded values
+        let temp = self.simulation_profile_editor.options.temperature.clone();
+        let tol = self.simulation_profile_editor.options.reltol.clone();
+        let method = self.simulation_profile_editor.options.method.clone();
+        profile_row(ui, mode, self.text(UiText::TemperatureSweep), &format!("{} C", temp), "nominal");
+        profile_row(ui, mode, self.text(UiText::Tolerance), &tol, "rel");
+        profile_row(ui, mode, "Method", &method, "integration");
         profile_row(
             ui,
             mode,
             self.text(UiText::Backend),
             self.simulation_panel.backend.label(),
-            "wgpu UI",
+            "engine",
         );
     }
 }

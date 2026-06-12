@@ -153,6 +153,8 @@ pub(super) enum UiText {
     Netlist,
     NetlistPreview,
     NextSteps,
+    Open,
+    OpenHint,
     OpenSchematic,
     OpenIssues,
     OpenProject,

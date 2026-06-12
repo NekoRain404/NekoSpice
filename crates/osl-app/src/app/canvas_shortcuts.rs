@@ -94,5 +94,13 @@ impl NekoSpiceApp {
         if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::Y)) {
             self.redo();
         }
+        // Ctrl+O = Open file
+        if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::O)) {
+            self.open_file_dialog();
+        }
+        // Ctrl+Shift+S = Save As
+        if ui.input(|input| input.modifiers.ctrl && input.modifiers.shift && input.key_pressed(egui::Key::S)) {
+            self.save_document_with_dialog();
+        }
     }
 }

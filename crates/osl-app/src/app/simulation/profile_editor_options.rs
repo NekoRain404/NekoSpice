@@ -136,6 +136,12 @@ fn draw_simulation_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui, mode: Stud
                 .desired_width(100.0));
                 ui.end_row();
             });
+
+        // Reset to defaults button
+        ui.add_space(6.0);
+        if ui.button("Reset to Defaults").on_hover_text("Reset all solver options to defaults").clicked() {
+            app.simulation_profile_editor.options = super::profile_editor::SimOptions::default();
+        }
     });
 }
 

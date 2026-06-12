@@ -149,9 +149,14 @@ fn run_job_with_backend(
     write_text(&source_netlist, &job.netlist)?;
     let mut metadata = backend.run(&source_netlist, &output_dir)?;
 
-    // If simulation failed, parse the log file for meaningful error messages
+    // If simulation failed, parse the log file for meaningful error messages.
+    // Check both ngspice.log and xyce.log since we don't know which backend ran.
     if metadata.status == osl_core::RunStatus::Failed {
-        let log_path = output_dir.join("ngspice.log");
+        let log_path = if output_dir.join("xyce.log").is_file() {
+            output_dir.join("xyce.log")
+        } else {
+            output_dir.join("ngspice.log")
+        };
         if let Ok(log_content) = std::fs::read_to_string(&log_path) {
             let (errors, warnings, summary) = parse_ngspice_log(&log_content);
             if !errors.is_empty() || !warnings.is_empty() {
