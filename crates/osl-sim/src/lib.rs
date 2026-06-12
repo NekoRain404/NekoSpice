@@ -1,4 +1,11 @@
 mod artifacts;
+mod profile;
+
+pub use profile::{
+    SimulationProfile, SpiceMethod, ProfileParamEntry,
+    inject_profile_directives, validate_netlist_for_simulation,
+    parse_ngspice_log, format_simulation_log_summary,
+};
 
 pub use artifacts::{
     collect_run_artifacts, export_waveform_artifacts, finalize_run_artifacts,

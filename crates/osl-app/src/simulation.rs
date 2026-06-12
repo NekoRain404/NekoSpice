@@ -6,7 +6,7 @@ use crate::waveform_summary::GuiWaveformSummaryState;
 #[cfg(test)]
 use osl_core::OslError;
 use osl_core::{OslResult, RunMetadata, make_run_id, write_text};
-use osl_sim::{NgspiceCliBackend, XyceCliBackend, SimulatorBackend, finalize_run_artifacts};
+use osl_sim::{NgspiceCliBackend, XyceCliBackend, SimulatorBackend, SimulationProfile, finalize_run_artifacts, inject_profile_directives, validate_netlist_for_simulation, parse_ngspice_log, format_simulation_log_summary};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
@@ -31,19 +31,47 @@ pub(crate) struct GuiSimulationJob {
     schematic_path: PathBuf,
     netlist: String,
     runs_root: PathBuf,
+    /// Simulation profile carrying user-configured settings (temperature,
+    /// tolerances, method, component/model parameter overrides).
+    profile: SimulationProfile,
 }
 
 impl GuiSimulationJob {
-    /// from document。
+    /// Create a simulation job from a loaded schematic document and profile.
+    ///
+    /// The raw netlist from the schematic is combined with the profile's
+    /// settings (temperature, tolerances, method, parameter overrides)
+    /// to produce a complete, runnable SPICE netlist.
     pub(crate) fn from_document(
         document: &KicadGuiDocument,
         runs_root: &Path,
+        profile: &SimulationProfile,
     ) -> Result<Self, String> {
+        let raw_netlist = document.spice_netlist_preview()?;
+        // Inject profile directives into the netlist
+        let netlist = inject_profile_directives(&raw_netlist, profile);
         Ok(Self {
             schematic_path: document.path().to_path_buf(),
-            netlist: document.spice_netlist_preview()?,
+            netlist,
             runs_root: runs_root.to_path_buf(),
+            profile: profile.clone(),
         })
+    }
+
+    /// Validate the netlist before running simulation.
+    /// Returns warnings/errors that should be shown to the user.
+    pub(crate) fn validate(&self) -> Vec<String> {
+        validate_netlist_for_simulation(&self.netlist)
+    }
+
+    /// Access the netlist (with profile directives injected).
+    pub(crate) fn netlist(&self) -> &str {
+        &self.netlist
+    }
+
+    /// Access the simulation profile.
+    pub(crate) fn profile(&self) -> &SimulationProfile {
+        &self.profile
     }
 }
 
@@ -103,8 +131,12 @@ pub(crate) fn run_document_with_backend(
     runs_root: &Path,
     backend: &dyn SimulatorBackend,
 ) -> OslResult<GuiSimulationRun> {
-    let job =
-        GuiSimulationJob::from_document(document, runs_root).map_err(OslError::InvalidInput)?;
+    let job = GuiSimulationJob::from_document(
+        document,
+        runs_root,
+        &SimulationProfile::default(),
+    )
+    .map_err(OslError::InvalidInput)?;
     run_job_with_backend(&job, backend)
 }
 
@@ -116,6 +148,22 @@ fn run_job_with_backend(
     let source_netlist = output_dir.join("schematic.cir");
     write_text(&source_netlist, &job.netlist)?;
     let mut metadata = backend.run(&source_netlist, &output_dir)?;
+
+    // If simulation failed, parse the log file for meaningful error messages
+    if metadata.status == osl_core::RunStatus::Failed {
+        let log_path = output_dir.join("ngspice.log");
+        if let Ok(log_content) = std::fs::read_to_string(&log_path) {
+            let (errors, warnings, summary) = parse_ngspice_log(&log_content);
+            if !errors.is_empty() || !warnings.is_empty() {
+                let log_summary = format_simulation_log_summary(&errors, &warnings, summary.as_deref());
+                write_text(
+                    &output_dir.join("simulation-error.txt"),
+                    &log_summary,
+                )?;
+            }
+        }
+    }
+
     finalize_run_artifacts(&output_dir, &mut metadata)?;
     let report = GuiReportSummary::from_report_dir(&output_dir);
     let waveform = GuiWaveformSummaryState::from_run_dir(&output_dir);
@@ -281,7 +329,7 @@ Values:
         let document = KicadGuiDocument::load(temp.path().to_path_buf()).unwrap();
         let runs_root =
             std::env::temp_dir().join(format!("nekospice_gui_task_{}", osl_core::now_unix_ms()));
-        let job = GuiSimulationJob::from_document(&document, &runs_root).unwrap();
+        let job = GuiSimulationJob::from_document(&document, &runs_root, &SimulationProfile::default()).unwrap();
         let task = GuiSimulationTask::spawn(job, || Box::new(RecordingBackend));
 
         let started = Instant::now();

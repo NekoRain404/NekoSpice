@@ -15,6 +15,7 @@ use crate::waveform_summary::GuiWaveformSummaryState;
 use eframe::egui;
 use osl_core::RunStatus;
 use osl_kicad::{KicadDiagnosticSeverity, KicadSimulationDirective, KicadSimulationDirectiveKind};
+use osl_sim::{SimulationProfile, SpiceMethod, ProfileParamEntry};
 use std::path::Path;
 use std::time::Duration;
 
@@ -232,16 +233,66 @@ ui.horizontal(|ui| {
         }
     }
 
+    /// Build a SimulationProfile from the current profile editor state.
+    ///
+    /// Converts the GUI editor's editable fields (temperature, tolerances,
+    /// method, component/model params) into a SimulationProfile that will
+    /// be injected as SPICE directives in the netlist.
+    pub(crate) fn build_simulation_profile(&self) -> SimulationProfile {
+        let options = &self.simulation_profile_editor.options;
+        SimulationProfile {
+            temperature: options.temperature.clone(),
+            max_iterations: options.max_iterations.clone(),
+            min_timestep: options.min_timestep.clone(),
+            method: SpiceMethod::from_str_loose(&options.method),
+            reltol: options.reltol.clone(),
+            abstol: options.abstol.clone(),
+            vntol: options.vntol.clone(),
+            component_params: self
+                .simulation_profile_editor
+                .component_params
+                .iter()
+                .filter(|(name, value, _)| !name.trim().is_empty() && !value.trim().is_empty())
+                .map(|(name, value, unit)| ProfileParamEntry {
+                    name: name.clone(),
+                    value: value.clone(),
+                    unit: unit.clone(),
+                })
+                .collect(),
+            model_params: self
+                .simulation_profile_editor
+                .model_params
+                .iter()
+                .filter(|(name, value, _)| !name.trim().is_empty() && !value.trim().is_empty())
+                .map(|(name, value, unit)| ProfileParamEntry {
+                    name: name.clone(),
+                    value: value.clone(),
+                    unit: unit.clone(),
+                })
+                .collect(),
+        }
+    }
+
     /// Launch a simulation from the current panel state.
-    /// Creates a ngspice job from the loaded document and spawns it.
+    ///
+    /// Builds a simulation profile from the editor state, validates the
+    /// netlist, and spawns the backend (ngspice or Xyce) in a background
+    /// thread. Results are polled via `poll_simulation_task()`.
     pub(crate) fn run_simulation_from_panel(&mut self) {
         let Some(document) = &self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());
             return;
         };
+        // Build profile from editor state
+        let profile = self.build_simulation_profile();
         let runs_root = Path::new("runs").join("gui");
-        match crate::simulation::GuiSimulationJob::from_document(document, &runs_root) {
+        match crate::simulation::GuiSimulationJob::from_document(document, &runs_root, &profile) {
             Ok(job) => {
+                // Validate netlist before running
+                let issues = job.validate();
+                if !issues.is_empty() {
+                    self.status_message = Some(format!("Netlist issues: {}", issues.join("; ")));
+                }
                 self.simulation_panel.last_run = None;
                 self.simulation_panel.last_error = None;
                 self.simulation_panel.active_task = Some(GuiSimulationTask::spawn_with_backend(job, self.simulation_panel.backend.label()));
@@ -265,12 +316,29 @@ ui.horizontal(|ui| {
         self.simulation_panel.active_task = None;
         match result {
             Ok(run) => {
-                self.status_message = Some(format!(
-                    "Simulation {} in {} ms",
-                    run.metadata.status.as_str(),
-                    run.metadata.duration_ms
-                ));
-                self.simulation_panel.last_error = None;
+                // If simulation failed, try to read the parsed error log
+                if run.metadata.status == osl_core::RunStatus::Failed {
+                    let error_file = run.output_dir.join("simulation-error.txt");
+                    if let Ok(error_text) = std::fs::read_to_string(&error_file) {
+                        self.status_message = Some(error_text.clone());
+                        self.simulation_panel.last_error = Some(error_text);
+                    } else {
+                        self.status_message = Some(format!(
+                            "Simulation {} in {} ms (exit {:?})",
+                            run.metadata.status.as_str(),
+                            run.metadata.duration_ms,
+                            run.metadata.exit_code,
+                        ));
+                        self.simulation_panel.last_error = None;
+                    }
+                } else {
+                    self.status_message = Some(format!(
+                        "Simulation {} in {} ms",
+                        run.metadata.status.as_str(),
+                        run.metadata.duration_ms
+                    ));
+                    self.simulation_panel.last_error = None;
+                }
                 self.sync_selected_waveform_signal(&run.waveform);
                 self.simulation_panel.last_run = Some(run);
             }

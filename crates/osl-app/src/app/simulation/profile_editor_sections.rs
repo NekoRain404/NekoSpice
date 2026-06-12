@@ -24,6 +24,12 @@ pub(crate) fn draw_analysis_setup_panel(app: &mut NekoSpiceApp, ui: &mut egui::U
                 for (col, (kind, title, caption)) in row.iter().enumerate() {
                     let active = app.simulation_panel.directive_kind == *kind;
                     if analysis_mode_button(&mut columns[col], mode, title, caption, active) {
+                        // Auto-populate directive body with sensible defaults
+                        // when switching analysis type for the first time
+                        if app.simulation_panel.directive_kind != *kind {
+                            app.simulation_panel.directive_body =
+                                default_directive_body_for_kind(*kind);
+                        }
                         app.simulation_panel.directive_kind = *kind;
                     }
                 }
@@ -231,4 +237,17 @@ fn load_opamp_template(params: &mut Vec<(String, String, String)>) {
     params.push(("C1".into(), "10p".into(), "F".into()));
     params.push(("Vcc".into(), "15".into(), "V".into()));
     params.push(("Vee".into(), "-15".into(), "V".into()));
+}
+
+
+/// Return a sensible default directive body for each analysis kind.
+/// Used when the user switches analysis type in the profile editor.
+fn default_directive_body_for_kind(kind: KicadSimulationDirectiveKind) -> String {
+    match kind {
+        KicadSimulationDirectiveKind::Tran => "1u 1m".to_string(),
+        KicadSimulationDirectiveKind::Ac => "dec 10 1 1Meg".to_string(),
+        KicadSimulationDirectiveKind::Dc => "V1 0 5 0.1".to_string(),
+        KicadSimulationDirectiveKind::Op => String::new(),
+        _ => String::new(),
+    }
 }
