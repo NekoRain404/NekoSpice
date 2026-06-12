@@ -135,15 +135,6 @@ impl AnalysisParams {
         }
     }
 
-    /// The analysis kind string (e.g., ".tran", ".ac").
-    pub(crate) fn kind_prefix(&self) -> &'static str {
-        match self {
-            Self::Tran { .. } => ".tran",
-            Self::Ac { .. } => ".ac",
-            Self::Dc { .. } => ".dc",
-            Self::Op => ".op",
-        }
-    }
 }
 
 /// Persistent state for the simulation right panel.
@@ -171,12 +162,6 @@ pub(crate) struct SimulationPanelState {
     pub(crate) backend: SimulationBackendKind,
 }
 
-impl SimulationPanelState {
-    /// Get the directive body string from structured params.
-    pub(crate) fn directive_body(&self) -> String {
-        self.analysis_params.to_body()
-    }
-}
 
 impl Default for SimulationPanelState {
     fn default() -> Self {
