@@ -119,8 +119,41 @@ impl NekoSpiceApp {
             ui.separator();
 
             // ── 后端选择器（交互式） ─────────────────────────────
-            ui.label(StudioTheme::muted_for(mode, self.simulation_panel.backend.label()));
+            egui::ComboBox::from_id_salt("schematic_backend_selector")
+                .selected_text(self.simulation_panel.backend.label())
+                .show_ui(ui, |ui| {
+                    for &kind in &crate::app::simulation::state::SimulationBackendKind::ALL {
+                        let label = match self.locale() {
+                            crate::app::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
+                            _ => kind.label(),
+                        };
+                        ui.selectable_value(&mut self.simulation_panel.backend, kind, label);
+                    }
+                });
             ui.separator();
+
+            // ── 仿真指令指示器 ──────────────────────────────
+            let directive_text = format!(
+                "{} {}",
+                self.simulation_panel.directive_kind,
+                self.simulation_panel.analysis_params.to_body().trim()
+            ).trim().to_string();
+            ui.label(
+                egui::RichText::new(&directive_text)
+                    .monospace()
+                    .size(11.0)
+                    .color(palette.accent),
+            ).on_hover_text("Current simulation directive");
+
+            // Netlist export quick button
+            if self.document.is_some() {
+                if ui.small_button("Export .cir")
+                    .on_hover_text("Export SPICE netlist to file")
+                    .clicked()
+                {
+                    self.export_netlist_dialog();
+                }
+            }
 
             // ── DRC 状态 ──────────────────────────────────────
             ui.label(StudioTheme::muted_for(mode, "DRC"));

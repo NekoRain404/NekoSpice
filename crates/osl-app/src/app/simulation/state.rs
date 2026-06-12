@@ -67,6 +67,21 @@ pub(crate) enum AnalysisParams {
     },
     /// `.op` — no parameters
     Op,
+    /// `.noise V(output) V(input) type npoints fstart fstop`
+    Noise {
+        /// Output variable (e.g. "V(out)")
+        output: String,
+        /// Input source (e.g. "V(src)")
+        input_source: String,
+        /// Sweep type: "dec", "lin", or "oct"
+        sweep_type: String,
+        /// Number of points per decade/octave or total
+        npoints: String,
+        /// Start frequency (Hz)
+        fstart: String,
+        /// Stop frequency (Hz)
+        fstop: String,
+    },
 }
 
 /// `.step` parameter sweep configuration.
@@ -156,6 +171,14 @@ impl AnalysisParams {
                 vincr: "0.1".to_string(),
             },
             KicadSimulationDirectiveKind::Op => Self::Op,
+            KicadSimulationDirectiveKind::Noise => Self::Noise {
+                output: "V(out)".to_string(),
+                input_source: "V(src)".to_string(),
+                sweep_type: "dec".to_string(),
+                npoints: "10".to_string(),
+                fstart: "1".to_string(),
+                fstop: "100Meg".to_string(),
+            },
             _ => Self::default(),
         }
     }
@@ -183,6 +206,9 @@ impl AnalysisParams {
                 format!("{} {} {} {}", source, vstart, vstop, vincr)
             }
             Self::Op => String::new(),
+            Self::Noise { output, input_source, sweep_type, npoints, fstart, fstop } => {
+                format!("{} {} {} {} {} {}", output.trim(), input_source.trim(), sweep_type, npoints, fstart, fstop)
+            },
         }
     }
 

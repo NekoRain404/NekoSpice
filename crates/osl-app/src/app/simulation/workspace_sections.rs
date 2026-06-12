@@ -209,7 +209,7 @@ fn analysis_modes() -> [(
     osl_kicad::KicadSimulationDirectiveKind,
     &'static str,
     &'static str,
-); 4] {
+); 5] {
     [
         (
             osl_kicad::KicadSimulationDirectiveKind::Op,
@@ -226,6 +226,11 @@ fn analysis_modes() -> [(
             osl_kicad::KicadSimulationDirectiveKind::Ac,
             ".ac",
             "small signal",
+        ),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Noise,
+            ".noise",
+            "noise analysis",
         ),
     ]
 }

@@ -34,6 +34,7 @@ impl NekoSpiceApp {
                     KicadSimulationDirectiveKind::Ac,
                     KicadSimulationDirectiveKind::Dc,
                     KicadSimulationDirectiveKind::Op,
+                    KicadSimulationDirectiveKind::Noise,
                 ] {
                     let label = kind.to_string();
                     let active = self.simulation_panel.directive_kind == kind;
@@ -156,6 +157,45 @@ impl NekoSpiceApp {
                     mode,
                     "Operating point analysis — calculates DC bias conditions.",
                 ));
+            }
+            AnalysisParams::Noise { output, input_source, sweep_type, npoints, fstart, fstop } => {
+                egui::Grid::new("noise_params_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
+                        labeled_edit(ui, mode, "Output", output, "V(out)")
+                            .on_hover_text("Noise output variable");
+                        labeled_edit(ui, mode, "Input Source", input_source, "V(src)")
+                            .on_hover_text("Input noise source");
+                    });
+                // Sweep type selector
+                ui.label(StudioTheme::muted_for(mode, "Sweep Type"));
+                ui.horizontal(|ui| {
+                    for (st, tip) in [("dec", "Points per decade"), ("lin", "Total linear points"), ("oct", "Points per octave")] {
+                        let active = sweep_type.as_str() == st;
+                        let btn = if active {
+                            egui::Button::new(egui::RichText::new(st).strong())
+                                .fill(palette.accent_soft)
+                        } else {
+                            egui::Button::new(st)
+                        };
+                        if ui.add(btn).on_hover_text(tip).clicked() {
+                            *sweep_type = st.to_string();
+                        }
+                    }
+                });
+                ui.add_space(4.0);
+                egui::Grid::new("noise_sweep_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
+                        labeled_edit(ui, mode, "Points", npoints, "10")
+                            .on_hover_text("Number of points per decade/octave or total");
+                        labeled_edit(ui, mode, "Fstart", fstart, "1")
+                            .on_hover_text("Start frequency (Hz)");
+                        labeled_edit(ui, mode, "Fstop", fstop, "100Meg")
+                            .on_hover_text("Stop frequency (Hz)");
+                    });
             }
         }
     }

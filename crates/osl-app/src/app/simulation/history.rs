@@ -27,8 +27,10 @@ pub(crate) struct SimulationHistoryEntry {
     /// Whether the run passed or failed.
     pub(crate) status: RunStatus,
     /// Output directory path for artifact access.
+    #[allow(dead_code)]
     pub(crate) output_dir: String,
     /// Key settings snapshot (temperature, method, RELTOL).
+    #[allow(dead_code)]
     pub(crate) settings_summary: String,
 }
 

@@ -49,8 +49,6 @@ impl NekoSpiceApp {
             section_header(ui, mode, "Measurements (.measure)");
             ui.add_space(4.0);
 
-            let palette = StudioTheme::palette(mode);
-
             // Show current entries
             let mut remove_index = None;
             for (i, entry) in self.simulation_measurements.iter_mut().enumerate() {
