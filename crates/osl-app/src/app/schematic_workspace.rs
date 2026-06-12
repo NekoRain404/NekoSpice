@@ -65,17 +65,17 @@ impl NekoSpiceApp {
 
         ui.horizontal(|ui| {
             // File operations group
-            if canvas_toolbar_button(ui, mode, "\u{1F4C2} Open", true).clicked() {
+            if canvas_toolbar_button(ui, mode, "\u{25B6} Open", true).clicked() {
                 self.open_file_dialog();
             }
             if canvas_toolbar_button(ui, mode, "\u{2913} Save", self.document.is_some()).clicked() {
                 self.save_document_with_dialog();
             }
             ui.add_space(2.0);
-            if canvas_toolbar_button(ui, mode, "\u{21B6} Undo", self.history.can_undo()).clicked() {
+            if canvas_toolbar_button(ui, mode, "\u{21A9} Undo", self.history.can_undo()).clicked() {
                 self.undo();
             }
-            if canvas_toolbar_button(ui, mode, "\u{21B7} Redo", self.history.can_redo()).clicked() {
+            if canvas_toolbar_button(ui, mode, "\u{21AA} Redo", self.history.can_redo()).clicked() {
                 self.redo();
             }
             ui.add_space(2.0);
@@ -129,6 +129,10 @@ impl NekoSpiceApp {
 
             // Visual separator
             ui.add_space(6.0);
+            ui.separator();
+
+            // Backend indicator
+            ui.label(StudioTheme::muted_for(mode, self.simulation_panel.backend.label()));
             ui.separator();
 
             // DRC status

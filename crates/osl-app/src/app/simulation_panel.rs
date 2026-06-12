@@ -238,7 +238,7 @@ ui.horizontal(|ui| {
                 self.simulation_panel.last_run = None;
                 self.simulation_panel.last_error = None;
                 self.simulation_panel.active_task = Some(GuiSimulationTask::spawn_with_backend(job, self.simulation_panel.backend.label()));
-                self.status_message = Some("Simulation started".to_string());
+                self.status_message = Some(format!("Simulation started ({})", self.simulation_panel.backend.label()));
             }
             Err(error) => {
                 self.status_message = Some(error.clone());
