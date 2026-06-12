@@ -1,80 +1,157 @@
-//! Simulation directive editor — the UI for editing .tran/.ac/.dc/.op
-//! directive kind and body text, with a "Set Directive" button that
-//! writes the edited value back to the schematic.
+//! Simulation directive editor — structured UI for editing analysis parameters.
+//!
+//! Each analysis type shows its own set of labeled fields:
+//! - `.tran`: tstep, tstop, tstart, tmax, UIC checkbox
+//! - `.ac`: sweep type (dec/lin/oct), npoints, fstart, fstop
+//! - `.dc`: source name, vstart, vstop, vincr
+//! - `.op`: no parameters
+//!
+//! The structured fields are converted to SPICE directive body text when
+//! the user clicks "Set Directive" or runs the simulation.
 
 use crate::app::NekoSpiceApp;
-use eframe::egui;
-use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
+use eframe::egui;
 use osl_kicad::KicadSimulationDirectiveKind;
-
-/// Auto-default directive body when the user switches analysis type.
-pub(crate) fn default_directive_body_for_kind(kind: KicadSimulationDirectiveKind) -> String {
-    match kind {
-        KicadSimulationDirectiveKind::Tran => "1u 1m".to_string(),
-        KicadSimulationDirectiveKind::Ac => "dec 10 1 1Meg".to_string(),
-        KicadSimulationDirectiveKind::Dc => "V1 0 5 0.1".to_string(),
-        KicadSimulationDirectiveKind::Op => String::new(),
-        _ => String::new(),
-    }
-}
+use super::state::AnalysisParams;
 
 impl NekoSpiceApp {
-    /// Draw the directive editor: kind selector buttons + body text field + Set Directive.
+    /// Draw the structured directive editor in the panel sidebar.
+    ///
+    /// Shows analysis type buttons and type-specific parameter fields.
     pub(in crate::app) fn draw_simulation_directive_editor(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        ui.label(StudioTheme::section_title_for(mode, self.text(UiText::SimulationWorkspace)));
-        ui.horizontal(|ui| {
-            ui.label(self.text(UiText::Kind));
-            for kind in [
-                KicadSimulationDirectiveKind::Tran,
-                KicadSimulationDirectiveKind::Ac,
-                KicadSimulationDirectiveKind::Dc,
-                KicadSimulationDirectiveKind::Op,
-            ] {
-                let label = kind.to_string();
-                let active = self.simulation_panel.directive_kind == kind;
-                let btn = if active {
-                    egui::Button::new(egui::RichText::new(&label).strong())
-                        .fill(self.theme_palette().accent_soft)
-                } else {
-                    egui::Button::new(&label)
-                };
-                if ui.add(btn).clicked() {
-                    if self.simulation_panel.directive_kind != kind {
-                        self.simulation_panel.directive_body =
-                            default_directive_body_for_kind(kind);
+        let palette = self.theme_palette();
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(mode, "Analysis Type"));
+            ui.add_space(4.0);
+
+            // Analysis type selector buttons
+            ui.horizontal_wrapped(|ui| {
+                for kind in [
+                    KicadSimulationDirectiveKind::Tran,
+                    KicadSimulationDirectiveKind::Ac,
+                    KicadSimulationDirectiveKind::Dc,
+                    KicadSimulationDirectiveKind::Op,
+                ] {
+                    let label = kind.to_string();
+                    let active = self.simulation_panel.directive_kind == kind;
+                    let btn = if active {
+                        egui::Button::new(egui::RichText::new(&label).strong().color(palette.text))
+                            .fill(palette.accent_soft)
+                            .stroke(egui::Stroke::new(1.0, palette.accent))
+                    } else {
+                        egui::Button::new(egui::RichText::new(&label).color(palette.text_muted))
+                            .fill(palette.panel_soft)
+                            .stroke(egui::Stroke::new(1.0, palette.border))
+                    };
+                    if ui.add(btn).clicked() {
+                        if self.simulation_panel.directive_kind != kind {
+                            self.simulation_panel.directive_kind = kind;
+                            self.simulation_panel.analysis_params = AnalysisParams::for_kind(kind);
+                        }
                     }
-                    self.simulation_panel.directive_kind = kind;
                 }
+            });
+
+            ui.add_space(6.0);
+            ui.separator();
+            ui.add_space(6.0);
+
+            // Structured parameter fields for the selected analysis type
+            self.draw_analysis_params_fields(ui);
+
+            ui.add_space(6.0);
+
+            // Set Directive button
+            if ui
+                .add_enabled(
+                    self.document.is_some(),
+                    egui::Button::new("Set Directive")
+                        .fill(palette.accent_soft),
+                )
+                .clicked()
+            {
+                self.apply_simulation_directive_edit();
             }
         });
-        ui.horizontal(|ui| {
-            ui.label(self.text(UiText::Body));
-            ui.text_edit_singleline(&mut self.simulation_panel.directive_body);
-        });
-        if ui
-            .add_enabled(
-                self.document.is_some(),
-                egui::Button::new(self.text(UiText::SetDirective)),
-            )
-            .clicked()
-        {
-            self.apply_simulation_directive_edit();
+    }
+
+    /// Draw type-specific parameter fields based on the current analysis kind.
+    fn draw_analysis_params_fields(&mut self, ui: &mut egui::Ui) {
+        let palette = self.theme_palette();
+        let mode = self.theme_mode();
+        match &mut self.simulation_panel.analysis_params {
+            AnalysisParams::Tran { tstep, tstop, tstart, tmax, uic } => {
+                egui::Grid::new("tran_params_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
+                        labeled_edit(ui, mode, "Tstep (step)", tstep, "1u");
+                        labeled_edit(ui, mode, "Tstop (end)", tstop, "1m");
+                        labeled_edit(ui, mode, "Tstart (start)", tstart, "0");
+                        labeled_edit(ui, mode, "Tmax (max step)", tmax, "0 = auto");
+                        ui.label(StudioTheme::muted_for(mode, "UIC"));
+                        ui.checkbox(uic, "Use Initial Conditions");
+                        ui.end_row();
+                    });
+            }
+            AnalysisParams::Ac { sweep_type, npoints, fstart, fstop } => {
+                // Sweep type selector
+                ui.label(StudioTheme::muted_for(mode, "Sweep Type"));
+                ui.horizontal(|ui| {
+                    for st in ["dec", "lin", "oct"] {
+                        let active = sweep_type.as_str() == st;
+                        let btn = if active {
+                            egui::Button::new(egui::RichText::new(st).strong())
+                                .fill(palette.accent_soft)
+                        } else {
+                            egui::Button::new(st)
+                        };
+                        if ui.add(btn).clicked() {
+                            *sweep_type = st.to_string();
+                        }
+                    }
+                });
+                ui.add_space(4.0);
+                egui::Grid::new("ac_params_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
+                        labeled_edit(ui, mode, "Points", npoints, "10");
+                        labeled_edit(ui, mode, "Fstart", fstart, "1");
+                        labeled_edit(ui, mode, "Fstop", fstop, "1Meg");
+                    });
+            }
+            AnalysisParams::Dc { source, vstart, vstop, vincr } => {
+                egui::Grid::new("dc_params_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
+                        labeled_edit(ui, mode, "Source", source, "V1");
+                        labeled_edit(ui, mode, "Vstart", vstart, "0");
+                        labeled_edit(ui, mode, "Vstop", vstop, "5");
+                        labeled_edit(ui, mode, "Vincr", vincr, "0.1");
+                    });
+            }
+            AnalysisParams::Op => {
+                ui.label(StudioTheme::muted_for(
+                    mode,
+                    "Operating point analysis — no parameters required.",
+                ));
+            }
         }
     }
 
-    /// Apply the current directive editor state to the loaded document.
-    /// Pushes an undo snapshot before modifying the schematic.
+    /// Apply the current structured directive to the loaded document.
     pub(in crate::app) fn apply_simulation_directive_edit(&mut self) {
         let Some(document) = &mut self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());
             return;
         };
-        // Snapshot before edit for undo support
         self.history.push(document.snapshot());
         let kind = self.simulation_panel.directive_kind;
-        let body = self.simulation_panel.directive_body.clone();
+        let body = self.simulation_panel.analysis_params.to_body();
         match document.set_simulation_directive(kind, body, None) {
             Ok(summary) => {
                 self.scene = Some(document.scene());
@@ -88,4 +165,17 @@ impl NekoSpiceApp {
             }
         }
     }
+}
+
+/// Labeled text field with placeholder hint.
+fn labeled_edit(
+    ui: &mut egui::Ui,
+    mode: crate::app::theme::StudioThemeMode,
+    label: &str,
+    value: &mut String,
+    hint: &str,
+) {
+    ui.label(StudioTheme::muted_for(mode, label));
+    ui.add(egui::TextEdit::singleline(value).desired_width(120.0).hint_text(hint));
+    ui.end_row();
 }

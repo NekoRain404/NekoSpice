@@ -1,6 +1,6 @@
 //! Simulation workspace overview sections:
 //!
-//! - Analysis setup panel (analysis type selection + directive body)
+//! - Analysis setup panel (analysis type selection + structured params)
 //! - Netlist preview with syntax highlighting
 //! - Run output and diagnostics
 //! - Profile summary showing all configured simulation settings
@@ -10,6 +10,7 @@
 
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
+use super::state::AnalysisParams;
 use super::workspace_widgets::{analysis_mode_button, code_preview_line, profile_row};
 use crate::app::status_strip::severity_color;
 use crate::app::theme::StudioTheme;
@@ -17,7 +18,7 @@ use eframe::egui;
 use osl_kicad::KicadDiagnosticSeverity;
 
 impl NekoSpiceApp {
-    /// draw simulation analysis setup with directive body editor.
+    /// Draw simulation analysis setup with structured parameter fields.
     pub(crate) fn draw_simulation_analysis_setup(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -32,10 +33,8 @@ impl NekoSpiceApp {
                         let active = self.simulation_panel.directive_kind == *kind;
                         if analysis_mode_button(&mut columns[column], mode, title, caption, active)
                         {
-                            // Auto-fill default body when switching types
                             if self.simulation_panel.directive_kind != *kind {
-                                self.simulation_panel.directive_body =
-                                    super::directive_editor::default_directive_body_for_kind(*kind);
+                                self.simulation_panel.analysis_params = AnalysisParams::for_kind(*kind);
                             }
                             self.simulation_panel.directive_kind = *kind;
                         }
@@ -44,12 +43,12 @@ impl NekoSpiceApp {
                 ui.add_space(6.0);
             }
             ui.separator();
-            // Directive body editor
+            // Directive editor with structured fields
             self.draw_simulation_directive_editor(ui);
         });
     }
 
-    /// draw simulation netlist preview with line numbers and syntax highlighting.
+    /// Draw simulation netlist preview with line numbers.
     pub(crate) fn draw_simulation_netlist_preview(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -69,7 +68,6 @@ impl NekoSpiceApp {
                 ));
                 return;
             };
-            // Build the actual netlist that would be sent to the solver
             let profile = self.build_simulation_profile();
             let netlist_result = document.spice_netlist_preview().map(|netlist| {
                 let netlist = osl_sim::inject_profile_directives(&netlist, &profile);
@@ -103,7 +101,7 @@ impl NekoSpiceApp {
         });
     }
 
-    /// draw simulation run output and diagnostics.
+    /// Draw simulation run output and diagnostics.
     pub(crate) fn draw_simulation_run_output(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -121,7 +119,7 @@ impl NekoSpiceApp {
         });
     }
 
-    /// draw a comprehensive profile summary showing all configured simulation settings.
+    /// Draw comprehensive profile summary showing all configured simulation settings.
     pub(crate) fn draw_simulation_profile_summary(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
@@ -140,10 +138,10 @@ impl NekoSpiceApp {
                 });
             }
 
-            // Analysis directive
+            // Analysis directive (built from structured params)
             let analysis = format!("{} {}",
                 self.simulation_panel.directive_kind.to_string(),
-                self.simulation_panel.directive_body.trim()
+                self.simulation_panel.analysis_params.to_body().trim()
             ).trim().to_string();
             profile_row(ui, mode, "Analysis", &analysis, "active");
 

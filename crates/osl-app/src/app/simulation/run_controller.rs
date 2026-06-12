@@ -29,7 +29,7 @@ impl NekoSpiceApp {
             KicadSimulationDirectiveKind::Op => ".op".to_string(),
             _ => ".tran".to_string(),
         };
-        let analysis_body = self.simulation_panel.directive_body.clone();
+        let analysis_body = self.simulation_panel.analysis_params.to_body();
 
         SimulationProfile {
             // Analysis

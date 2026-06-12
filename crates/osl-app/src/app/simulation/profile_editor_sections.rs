@@ -6,6 +6,7 @@
 
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
+use super::state::AnalysisParams;
 use super::profile_editor_widgets::{param_table, section_header};
 use super::workspace_widgets::analysis_mode_button;
 use crate::app::theme::StudioTheme;
@@ -24,11 +25,8 @@ pub(crate) fn draw_analysis_setup_panel(app: &mut NekoSpiceApp, ui: &mut egui::U
                 for (col, (kind, title, caption)) in row.iter().enumerate() {
                     let active = app.simulation_panel.directive_kind == *kind;
                     if analysis_mode_button(&mut columns[col], mode, title, caption, active) {
-                        // Auto-populate directive body with sensible defaults
-                        // when switching analysis type for the first time
                         if app.simulation_panel.directive_kind != *kind {
-                            app.simulation_panel.directive_body =
-                                default_directive_body_for_kind(*kind);
+                            app.simulation_panel.analysis_params = AnalysisParams::for_kind(*kind);
                         }
                         app.simulation_panel.directive_kind = *kind;
                     }
@@ -37,20 +35,11 @@ pub(crate) fn draw_analysis_setup_panel(app: &mut NekoSpiceApp, ui: &mut egui::U
             ui.add_space(4.0);
         }
         ui.separator();
-        // Directive body editor
-        ui.label(StudioTheme::muted_for(mode, app.text(UiText::Body)));
-        ui.horizontal(|ui| {
-            ui.text_edit_singleline(&mut app.simulation_panel.directive_body);
-            if ui
-                .add_enabled(
-                    app.document.is_some(),
-                    egui::Button::new(app.text(UiText::SetDirective)),
-                )
-                .clicked()
-            {
-                app.apply_simulation_directive_edit();
-            }
-        });
+        // Show current directive preview
+        let body = app.simulation_panel.analysis_params.to_body();
+        let directive = format!("{} {}", app.simulation_panel.directive_kind, body.trim());
+        ui.label(StudioTheme::muted_for(mode, "Current directive:"));
+        ui.monospace(directive);
     });
 }
 
@@ -129,7 +118,7 @@ pub(crate) fn draw_parameter_definitions(app: &mut NekoSpiceApp, ui: &mut egui::
                 ui.end_row();
             });
 
-        // Editable parameter definition rows (uses the same component_params from state)
+        // Editable parameter definition rows
         if app.simulation_profile_editor.component_params.is_empty()
             && app.simulation_profile_editor.model_params.is_empty()
         {
@@ -237,17 +226,4 @@ fn load_opamp_template(params: &mut Vec<(String, String, String)>) {
     params.push(("C1".into(), "10p".into(), "F".into()));
     params.push(("Vcc".into(), "15".into(), "V".into()));
     params.push(("Vee".into(), "-15".into(), "V".into()));
-}
-
-
-/// Return a sensible default directive body for each analysis kind.
-/// Used when the user switches analysis type in the profile editor.
-fn default_directive_body_for_kind(kind: KicadSimulationDirectiveKind) -> String {
-    match kind {
-        KicadSimulationDirectiveKind::Tran => "1u 1m".to_string(),
-        KicadSimulationDirectiveKind::Ac => "dec 10 1 1Meg".to_string(),
-        KicadSimulationDirectiveKind::Dc => "V1 0 5 0.1".to_string(),
-        KicadSimulationDirectiveKind::Op => String::new(),
-        _ => String::new(),
-    }
 }

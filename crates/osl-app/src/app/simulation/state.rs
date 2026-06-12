@@ -1,7 +1,10 @@
 //! Simulation panel state definitions.
 //!
-//! Contains the backend engine selector and the persistent state for the
-//! simulation right panel (directive kind/body, run results, task tracking).
+//! Contains the backend engine selector, analysis parameters, and the
+//! persistent state for the simulation right panel.
+//!
+//! The `AnalysisParams` enum provides structured editing for each SPICE
+//! analysis type, replacing raw text body editing with proper fields.
 
 use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
 use osl_kicad::KicadSimulationDirectiveKind;
@@ -33,19 +36,129 @@ impl SimulationBackendKind {
     }
 }
 
+/// Structured analysis parameters for each SPICE analysis type.
+///
+/// Instead of requiring the user to type raw SPICE syntax, each analysis
+/// type exposes its parameters as named fields with sensible defaults.
+#[derive(Debug, Clone)]
+pub(crate) enum AnalysisParams {
+    /// `.tran tstep tstop [tstart [tmax]] [UIC]`
+    Tran {
+        tstep: String,
+        tstop: String,
+        tstart: String,
+        tmax: String,
+        uic: bool,
+    },
+    /// `.ac type npoints fstart fstop`
+    Ac {
+        /// Sweep type: "dec", "lin", or "oct"
+        sweep_type: String,
+        npoints: String,
+        fstart: String,
+        fstop: String,
+    },
+    /// `.dc source vstart vstop vincr [source2 start2 stop2 incr2]`
+    Dc {
+        source: String,
+        vstart: String,
+        vstop: String,
+        vincr: String,
+    },
+    /// `.op` — no parameters
+    Op,
+}
+
+impl Default for AnalysisParams {
+    fn default() -> Self {
+        Self::Tran {
+            tstep: "1u".to_string(),
+            tstop: "1m".to_string(),
+            tstart: "0".to_string(),
+            tmax: "0".to_string(),
+            uic: false,
+        }
+    }
+}
+
+impl AnalysisParams {
+    /// Create default params for the given analysis kind.
+    pub(crate) fn for_kind(kind: KicadSimulationDirectiveKind) -> Self {
+        match kind {
+            KicadSimulationDirectiveKind::Tran => Self::Tran {
+                tstep: "1u".to_string(),
+                tstop: "1m".to_string(),
+                tstart: "0".to_string(),
+                tmax: "0".to_string(),
+                uic: false,
+            },
+            KicadSimulationDirectiveKind::Ac => Self::Ac {
+                sweep_type: "dec".to_string(),
+                npoints: "10".to_string(),
+                fstart: "1".to_string(),
+                fstop: "1Meg".to_string(),
+            },
+            KicadSimulationDirectiveKind::Dc => Self::Dc {
+                source: "V1".to_string(),
+                vstart: "0".to_string(),
+                vstop: "5".to_string(),
+                vincr: "0.1".to_string(),
+            },
+            KicadSimulationDirectiveKind::Op => Self::Op,
+            _ => Self::default(),
+        }
+    }
+
+    /// Build the SPICE directive body string from structured fields.
+    pub(crate) fn to_body(&self) -> String {
+        match self {
+            Self::Tran { tstep, tstop, tstart, tmax, uic } => {
+                let mut parts = vec![tstep.clone(), tstop.clone()];
+                if !tstart.trim().is_empty() && tstart != "0" {
+                    parts.push(tstart.clone());
+                }
+                if !tmax.trim().is_empty() && tmax != "0" {
+                    parts.push(tmax.clone());
+                }
+                if *uic {
+                    parts.push("UIC".to_string());
+                }
+                parts.join(" ")
+            }
+            Self::Ac { sweep_type, npoints, fstart, fstop } => {
+                format!("{} {} {} {}", sweep_type, npoints, fstart, fstop)
+            }
+            Self::Dc { source, vstart, vstop, vincr } => {
+                format!("{} {} {} {}", source, vstart, vstop, vincr)
+            }
+            Self::Op => String::new(),
+        }
+    }
+
+    /// The analysis kind string (e.g., ".tran", ".ac").
+    pub(crate) fn kind_prefix(&self) -> &'static str {
+        match self {
+            Self::Tran { .. } => ".tran",
+            Self::Ac { .. } => ".ac",
+            Self::Dc { .. } => ".dc",
+            Self::Op => ".op",
+        }
+    }
+}
+
 /// Persistent state for the simulation right panel.
 ///
-/// Tracks the current directive kind/body, whether to show the netlist preview,
-/// the last completed run, any error, the currently running task, and the
-/// selected waveform signal for display.
+/// Tracks analysis parameters, run results, task tracking, and the
+/// selected backend engine.
 #[derive(Debug)]
 pub(crate) struct SimulationPanelState {
-    /// Currently selected analysis directive kind (.tran, .ac, .dc, .op).
+    /// Currently selected analysis directive kind.
     pub(crate) directive_kind: KicadSimulationDirectiveKind,
-    /// Directive body text (e.g., "1u 1m" for .tran).
-    pub(crate) directive_body: String,
+    /// Structured analysis parameters (replaces raw body text).
+    pub(crate) analysis_params: AnalysisParams,
     /// Whether to show the netlist preview section.
-    #[allow(dead_code)] pub(crate) show_netlist: bool,
+    #[allow(dead_code)]
+    pub(crate) show_netlist: bool,
     /// Last completed simulation run result.
     pub(crate) last_run: Option<GuiSimulationRun>,
     /// Error message from the last failed run.
@@ -58,11 +171,18 @@ pub(crate) struct SimulationPanelState {
     pub(crate) backend: SimulationBackendKind,
 }
 
+impl SimulationPanelState {
+    /// Get the directive body string from structured params.
+    pub(crate) fn directive_body(&self) -> String {
+        self.analysis_params.to_body()
+    }
+}
+
 impl Default for SimulationPanelState {
     fn default() -> Self {
         Self {
             directive_kind: KicadSimulationDirectiveKind::Tran,
-            directive_body: "1u 1m".to_string(),
+            analysis_params: AnalysisParams::default(),
             show_netlist: true,
             last_run: None,
             last_error: None,
