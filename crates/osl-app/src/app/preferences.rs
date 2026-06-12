@@ -49,6 +49,10 @@ struct SimulationSettingsFile {
     pivrel: String,
     numdgt: String,
     active_preset: String,
+    #[serde(default)]
+    backend: String,
+    #[serde(default)]
+    directive_kind: String,
 }
 
 impl Default for SimulationSettingsFile {
@@ -73,6 +77,8 @@ impl Default for SimulationSettingsFile {
             pivrel: "1e-3".to_string(),
             numdgt: "6".to_string(),
             active_preset: "default".to_string(),
+            backend: "ngspice".to_string(),
+            directive_kind: "tran".to_string(),
         }
     }
 }
@@ -166,7 +172,7 @@ impl StudioPreferences {
     /// 保存偏好设置到磁盘，同时包含仿真选项。
     ///
     /// 由 app 在仿真选项变更时调用，确保选项持久化。
-    pub(super) fn save_with_simulation(&self, sim_opts: &super::simulation::profile_editor::SimOptions, preset: &str) {
+    pub(super) fn save_with_simulation(&self, sim_opts: &super::simulation::profile_editor::SimOptions, preset: &str, backend: &str, _directive_kind: &str) {
         let file = SettingsFile {
             theme_mode: self.theme_mode.as_str().to_string(),
             locale: self.locale.as_str().to_string(),
@@ -192,6 +198,8 @@ impl StudioPreferences {
                 pivrel: sim_opts.pivrel.clone(),
                 numdgt: sim_opts.numdgt.clone(),
                 active_preset: preset.to_string(),
+                backend: backend.to_string(),
+                directive_kind: _directive_kind.to_string(),
             },
         };
         let path = settings_path();
@@ -205,15 +213,15 @@ impl StudioPreferences {
 
     /// 从磁盘加载仿真选项（如果存在）。
     /// 返回 (SimOptions, active_preset_name)。
-    pub(super) fn load_simulation_settings() -> (super::simulation::profile_editor::SimOptions, String) {
+    pub(super) fn load_simulation_settings() -> (super::simulation::profile_editor::SimOptions, String, String, String) {
         let path = settings_path();
         let data = match fs::read_to_string(&path) {
             Ok(d) => d,
-            Err(_) => return (super::simulation::profile_editor::SimOptions::default(), "default".to_string()),
+            Err(_) => return (super::simulation::profile_editor::SimOptions::default(), "default".to_string(), "ngspice".to_string(), "tran".to_string()),
         };
         let file: SettingsFile = match serde_json::from_str(&data) {
             Ok(f) => f,
-            Err(_) => return (super::simulation::profile_editor::SimOptions::default(), "default".to_string()),
+            Err(_) => return (super::simulation::profile_editor::SimOptions::default(), "default".to_string(), "ngspice".to_string(), "tran".to_string()),
         };
         let s = file.simulation;
         let opts = super::simulation::profile_editor::SimOptions {
@@ -236,7 +244,7 @@ impl StudioPreferences {
             pivrel: s.pivrel,
             numdgt: s.numdgt,
         };
-        (opts, s.active_preset)
+        (opts, s.active_preset, s.backend, s.directive_kind)
     }
 }
 
@@ -279,6 +287,8 @@ impl NekoSpiceApp {
         self.preferences.save_with_simulation(
             &self.simulation_profile_editor.options,
             &self.simulation_profile_editor.active_preset,
+            self.simulation_panel.backend.label(),
+            &self.simulation_panel.directive_kind.to_string(),
         );
     }
 

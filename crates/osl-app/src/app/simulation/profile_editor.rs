@@ -68,12 +68,18 @@ pub(crate) struct SimulationProfileEditorState {
     pub(crate) nodesets: Vec<(String, String)>,
     /// Name of the active preset ("default" or one from available_presets()).
     pub(crate) active_preset: String,
+    /// Persisted backend name (for restoring from disk).
+    #[allow(dead_code)]
+    pub(crate) persisted_backend: String,
+    /// Persisted directive kind (for restoring from disk).
+    #[allow(dead_code)]
+    pub(crate) persisted_directive_kind: String,
 }
 
 impl SimulationProfileEditorState {
     /// Load simulation settings from disk. Falls back to defaults if unavailable.
     pub(crate) fn from_disk() -> Self {
-        let (opts, preset) = crate::app::preferences::StudioPreferences::load_simulation_settings();
+        let (opts, preset, backend, directive_kind) = crate::app::preferences::StudioPreferences::load_simulation_settings();
         Self {
             sub_view: SimulationSubView::default(),
             component_params: Vec::new(),
@@ -82,6 +88,8 @@ impl SimulationProfileEditorState {
             initial_conditions: Vec::new(),
             nodesets: Vec::new(),
             active_preset: preset,
+            persisted_backend: backend,
+            persisted_directive_kind: directive_kind,
         }
     }
 }

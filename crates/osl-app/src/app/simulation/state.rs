@@ -260,3 +260,26 @@ impl Default for SimulationPanelState {
         }
     }
 }
+
+impl SimulationPanelState {
+    /// Load persisted simulation settings from disk.
+    /// Restores backend and directive_kind to their last-saved values.
+    #[allow(dead_code)]
+    pub(crate) fn from_disk() -> Self {
+        let (_opts, _preset, backend_str, directive_str) =
+            crate::app::preferences::StudioPreferences::load_simulation_settings();
+        let backend = match backend_str.as_str() {
+            "Xyce" | "xyce" => SimulationBackendKind::Xyce,
+            _ => SimulationBackendKind::Ngspice,
+        };
+        let directive_kind: KicadSimulationDirectiveKind = directive_str.parse()
+            .unwrap_or(KicadSimulationDirectiveKind::Tran);
+        let analysis_params = AnalysisParams::for_kind(directive_kind);
+        Self {
+            directive_kind,
+            analysis_params,
+            backend,
+            ..Self::default()
+        }
+    }
+}
