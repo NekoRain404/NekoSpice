@@ -187,6 +187,7 @@ impl NekoSpiceApp {
                     osl_kicad::KicadSimulationDirectiveKind::Ac => "small signal",
                     osl_kicad::KicadSimulationDirectiveKind::Dc => "sweep",
                     osl_kicad::KicadSimulationDirectiveKind::Op => "operating point",
+                    osl_kicad::KicadSimulationDirectiveKind::Noise => "noise analysis",
                     _ => "",
                 },
             );
