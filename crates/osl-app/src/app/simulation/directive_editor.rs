@@ -79,20 +79,25 @@ impl NekoSpiceApp {
 
     /// Draw type-specific parameter fields based on the current analysis kind.
     fn draw_analysis_params_fields(&mut self, ui: &mut egui::Ui) {
-        let palette = self.theme_palette();
         let mode = self.theme_mode();
+        let palette = self.theme_palette();
         match &mut self.simulation_panel.analysis_params {
             AnalysisParams::Tran { tstep, tstop, tstart, tmax, uic } => {
                 egui::Grid::new("tran_params_grid")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
-                        labeled_edit(ui, mode, "Tstep (step)", tstep, "1u");
-                        labeled_edit(ui, mode, "Tstop (end)", tstop, "1m");
-                        labeled_edit(ui, mode, "Tstart (start)", tstart, "0");
-                        labeled_edit(ui, mode, "Tmax (max step)", tmax, "0 = auto");
+                        labeled_edit(ui, mode, "Tstep", tstep, "1u")
+                            .on_hover_text("Printing/plotting increment");
+                        labeled_edit(ui, mode, "Tstop", tstop, "1m")
+                            .on_hover_text("Simulation stop time");
+                        labeled_edit(ui, mode, "Tstart", tstart, "0")
+                            .on_hover_text("Start time for plotting (0 = beginning)");
+                        labeled_edit(ui, mode, "Tmax", tmax, "auto")
+                            .on_hover_text("Maximum internal timestep (0 = auto)");
                         ui.label(StudioTheme::muted_for(mode, "UIC"));
-                        ui.checkbox(uic, "Use Initial Conditions");
+                        ui.checkbox(uic, "Use Initial Conditions")
+                            .on_hover_text("Skip initial operating point calculation");
                         ui.end_row();
                     });
             }
@@ -100,7 +105,7 @@ impl NekoSpiceApp {
                 // Sweep type selector
                 ui.label(StudioTheme::muted_for(mode, "Sweep Type"));
                 ui.horizontal(|ui| {
-                    for st in ["dec", "lin", "oct"] {
+                    for (st, tip) in [("dec", "Points per decade"), ("lin", "Total linear points"), ("oct", "Points per octave")] {
                         let active = sweep_type.as_str() == st;
                         let btn = if active {
                             egui::Button::new(egui::RichText::new(st).strong())
@@ -108,7 +113,7 @@ impl NekoSpiceApp {
                         } else {
                             egui::Button::new(st)
                         };
-                        if ui.add(btn).clicked() {
+                        if ui.add(btn).on_hover_text(tip).clicked() {
                             *sweep_type = st.to_string();
                         }
                     }
@@ -118,9 +123,12 @@ impl NekoSpiceApp {
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
-                        labeled_edit(ui, mode, "Points", npoints, "10");
-                        labeled_edit(ui, mode, "Fstart", fstart, "1");
-                        labeled_edit(ui, mode, "Fstop", fstop, "1Meg");
+                        labeled_edit(ui, mode, "Points", npoints, "10")
+                            .on_hover_text("Number of points per decade/octave or total");
+                        labeled_edit(ui, mode, "Fstart", fstart, "1")
+                            .on_hover_text("Start frequency (Hz)");
+                        labeled_edit(ui, mode, "Fstop", fstop, "1Meg")
+                            .on_hover_text("Stop frequency (Hz)");
                     });
             }
             AnalysisParams::Dc { source, vstart, vstop, vincr } => {
@@ -128,16 +136,20 @@ impl NekoSpiceApp {
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
-                        labeled_edit(ui, mode, "Source", source, "V1");
-                        labeled_edit(ui, mode, "Vstart", vstart, "0");
-                        labeled_edit(ui, mode, "Vstop", vstop, "5");
-                        labeled_edit(ui, mode, "Vincr", vincr, "0.1");
+                        labeled_edit(ui, mode, "Source", source, "V1")
+                            .on_hover_text("Independent source to sweep");
+                        labeled_edit(ui, mode, "Vstart", vstart, "0")
+                            .on_hover_text("Start value");
+                        labeled_edit(ui, mode, "Vstop", vstop, "5")
+                            .on_hover_text("Stop value");
+                        labeled_edit(ui, mode, "Vincr", vincr, "0.1")
+                            .on_hover_text("Increment step");
                     });
             }
             AnalysisParams::Op => {
                 ui.label(StudioTheme::muted_for(
                     mode,
-                    "Operating point analysis — no parameters required.",
+                    "Operating point analysis — calculates DC bias conditions.",
                 ));
             }
         }
@@ -167,15 +179,16 @@ impl NekoSpiceApp {
     }
 }
 
-/// Labeled text field with placeholder hint.
+/// Labeled text field with placeholder hint. Returns the response for hover text.
 fn labeled_edit(
     ui: &mut egui::Ui,
     mode: crate::app::theme::StudioThemeMode,
     label: &str,
     value: &mut String,
     hint: &str,
-) {
+) -> egui::Response {
     ui.label(StudioTheme::muted_for(mode, label));
-    ui.add(egui::TextEdit::singleline(value).desired_width(120.0).hint_text(hint));
+    let response = ui.add(egui::TextEdit::singleline(value).desired_width(120.0).hint_text(hint));
     ui.end_row();
+    response
 }
