@@ -160,6 +160,8 @@ pub(crate) struct SimulationPanelState {
     pub(crate) selected_waveform_signal: Option<String>,
     /// Currently selected simulation backend engine.
     pub(crate) backend: SimulationBackendKind,
+    /// Netlist validation warnings from the last run attempt.
+    pub(crate) netlist_warnings: Vec<String>,
 }
 
 
@@ -174,6 +176,7 @@ impl Default for SimulationPanelState {
             active_task: None,
             selected_waveform_signal: None,
             backend: SimulationBackendKind::Ngspice,
+            netlist_warnings: Vec::new(),
         }
     }
 }

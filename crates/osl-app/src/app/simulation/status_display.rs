@@ -18,12 +18,26 @@ use osl_core::RunStatus;
 use osl_kicad::KicadDiagnosticSeverity;
 
 impl NekoSpiceApp {
-    /// Draw the run status section: current task state, errors, ngspice log,
-    /// last run info, artifacts, report, and waveform summary.
+    /// Draw the run status section: netlist warnings, current task state,
+    /// errors, ngspice log, last run info, artifacts, report, and waveform summary.
     pub(in crate::app) fn draw_simulation_run_status(&mut self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+
+        // Show netlist validation warnings (persistent until next run)
+        if !self.simulation_panel.netlist_warnings.is_empty() {
+            for warning in &self.simulation_panel.netlist_warnings {
+                ui.colored_label(
+                    severity_color(mode, KicadDiagnosticSeverity::Warning),
+                    format!("Warning: {}", warning),
+                );
+            }
+            ui.add_space(4.0);
+        }
+
         if self.simulation_panel.active_task.is_some() {
             ui.label(self.text(UiText::Running));
         }
+
         // Show ngspice/xyce log if available
         if let Some(run) = &self.simulation_panel.last_run {
             let log_path = run.output_dir.join("ngspice.log");
@@ -32,7 +46,7 @@ impl NekoSpiceApp {
             if actual.is_file() {
                 if let Ok(content) = std::fs::read_to_string(&actual) {
                     ui.separator();
-                    ui.label(StudioTheme::muted_for(self.theme_mode(), "Simulation Log"));
+                    ui.label(StudioTheme::muted_for(mode, "Simulation Log"));
                     egui::ScrollArea::vertical()
                         .id_salt("ngspice_log_viewer")
                         .max_height(100.0)
@@ -45,7 +59,7 @@ impl NekoSpiceApp {
         }
         if let Some(error) = &self.simulation_panel.last_error {
             ui.colored_label(
-                severity_color(self.theme_mode(), KicadDiagnosticSeverity::Error),
+                severity_color(mode, KicadDiagnosticSeverity::Error),
                 error,
             );
         }
@@ -53,7 +67,7 @@ impl NekoSpiceApp {
             let color = match run.metadata.status {
                 RunStatus::Passed => self.theme_palette().success,
                 RunStatus::Failed => {
-                    severity_color(self.theme_mode(), KicadDiagnosticSeverity::Error)
+                    severity_color(mode, KicadDiagnosticSeverity::Error)
                 }
             };
             ui.colored_label(
@@ -80,7 +94,7 @@ impl NekoSpiceApp {
             draw_simulation_artifacts_panel(ui, run);
             draw_simulation_waveform_panel(
                 ui,
-                self.theme_mode(),
+                mode,
                 &run.waveform,
                 &mut self.simulation_panel.selected_waveform_signal,
             );

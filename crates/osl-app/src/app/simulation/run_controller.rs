@@ -121,11 +121,13 @@ impl NekoSpiceApp {
         match GuiSimulationJob::from_document(document, &runs_root, &profile) {
             Ok(job) => {
                 let issues = job.validate();
+                self.simulation_panel.netlist_warnings = issues.clone();
                 if !issues.is_empty() {
                     self.status_message =
                         Some(format!("Netlist issues: {}", issues.join("; ")));
                 }
                 self.simulation_panel.last_run = None;
+                self.simulation_panel.netlist_warnings.clear();
                 self.simulation_panel.last_error = None;
                 let ngspice = self.preferences.ngspice_path.clone();
                 let xyce = self.preferences.xyce_path.clone();
@@ -198,6 +200,7 @@ impl NekoSpiceApp {
             Err(error) => {
                 self.status_message = Some(error.clone());
                 self.simulation_panel.last_run = None;
+                self.simulation_panel.netlist_warnings.clear();
                 self.simulation_panel.last_error = Some(error);
             }
         }
