@@ -2,7 +2,6 @@ use crate::app::NekoSpiceApp;
 use super::dashboard::SECTION_GAP;
 use crate::app::localization::UiText;
 use crate::app::navigation::StudioWorkspace;
-use crate::app::review::widgets::REVIEW_FINDINGS;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText, Vec2};
 
@@ -90,39 +89,86 @@ impl NekoSpiceApp {
     }
 
     fn home_command_metric_cards(&self) -> [HomeMetricCard; 4] {
-        let open_issues = REVIEW_FINDINGS.len().to_string();
+        let palette = StudioTheme::palette(self.theme_mode());
         let symbol_coverage = self.symbol_coverage_text();
-        let run_state = self
-            .simulation_panel
-            .last_run
+        
+        // Real ERC/DRC error count from schematic
+        let (error_count, warning_count) = self
+            .document
             .as_ref()
-            .map(|run| run.metadata.status.as_str().to_string())
-            .unwrap_or_else(|| self.text(UiText::Queued).to_string());
+            .map(|d| {
+                let report = d.check_report();
+                (report.error_count(), report.warning_count())
+            })
+            .unwrap_or((0, 0));
+        let issue_text = if error_count + warning_count > 0 {
+            format!("{}e / {}w", error_count, warning_count)
+        } else {
+            self.text(UiText::Ready).to_string()
+        };
+        let issue_color = if error_count > 0 {
+            palette.danger
+        } else if warning_count > 0 {
+            palette.warning
+        } else {
+            palette.success
+        };
+
+        // Simulation run state
+        let (run_state, run_color) = if self.simulation_panel.active_task.is_some() {
+            (self.text(UiText::Running).to_string(), palette.warning)
+        } else if let Some(run) = &self.simulation_panel.last_run {
+            match run.metadata.status {
+                osl_core::RunStatus::Passed => (
+                    format!("{}ms", run.metadata.duration_ms),
+                    palette.success,
+                ),
+                osl_core::RunStatus::Failed => (
+                    self.text(UiText::WaveformError).to_string(),
+                    palette.danger,
+                ),
+            }
+        } else {
+            (self.text(UiText::Queued).to_string(), palette.text_muted)
+        };
+
+        // Backend name
+        let backend = self.simulation_panel.backend.label();
+
+        // Waveform signal count
+        let waveform_info = self.simulation_panel.last_run.as_ref().map(|run| {
+            match &run.waveform {
+                crate::waveform_summary::GuiWaveformSummaryState::Ready(s) => {
+                    format!("{} signals", s.variable_count)
+                }
+                _ => self.text(UiText::Missing).to_string(),
+            }
+        }).unwrap_or_else(|| self.text(UiText::NoWaveform).to_string());
 
         [
             HomeMetricCard {
                 title: self.text(UiText::OpenIssues),
-                value: open_issues,
+                value: issue_text,
                 caption: self.text(UiText::DesignReview).to_string(),
-                color: StudioTheme::palette(self.theme_mode()).warning,
-            },
-            HomeMetricCard {
-                title: self.text(UiText::ReviewScore),
-                value: "72".to_string(),
-                caption: self.text(UiText::HealthReady).to_string(),
-                color: StudioTheme::palette(self.theme_mode()).success,
+                color: issue_color,
             },
             HomeMetricCard {
                 title: self.text(UiText::SymbolCoverage),
                 value: symbol_coverage,
                 caption: self.text(UiText::LibraryStatus).to_string(),
-                color: StudioTheme::palette(self.theme_mode()).accent,
+                color: palette.accent,
             },
             HomeMetricCard {
                 title: self.text(UiText::LastRun),
                 value: run_state,
+                caption: backend.to_string(),
+                color: run_color,
+            },
+            HomeMetricCard {
+                title: "Waveforms",
+                value: waveform_info,
                 caption: self.text(UiText::SimulationQueue).to_string(),
-                color: StudioTheme::palette(self.theme_mode()).success,
+                color: palette.success,
             },
         ]
     }
