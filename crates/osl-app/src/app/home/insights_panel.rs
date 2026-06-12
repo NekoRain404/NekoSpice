@@ -51,23 +51,65 @@ impl NekoSpiceApp {
             let thd_title = self.text(UiText::HighThd);
             let noise_title = self.text(UiText::MeasurementNoise);
             let power_title = self.text(UiText::PowerCheck);
-            let power_ok = self.text(UiText::PowerBudgetOk);
 
-            if insight_row(ui, mode, &stability_title,
-                    "Phase margin is below 60 deg", &view_label) {
-                self.active_workspace = crate::app::navigation::StudioWorkspace::Review;
+            // Generate insights from real data
+            let has_doc = self.document.is_some();
+            let has_run = self.simulation_panel.last_run.is_some();
+            let has_errors = self.simulation_panel.last_error.is_some();
+            let report = self.document.as_ref().map(|d| d.check_report());
+            let error_count = report.as_ref().map(|r| r.error_count()).unwrap_or(0);
+            let warning_count = report.as_ref().map(|r| r.warning_count()).unwrap_or(0);
+            let waveform_vars = self.simulation_panel.last_run.as_ref()
+                .and_then(|run| match &run.waveform {
+                    crate::waveform_summary::GuiWaveformSummaryState::Ready(s) => Some(s.variable_count),
+                    _ => None,
+                })
+                .unwrap_or(0);
+
+            // ERC findings
+            if error_count > 0 {
+                if insight_row(ui, mode, &stability_title,
+                        &format!("{error_count} ERC errors found — review schematic"), &view_label) {
+                    self.active_workspace = crate::app::navigation::StudioWorkspace::Schematic;
+                }
+            } else if warning_count > 0 {
+                if insight_row(ui, mode, &stability_title,
+                        &format!("{warning_count} ERC warnings — consider fixing"), &view_label) {
+                    self.active_workspace = crate::app::navigation::StudioWorkspace::Review;
+                }
             }
-            if insight_row(ui, mode, &thd_title,
-                    "THD improved by 12 dB vs. last run", &view_label) {
-                self.active_workspace = crate::app::navigation::StudioWorkspace::Waveforms;
+
+            // Simulation results
+            if has_run && waveform_vars > 0 {
+                if insight_row(ui, mode, &thd_title,
+                        &format!("Simulation complete — {waveform_vars} signals captured"), &view_label) {
+                    self.active_workspace = crate::app::navigation::StudioWorkspace::Waveforms;
+                }
+            } else if has_errors {
+                if insight_row(ui, mode, &thd_title,
+                        "Last simulation failed — check log for errors", &view_label) {
+                    self.active_workspace = crate::app::navigation::StudioWorkspace::Simulation;
+                }
             }
-            if insight_row(ui, mode, &noise_title,
-                    "Input trace variance is above the recent baseline", &view_label) {
-                self.active_workspace = crate::app::navigation::StudioWorkspace::Waveforms;
+
+            // Schematic status
+            if has_doc && !has_run {
+                if insight_row(ui, mode, &noise_title,
+                        "Ready to simulate — run a simulation to validate", &view_label) {
+                    self.active_workspace = crate::app::navigation::StudioWorkspace::Simulation;
+                }
+            } else if has_run {
+                if insight_row(ui, mode, &noise_title,
+                        &self.simulation_panel.backend.label().to_string(), &view_label) {
+                    self.active_workspace = crate::app::navigation::StudioWorkspace::Simulation;
+                }
             }
+
+            // System health
+            let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
             if insight_row(ui, mode, &power_title,
-                    &power_ok, &view_label) {
-                self.active_workspace = crate::app::navigation::StudioWorkspace::Reports;
+                    &format!("System: {threads} threads, wgpu renderer active"), &view_label) {
+                self.active_workspace = crate::app::navigation::StudioWorkspace::Settings;
             }
         });
 
