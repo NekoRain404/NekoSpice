@@ -115,8 +115,13 @@ NekoSpice/
 │           │   │   └── insights_panel.rs  # 洞察面板
 │           │   │
 │           │   ├── schematic/    # ── 原理图工作区 ──
-│           │   │   ├── workspace.rs       # 原理图中心工作区
-│           │   │   ├── bottom_dock.rs     # 底部停靠面板（波形/FFT/Bode/控制台/网表）
+│           │   │   ├── workspace.rs       # 原理图中心工作区（布局编排）
+│           │   │   ├── toolbar.rs         # 顶部工具栏（文件/编辑/缩放/绘图工具/DRC）
+│           │   │   ├── document_tabs.rs   # 文档标签栏（原理图/子图纸）
+│           │   │   ├── bottom_dock/       # 底部停靠面板（目录模块）
+│           │   │   │   ├── mod.rs         # 标签页切换路由
+│           │   │   │   ├── waveforms.rs   # 波形/FFT/Bode 标签页
+│           │   │   │   └── debug.rs       # 控制台/网表/ERC/检查器标签页
 │           │   │   ├── workspace_widgets.rs # 工作区组件
 │           │   │   ├── selection_properties.rs # 选中项属性编辑器
 │           │   │   ├── symbol_placement.rs # 符号放置 UI
