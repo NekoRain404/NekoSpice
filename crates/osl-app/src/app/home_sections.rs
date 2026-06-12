@@ -299,6 +299,22 @@ impl NekoSpiceApp {
                     self.run_simulation_from_panel();
                     self.active_workspace = StudioWorkspace::Simulation;
                 }
+                UiText::OpenProject | UiText::ImportKiCad => {
+                    self.open_file_dialog();
+                }
+                UiText::NewSchematic => {
+                    self.status_message = Some("New schematic (use File > Open to load)".to_string());
+                }
+                UiText::NewProject => {
+                    self.status_message = Some("New project (use File > Open to load)".to_string());
+                }
+                UiText::WaveformViewer => {
+                    if self.simulation_panel.last_run.is_some() {
+                        self.active_workspace = StudioWorkspace::Waveforms;
+                    } else {
+                        self.status_message = Some("Run a simulation first to view waveforms".to_string());
+                    }
+                }
                 _ => {
                     if let Some(workspace) = route {
                         self.active_workspace = workspace;

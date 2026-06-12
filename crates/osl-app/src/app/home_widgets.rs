@@ -67,8 +67,9 @@ pub(super) fn template_card(
     title: &str,
     caption: &str,
     use_text: &str,
-) {
+) -> bool {
     let palette = StudioTheme::palette(mode);
+    let mut clicked = false;
     StudioTheme::panel_frame_for(mode).show(ui, |ui| {
         ui.set_min_height(106.0);
         ui.set_width(ui.available_width());
@@ -77,9 +78,12 @@ pub(super) fn template_card(
         ui.add_space(6.0);
         draw_template_glyph(ui, mode);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let _ = ui.small_button(format!("+ {}", use_text));
+            if ui.small_button(format!("+ {}", use_text)).clicked() {
+                clicked = true;
+            }
         });
     });
+    clicked
 }
 
 pub(super) fn queue_row(

@@ -25,7 +25,14 @@ impl NekoSpiceApp {
             ui.separator();
             let cursors = self.text(UiText::Cursors);
             ui.checkbox(&mut self.waveform_workspace.cursor_overlay, cursors);
-            let _ = ui.button(self.text(UiText::AutoScale));
+            if ui.button(self.text(UiText::AutoScale)).clicked() {
+                // AutoScale: reset viewport to fit all visible data
+                if let Some(run) = &self.simulation_panel.last_run {
+                    if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) = &run.waveform {
+                        self.status_message = Some(format!("Auto-scaled {} signals", summary.variable_count));
+                    }
+                }
+            }
         });
     }
 
