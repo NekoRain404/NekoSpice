@@ -155,6 +155,15 @@ pub struct SimulationProfile {
     pub component_params: Vec<ProfileParamEntry>,
     /// Model parameter overrides from the profile editor.
     pub model_params: Vec<ProfileParamEntry>,
+
+    // ── Sweep ─────────────────────────────────────────────────────────
+    /// `.step` parameter sweep directive (optional).
+    /// When set, generates a `.step` line before the analysis directive.
+    pub step_directive: Option<String>,
+
+    // ── Measurements ──────────────────────────────────────────────────
+    /// `.measure` directives for post-simulation extraction.
+    pub measure_directives: Vec<String>,
 }
 
 impl Default for SimulationProfile {
@@ -191,6 +200,8 @@ impl Default for SimulationProfile {
             // Parameter overrides
             component_params: Vec::new(),
             model_params: Vec::new(),
+            step_directive: None,
+            measure_directives: Vec::new(),
         }
     }
 }
@@ -259,6 +270,13 @@ impl SimulationProfile {
         let mut lines = Vec::new();
 
         // ── Analysis directive ─────────────────────────────────────────
+        // .step directive (before analysis)
+        if let Some(ref step) = self.step_directive {
+            if !step.trim().is_empty() {
+                lines.push(step.trim().to_string());
+            }
+        }
+        // Analysis directive
         let analysis_line = if self.analysis_body.trim().is_empty() {
             format!("{}", self.analysis_kind)
         } else {
@@ -345,6 +363,13 @@ impl SimulationProfile {
             }
         }
 
+        // ── Measurements ─────────────────────────────────────────────────
+        for measure in &self.measure_directives {
+            if !measure.trim().is_empty() {
+                lines.push(measure.trim().to_string());
+            }
+        }
+
         // ── Initial conditions ─────────────────────────────────────────
         if !self.initial_conditions.is_empty() {
             let entries: Vec<String> = self
@@ -418,6 +443,8 @@ impl SimulationProfile {
             || !self.nodesets.is_empty()
             || self.component_params.iter().any(ProfileParamEntry::is_valid)
             || self.model_params.iter().any(ProfileParamEntry::is_valid)
+            || self.step_directive.is_some()
+            || !self.measure_directives.is_empty()
     }
 }
 

@@ -61,6 +61,8 @@ use simulation::SimulationProfileEditorState;
 use schematic::inspector::SchematicInspectorPanelState;
 use schematic::tools::SchematicToolState;
 use schematic::SelectionPropertyEditorState;
+use simulation::SimulationHistory;
+use simulation::measure_editor::MeasureEntry;
 use simulation::SimulationPanelState;
 
 const EDIT_NUDGE_MM: f64 = 2.54;
@@ -105,6 +107,8 @@ pub struct NekoSpiceApp {
     pub(super) schematic_tools: SchematicToolState,
     pub(super) simulation_panel: SimulationPanelState,
     pub(super) simulation_profile_editor: SimulationProfileEditorState,
+    pub(super) simulation_history: SimulationHistory,
+    pub(super) simulation_measurements: Vec<MeasureEntry>,
     optimization_workspace: OptimizationWorkspaceState,
     review_workspace: ReviewWorkspaceState,
     reports_workspace: ReportsWorkspaceState,
@@ -173,6 +177,8 @@ impl Default for NekoSpiceApp {
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
             simulation_profile_editor: SimulationProfileEditorState::from_disk(),
+            simulation_history: SimulationHistory::default(),
+            simulation_measurements: Vec::new(),
             optimization_workspace: OptimizationWorkspaceState::default(),
             review_workspace: ReviewWorkspaceState::default(),
             reports_workspace: ReportsWorkspaceState::default(),

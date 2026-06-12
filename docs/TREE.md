@@ -222,7 +222,7 @@ NekoSpiceApp (app.rs)
   ├── schematic/   — 原理图编辑
   │   ├── tools/   — 绘图工具（导线/标签/总线/连接点等）
   │   └── inspector/ — 属性检查器
-  ├── simulation/  — 仿真工作流 (18 SPICE options, presets, .ic/.nodeset)
+  ├── simulation/  — 仿真工作流 (18 SPICE options, presets, .step sweep, .measure, history)
   │   ├── directive_editor  — 指令编辑
   │   ├── run_controller    — 启动/轮询
   │   ├── profile_editor    — 求解器配置

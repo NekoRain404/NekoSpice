@@ -18,6 +18,9 @@ pub enum KicadSimulationDirectiveKind {
     Subckt,
     Control,
     Endc,
+    Step,
+    Noise,
+    Measure,
     Other,
 }
 
@@ -37,6 +40,9 @@ impl KicadSimulationDirectiveKind {
             Self::Subckt => Some(".subckt"),
             Self::Control => Some(".control"),
             Self::Endc => Some(".endc"),
+            Self::Step => Some(".step"),
+            Self::Noise => Some(".noise"),
+            Self::Measure => Some(".measure"),
             Self::Other => None,
         }
     }
@@ -58,13 +64,16 @@ impl KicadSimulationDirectiveKind {
             ".subckt" => Self::Subckt,
             ".control" => Self::Control,
             ".endc" => Self::Endc,
+            ".step" => Self::Step,
+            ".noise" => Self::Noise,
+            ".measure" | ".meas" => Self::Measure,
             _ => Self::Other,
         })
     }
 
     /// is analysis。
     pub fn is_analysis(self) -> bool {
-        matches!(self, Self::Tran | Self::Ac | Self::Dc | Self::Op)
+        matches!(self, Self::Tran | Self::Ac | Self::Dc | Self::Op | Self::Noise)
     }
 }
 
@@ -83,6 +92,9 @@ impl fmt::Display for KicadSimulationDirectiveKind {
             Self::Subckt => "subckt",
             Self::Control => "control",
             Self::Endc => "endc",
+            Self::Step => "step",
+            Self::Noise => "noise",
+            Self::Measure => "measure",
             Self::Other => "other",
         })
     }
@@ -110,6 +122,9 @@ impl FromStr for KicadSimulationDirectiveKind {
             "subckt" => Ok(Self::Subckt),
             "control" => Ok(Self::Control),
             "endc" => Ok(Self::Endc),
+            "step" => Ok(Self::Step),
+            "noise" => Ok(Self::Noise),
+            "measure" | "meas" => Ok(Self::Measure),
             "other" | "raw" => Ok(Self::Other),
             _ => Err(OslError::InvalidInput(format!(
                 "unsupported KiCad simulation directive kind '{value}'"

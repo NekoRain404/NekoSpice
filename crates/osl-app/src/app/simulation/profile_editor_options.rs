@@ -18,6 +18,7 @@ use super::options_solver::{draw_transient_solver_section, draw_convergence_sect
 use super::options_ic::draw_initial_conditions_section;
 use super::options_status::{draw_run_status_summary, draw_recent_runs};
 
+
 /// Draw the complete right-column options panel with all sections.
 ///
 /// Each section reports whether any field was changed. If so, the
@@ -66,6 +67,8 @@ pub(crate) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     draw_run_status_summary(app, ui, mode);
     ui.add_space(8.0);
     draw_recent_runs(app, ui, mode);
+    ui.add_space(8.0);
+    app.draw_history_panel(ui, mode);
 
     // Persist to disk when any field was modified
     if any_changed {

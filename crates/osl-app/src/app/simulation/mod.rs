@@ -36,7 +36,12 @@ pub(crate) mod waveform_panel;
 pub(crate) mod workspace;
 pub(crate) mod artifacts_panel;
 pub(crate) mod workspace_sections;
+pub(crate) mod history;
+pub(crate) mod measure_editor;
+pub(crate) mod history_panel;
+pub(crate) mod step_sweep_editor;
 pub(crate) mod workspace_widgets;
 
 pub(crate) use state::SimulationPanelState;
+pub(crate) use history::SimulationHistory;
 pub(crate) use profile_editor::SimulationProfileEditorState;

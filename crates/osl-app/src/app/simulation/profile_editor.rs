@@ -211,6 +211,10 @@ impl NekoSpiceApp {
                     ui.set_width((ui.available_width() * 0.34).max(240.0));
                     draw_analysis_setup_panel(self, ui);
                     ui.add_space(8.0);
+                    self.draw_step_sweep_editor(ui, mode);
+                    ui.add_space(8.0);
+                    self.draw_measure_editor(ui, mode);
+                    ui.add_space(8.0);
                     draw_component_params(self, ui);
                     ui.add_space(8.0);
                     draw_model_params(self, ui);

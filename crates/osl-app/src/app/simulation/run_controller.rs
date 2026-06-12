@@ -72,6 +72,10 @@ impl NekoSpiceApp {
                 .filter(|(n, v)| !n.trim().is_empty() && !v.trim().is_empty())
                 .cloned()
                 .collect(),
+            // Sweep
+            step_directive: self.simulation_panel.step_sweep.to_directive(),
+            // Measurements
+            measure_directives: self.build_measure_directives(),
             // Parameter overrides
             component_params: self
                 .simulation_profile_editor
@@ -193,6 +197,18 @@ impl NekoSpiceApp {
                     ));
                     self.simulation_panel.last_error = None;
                 }
+                // Record in history for comparison
+                let analysis_type = self.simulation_panel.directive_kind.to_string();
+                let analysis_body = self.simulation_panel.analysis_params.to_body();
+                let backend = self.simulation_panel.backend.label().to_string();
+                let opts = &self.simulation_profile_editor.options;
+                let settings_summary = format!(
+                    "{} °C, {}, RELTOL={}",
+                    opts.temperature, opts.method, opts.reltol,
+                );
+                self.simulation_history.record_run(
+                    &run, &analysis_type, &analysis_body, &backend, settings_summary,
+                );
                 self.sync_selected_waveform_signal(&run.waveform);
                 self.simulation_panel.last_run = Some(run);
             }

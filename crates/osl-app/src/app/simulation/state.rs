@@ -69,6 +69,57 @@ pub(crate) enum AnalysisParams {
     Op,
 }
 
+/// `.step` parameter sweep configuration.
+///
+/// SPICE supports several sweep types:
+/// - `.step param NAME list val1 val2 ...` — explicit value list
+/// - `.step param NAME start stop step` — linear sweep
+/// - `.step param NAME start stop dec npoints` — decade sweep
+/// - `.step param NAME start stop oct npoints` — octave sweep
+/// - `.step temp start stop step` — temperature sweep
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum StepSweep {
+    /// No sweep active.
+    None,
+    /// Parametric sweep over a named parameter.
+    Parametric {
+        /// Name of the parameter to sweep (e.g. "R1", "TEMP").
+        param_name: String,
+        /// Sweep mode: "list", "lin", "dec", "oct".
+        sweep_mode: String,
+        /// Sweep values (for list mode) or start value.
+        start: String,
+        /// Stop value (empty for list mode).
+        stop: String,
+        /// Step size (lin) or points per dec/oct (dec/oct). Empty for list mode.
+        step: String,
+    },
+}
+
+impl Default for StepSweep {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl StepSweep {
+    /// Build the `.step` directive body string.
+    pub(crate) fn to_directive(&self) -> Option<String> {
+        match self {
+            Self::None => None,
+            Self::Parametric { param_name, sweep_mode, start, stop, step } => {
+                match sweep_mode.as_str() {
+                    "list" => Some(format!(".step param {} list {}", param_name, start)),
+                    "lin" => Some(format!(".step param {} lin {} {} {}", param_name, start, stop, step)),
+                    "dec" => Some(format!(".step param {} dec {} {} {}", param_name, step, start, stop)),
+                    "oct" => Some(format!(".step param {} oct {} {} {}", param_name, step, start, stop)),
+                    _ => Some(format!(".step param {} {} {} {}", param_name, start, stop, step)),
+                }
+            }
+        }
+    }
+}
+
 impl Default for AnalysisParams {
     fn default() -> Self {
         Self::Tran {
@@ -162,6 +213,8 @@ pub(crate) struct SimulationPanelState {
     pub(crate) backend: SimulationBackendKind,
     /// Netlist validation warnings from the last run attempt.
     pub(crate) netlist_warnings: Vec<String>,
+    /// `.step` parameter sweep configuration.
+    pub(crate) step_sweep: StepSweep,
 }
 
 
@@ -177,6 +230,7 @@ impl Default for SimulationPanelState {
             selected_waveform_signal: None,
             backend: SimulationBackendKind::Ngspice,
             netlist_warnings: Vec::new(),
+            step_sweep: StepSweep::None,
         }
     }
 }

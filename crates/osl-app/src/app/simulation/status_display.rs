@@ -64,22 +64,52 @@ impl NekoSpiceApp {
             );
         }
         if let Some(run) = &self.simulation_panel.last_run {
+            let palette = self.theme_palette();
             let color = match run.metadata.status {
-                RunStatus::Passed => self.theme_palette().success,
-                RunStatus::Failed => {
-                    severity_color(mode, KicadDiagnosticSeverity::Error)
-                }
+                RunStatus::Passed => palette.success,
+                RunStatus::Failed => severity_color(mode, KicadDiagnosticSeverity::Error),
             };
-            ui.colored_label(
-                color,
-                format!(
-                    "{}: {} ms, exit {:?}",
-                    run.metadata.status.as_str(),
-                    run.metadata.duration_ms,
-                    run.metadata.exit_code
-                ),
-            );
-            ui.monospace(run.output_dir.display().to_string());
+
+            // Structured result summary card
+            StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+                ui.label(StudioTheme::section_title_for(mode, "Run Result"));
+                ui.add_space(4.0);
+
+                // Status row with colored indicator
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("●").color(color).size(14.0));
+                    ui.label(
+                        egui::RichText::new(run.metadata.status.as_str())
+                            .strong()
+                            .color(color),
+                    );
+                });
+                ui.add_space(2.0);
+
+                // Key metrics grid
+                egui::Grid::new("run_result_metrics")
+                    .num_columns(2)
+                    .spacing([8.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label(StudioTheme::muted_for(mode, "Duration"));
+                        ui.label(egui::RichText::new(format!("{} ms", run.metadata.duration_ms)).monospace());
+                        ui.end_row();
+
+                        ui.label(StudioTheme::muted_for(mode, "Exit Code"));
+                        ui.label(egui::RichText::new(format!("{:?}", run.metadata.exit_code)).monospace());
+                        ui.end_row();
+
+                        ui.label(StudioTheme::muted_for(mode, "Backend"));
+                        ui.label(egui::RichText::new(&run.metadata.backend).monospace());
+                        ui.end_row();
+
+                        ui.label(StudioTheme::muted_for(mode, "Output"));
+                        ui.label(egui::RichText::new(run.output_dir.display().to_string()).monospace().size(10.0));
+                        ui.end_row();
+                    });
+            });
+
+            ui.add_space(4.0);
 
             // Quick action: view waveforms in dedicated workspace
             if ui
@@ -90,6 +120,7 @@ impl NekoSpiceApp {
                 self.active_workspace = StudioWorkspace::Waveforms;
             }
 
+            ui.add_space(4.0);
             draw_simulation_report_panel(ui, &run.report);
             draw_simulation_artifacts_panel(ui, run);
             draw_simulation_waveform_panel(
