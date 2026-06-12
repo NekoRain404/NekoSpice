@@ -180,19 +180,20 @@ impl NekoSpiceApp {
     }
 
     fn solver_status_text(&self) -> String {
+        let backend = self.simulation_panel.backend.label();
         if self.simulation_panel.active_task.is_some() {
-            return "ngspice running".to_string();
+            return format!("{} running", backend);
         }
         if let Some(run) = &self.simulation_panel.last_run {
             return match run.metadata.status {
-                RunStatus::Passed => format!("ngspice passed in {} ms", run.metadata.duration_ms),
-                RunStatus::Failed => format!("ngspice failed in {} ms", run.metadata.duration_ms),
+                RunStatus::Passed => format!("{} passed in {} ms", backend, run.metadata.duration_ms),
+                RunStatus::Failed => format!("{} failed in {} ms", backend, run.metadata.duration_ms),
             };
         }
         if self.simulation_panel.last_error.is_some() {
-            "ngspice error".to_string()
+            format!("{} error", backend)
         } else {
-            "ngspice ready".to_string()
+            format!("{} ready", backend)
         }
     }
 
