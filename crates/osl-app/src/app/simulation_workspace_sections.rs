@@ -116,7 +116,7 @@ impl NekoSpiceApp {
             ui,
             mode,
             self.text(UiText::Backend),
-            "ngspice-cli",
+            self.simulation_panel.backend.label(),
             "wgpu UI",
         );
     }
