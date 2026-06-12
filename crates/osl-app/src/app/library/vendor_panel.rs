@@ -1,7 +1,6 @@
 //! 厂商模型浏览面板。显示 TI/ADI 导入的 SPICE 模型列表。
 //!
 use crate::app::NekoSpiceApp;
-use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 

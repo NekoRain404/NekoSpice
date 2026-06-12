@@ -141,7 +141,7 @@ impl StudioTheme {
     /// 应用主题到 egui 上下文
     pub(crate) fn apply(ctx: &egui::Context, mode: StudioThemeMode) {
         let palette = Self::palette(mode);
-        let mut style = (*ctx.style()).clone();
+        let mut style = (*ctx.global_style()).clone();
 
         // 全局字体
         style.visuals.override_text_color = Some(palette.text);
@@ -193,26 +193,26 @@ impl StudioTheme {
         style.visuals.selection.bg_fill = palette.accent;
         style.visuals.selection.stroke = Stroke::new(1.0, palette.accent);
 
-        ctx.set_style(style);
+        ctx.set_global_style(style);
     }
 
     /// 创建面板帧样式
     pub(crate) fn panel_frame_for(mode: StudioThemeMode) -> egui::Frame {
         let palette = Self::palette(mode);
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(palette.panel)
             .inner_margin(egui::Margin::same(12))
-            .rounding(CornerRadius::same(6))
+            .corner_radius(CornerRadius::same(6))
             .stroke(Stroke::new(1.0, palette.border))
     }
 
     /// 创建卡片帧样式
     pub(crate) fn card_frame_for(mode: StudioThemeMode) -> egui::Frame {
         let palette = Self::palette(mode);
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(palette.panel_soft)
             .inner_margin(egui::Margin::same(10))
-            .rounding(CornerRadius::same(4))
+            .corner_radius(CornerRadius::same(4))
             .stroke(Stroke::new(1.0, palette.border))
     }
 

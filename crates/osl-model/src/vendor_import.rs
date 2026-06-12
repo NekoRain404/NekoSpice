@@ -107,7 +107,7 @@ fn import_dir_recursive(path: &Path, results: &mut Vec<VendorImportResult>) -> O
         if is_spice_model_file(path) {
             match import_spice_model_file(path) {
                 Ok(result) => results.push(result),
-                Err(err) => {
+                Err(_err) => {
                     // 跳过无法解析的文件，记录警告
                 }
             }
