@@ -5,6 +5,8 @@
 //! Sub-modules handle tool state and the property inspector.
 
 pub(crate) mod bottom_dock;
+pub(crate) mod toolbar;
+pub(crate) mod document_tabs;
 pub(crate) mod inspector;
 pub(crate) mod review_panel;
 pub(crate) mod selection_properties;
