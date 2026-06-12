@@ -78,7 +78,7 @@ impl NekoSpiceApp {
 
     fn draw_waveform_workspace_header(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        let palette = self.theme_palette();
+        
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 ui.heading(self.text(UiText::WaveformAnalysis));
