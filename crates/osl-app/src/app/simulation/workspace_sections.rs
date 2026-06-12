@@ -6,7 +6,6 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 use osl_kicad::KicadDiagnosticSeverity;
 
-const NETLIST_CENTER_PREVIEW_LINES: usize = 18;
 
 impl NekoSpiceApp {
     /// draw simulation analysis setup。
@@ -73,7 +72,7 @@ impl NekoSpiceApp {
             let profile = self.build_simulation_profile();
             let netlist_result = document.spice_netlist_preview().map(|netlist| {
                 let netlist = osl_sim::inject_profile_directives(&netlist, &profile);
-                if self.simulation_panel.backend == super::panel::SimulationBackendKind::Xyce {
+                if self.simulation_panel.backend == super::state::SimulationBackendKind::Xyce {
                     osl_sim::prepare_xyce_netlist_display(&netlist)
                 } else {
                     netlist

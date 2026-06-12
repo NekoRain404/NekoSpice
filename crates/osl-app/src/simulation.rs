@@ -33,7 +33,7 @@ pub(crate) struct GuiSimulationJob {
     runs_root: PathBuf,
     /// Simulation profile carrying user-configured settings (temperature,
     /// tolerances, method, component/model parameter overrides).
-    profile: SimulationProfile,
+    #[allow(dead_code)] profile: SimulationProfile,
 }
 
 impl GuiSimulationJob {
@@ -64,15 +64,6 @@ impl GuiSimulationJob {
         validate_netlist_for_simulation(&self.netlist)
     }
 
-    /// Access the netlist (with profile directives injected).
-    pub(crate) fn netlist(&self) -> &str {
-        &self.netlist
-    }
-
-    /// Access the simulation profile.
-    pub(crate) fn profile(&self) -> &SimulationProfile {
-        &self.profile
-    }
 }
 
 #[derive(Debug)]

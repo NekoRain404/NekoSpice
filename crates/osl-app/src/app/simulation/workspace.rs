@@ -136,7 +136,7 @@ impl NekoSpiceApp {
                 egui::ComboBox::from_id_salt("sim_workspace_backend")
                     .selected_text(self.simulation_panel.backend.label())
                     .show_ui(ui, |ui| {
-                        for &kind in &super::panel::SimulationBackendKind::ALL {
+                        for &kind in &super::state::SimulationBackendKind::ALL {
                             let label = match self.locale() {
                                 crate::app::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
                                 _ => kind.label(),
