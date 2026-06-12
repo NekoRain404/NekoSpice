@@ -1,7 +1,15 @@
+//! Shared widget helpers for the simulation workspace.
+//!
+//! Provides reusable UI components: analysis mode buttons, metric cards,
+//! code preview lines, profile summary rows, and status indicators.
+
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 
-/// analysis mode button。
+/// Interactive analysis mode button card with active state highlighting.
+///
+/// Returns `true` when clicked. Uses accent color for the active state
+/// and muted styling for inactive buttons.
 pub(crate) fn analysis_mode_button(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -37,7 +45,10 @@ pub(crate) fn analysis_mode_button(
         .clicked()
 }
 
-/// solver metric card。
+/// Solver metric card displaying a label, large value, and caption.
+///
+/// Used in the overview's 4-column metrics row to show solver engine,
+/// status, netlist directives, and last run duration at a glance.
 pub(crate) fn solver_metric_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -54,7 +65,33 @@ pub(crate) fn solver_metric_card(
     });
 }
 
-/// code preview line。
+/// Status indicator card with a colored dot, label, and value.
+///
+/// Used for quick-glance status in the simulation workspace.
+#[allow(dead_code)]
+pub(crate) fn status_indicator_card(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    color: egui::Color32,
+    label: &str,
+    value: &str,
+) {
+    let palette = StudioTheme::palette(mode);
+    StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+        ui.set_min_height(56.0);
+        ui.horizontal(|ui| {
+            ui.label(StudioTheme::status_dot(color));
+            ui.vertical(|ui| {
+                ui.label(StudioTheme::muted_for(mode, label));
+                ui.label(RichText::new(value).strong().color(palette.text));
+            });
+        });
+    });
+}
+
+/// Code preview line with line number gutter and monospace text.
+///
+/// Used in the netlist preview to show syntax with line numbers.
 pub(crate) fn code_preview_line(ui: &mut egui::Ui, line_number: usize, text: &str) {
     ui.horizontal(|ui| {
         ui.monospace(format!("{line_number:>2}"));
@@ -62,7 +99,9 @@ pub(crate) fn code_preview_line(ui: &mut egui::Ui, line_number: usize, text: &st
     });
 }
 
-/// profile row。
+/// Profile summary row showing a label, monospace value, and status tag.
+///
+/// Used in the configuration summary panel to display individual settings.
 pub(crate) fn profile_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
