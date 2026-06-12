@@ -68,7 +68,7 @@ fn initial_schematic_inspector_tab() -> SchematicInspectorTab {
 impl NekoSpiceApp {
     pub(super) fn draw_schematic_inspector_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        ui.heading(self.text(UiText::Inspector));
+        ui.label(StudioTheme::section_title_for(mode, self.text(UiText::Inspector)));
         ui.label(StudioTheme::muted_for(
             mode,
             self.text(UiText::SchematicInspectorCaption),

@@ -158,6 +158,7 @@ impl NekoSpiceApp {
     /// Document tab bar: shows loaded schematic and placeholder sub-sheets.
     fn draw_schematic_document_tabs(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
+        let palette = self.theme_palette();
         ui.horizontal_wrapped(|ui| {
             let active_name = self
                 .document
@@ -197,7 +198,7 @@ impl NekoSpiceApp {
                     }
                 }
             }
-            if ui.small_button("+").clicked() {
+            if ui.add(egui::Button::new(egui::RichText::new("+").size(14.0).strong().color(palette.text)).fill(palette.panel_soft).stroke(egui::Stroke::new(1.0, palette.border_strong))).clicked() {
                 self.status_message = Some(self.text(UiText::NewSchematic).to_string());
             }
         });

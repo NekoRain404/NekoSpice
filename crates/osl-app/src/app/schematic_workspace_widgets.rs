@@ -17,11 +17,11 @@ pub(super) fn canvas_toolbar_button(
 ) -> Response {
     let palette = StudioTheme::palette(mode);
     let text = RichText::new(label)
-        .size(12.0)
+        .size(13.0)
         .color(if enabled { palette.text } else { palette.text_muted });
     let btn = egui::Button::new(text)
         .fill(palette.panel_soft)
-        .stroke(Stroke::new(1.0, palette.border))
+        .stroke(Stroke::new(1.0, if enabled { palette.border_strong } else { palette.border }))
         .corner_radius(CornerRadius::same(4));
     let response = ui.add_enabled(enabled, btn);
     // Apply hover effect by painting over
@@ -37,7 +37,7 @@ pub(super) fn canvas_toolbar_button(
             response.rect.center(),
             egui::Align2::CENTER_CENTER,
             label,
-            egui::FontId::proportional(12.0),
+            egui::FontId::proportional(13.0),
             palette.text,
         );
     }
@@ -57,11 +57,11 @@ pub(super) fn toolbar_icon_button(
 ) -> Response {
     let palette = StudioTheme::palette(mode);
     let text = RichText::new(icon)
-        .size(14.0)
+        .size(16.0)
         .color(if enabled { palette.text } else { palette.text_muted });
     let btn = egui::Button::new(text)
         .fill(palette.panel_soft)
-        .stroke(Stroke::new(1.0, palette.border))
+        .stroke(Stroke::new(1.0, if enabled { palette.border_strong } else { palette.border }))
         .corner_radius(CornerRadius::same(4));
     let response = ui.add_enabled(enabled, btn).on_hover_text(tooltip);
     // Hover feedback
@@ -76,7 +76,7 @@ pub(super) fn toolbar_icon_button(
             response.rect.center(),
             egui::Align2::CENTER_CENTER,
             icon,
-            egui::FontId::proportional(14.0),
+            egui::FontId::proportional(16.0),
             palette.text,
         );
     }

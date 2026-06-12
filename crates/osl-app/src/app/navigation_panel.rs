@@ -41,7 +41,7 @@ fn draw_workspace_button(
     let palette = StudioTheme::palette(mode);
     let icon = workspace_icon(ws);
     let width = ui.available_width();
-    let height = 36.0;
+    let height = 40.0;
 
     let fg = if selected {
         palette.accent
@@ -53,15 +53,15 @@ fn draw_workspace_button(
         Vec2::new(width, height),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            ui.add_space(8.0);
+            ui.add_space(10.0);
             ui.label(
                 RichText::new(icon)
-                    .color(if selected { palette.accent } else { palette.text_muted })
+                    .color(if selected { palette.accent } else { palette.text })
                     .strong()
-                    .size(15.0),
+                    .size(17.0),
             );
-            ui.add_space(6.0);
-            ui.label(RichText::new(label).color(fg).size(13.0));
+            ui.add_space(8.0);
+            ui.label(RichText::new(label).color(fg).size(13.5).strong());
         },
     );
 
@@ -76,11 +76,14 @@ fn draw_workspace_button(
     }
 
     if selected {
+        // Bright left bar indicator
         let bar = eframe::egui::Rect::from_min_size(
             rect.left_top(),
             Vec2::new(3.0, rect.height()),
         );
         painter.rect_filled(bar, CornerRadius::same(0), palette.accent);
+        // Subtle background tint for selected item
+        painter.rect_filled(rect, corner, palette.accent_soft);
     }
 
     painter.rect_stroke(
