@@ -111,42 +111,84 @@ impl NekoSpiceApp {
         });
     }
 
-    /// Simulation defaults section — shows current solver options at a glance.
-    fn draw_settings_simulation_defaults(&self, ui: &mut egui::Ui) {
+    /// Simulation defaults section — editable solver options with auto-save.
+    fn draw_settings_simulation_defaults(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        let opts = &self.simulation_profile_editor.options;
+        let mut changed = false;
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(mode, "Simulation Defaults"));
             ui.add_space(4.0);
 
-            let preset = &self.simulation_profile_editor.active_preset;
+            let preset = self.simulation_profile_editor.active_preset.clone();
             if preset != "default" {
                 ui.horizontal(|ui| {
                     ui.label(StudioTheme::muted_for(mode, "Active Preset"));
-                    ui.label(egui::RichText::new(preset).strong().color(self.theme_palette().accent));
+                    ui.label(egui::RichText::new(&preset).strong().color(self.theme_palette().accent));
                 });
             }
 
+            // Backend selector
+            ui.horizontal(|ui| {
+                ui.label(StudioTheme::muted_for(mode, "Backend"));
+                egui::ComboBox::from_id_salt("settings_backend")
+                    .selected_text(self.simulation_panel.backend.label())
+                    .show_ui(ui, |ui| {
+                        for &kind in &super::super::simulation::state::SimulationBackendKind::ALL {
+                            if ui.selectable_value(&mut self.simulation_panel.backend, kind, kind.label()).changed() {
+                                changed = true;
+                            }
+                        }
+                    });
+            });
+            ui.add_space(4.0);
+
+            // Analysis type selector
+            ui.horizontal(|ui| {
+                ui.label(StudioTheme::muted_for(mode, "Analysis"));
+                for kind in [
+                    osl_kicad::KicadSimulationDirectiveKind::Tran,
+                    osl_kicad::KicadSimulationDirectiveKind::Ac,
+                    osl_kicad::KicadSimulationDirectiveKind::Dc,
+                    osl_kicad::KicadSimulationDirectiveKind::Op,
+                    osl_kicad::KicadSimulationDirectiveKind::Noise,
+                ] {
+                    let active = self.simulation_panel.directive_kind == kind;
+                    let btn = if active {
+                        egui::Button::new(egui::RichText::new(kind.to_string()).strong().color(self.theme_palette().text))
+                            .fill(self.theme_palette().accent_soft)
+                            .stroke(egui::Stroke::new(1.0, self.theme_palette().accent))
+                    } else {
+                        egui::Button::new(egui::RichText::new(kind.to_string()).color(self.theme_palette().text_muted))
+                            .fill(self.theme_palette().panel_soft)
+                    };
+                    if ui.add(btn).clicked() && !active {
+                        self.simulation_panel.directive_kind = kind;
+                        self.simulation_panel.analysis_params = super::super::simulation::state::AnalysisParams::for_kind(kind);
+                        changed = true;
+                    }
+                }
+            });
+            ui.add_space(4.0);
+
+            // Editable solver parameters
             egui::Grid::new("settings_sim_defaults")
                 .num_columns(2)
                 .spacing([12.0, 4.0])
                 .show(ui, |ui| {
-                    settings_grid_row(ui, mode, "Temperature", &format!("{} °C", opts.temperature));
-                    settings_grid_row(ui, mode, "Method", &opts.method);
-                    settings_grid_row(ui, mode, "RELTOL", &opts.reltol);
-                    settings_grid_row(ui, mode, "ABSTOL", &opts.abstol);
-                    settings_grid_row(ui, mode, "VNTOL", &opts.vntol);
-                    settings_grid_row(ui, mode, "GMIN", &opts.gmin);
-                    settings_grid_row(ui, mode, "ITL1", &opts.itl1);
-                    settings_grid_row(ui, mode, "ITL4", &opts.itl4);
+                    changed |= settings_edit_row(ui, mode, "Temperature (°C)", &mut self.simulation_profile_editor.options.temperature);
+                    changed |= settings_edit_row(ui, mode, "Method", &mut self.simulation_profile_editor.options.method);
+                    changed |= settings_edit_row(ui, mode, "RELTOL", &mut self.simulation_profile_editor.options.reltol);
+                    changed |= settings_edit_row(ui, mode, "ABSTOL", &mut self.simulation_profile_editor.options.abstol);
+                    changed |= settings_edit_row(ui, mode, "VNTOL", &mut self.simulation_profile_editor.options.vntol);
+                    changed |= settings_edit_row(ui, mode, "GMIN", &mut self.simulation_profile_editor.options.gmin);
+                    changed |= settings_edit_row(ui, mode, "ITL1", &mut self.simulation_profile_editor.options.itl1);
+                    changed |= settings_edit_row(ui, mode, "ITL4", &mut self.simulation_profile_editor.options.itl4);
                 });
-
-            ui.add_space(4.0);
-            ui.label(StudioTheme::muted_for(
-                mode,
-                "Edit simulation options in the Simulation workspace Profile Editor.",
-            ));
         });
+
+        if changed {
+            self.save_simulation_settings();
+        }
     }
 
     fn draw_settings_localization_section(&mut self, ui: &mut egui::Ui) {
@@ -196,8 +238,16 @@ fn settings_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &s
     });
 }
 
-fn settings_grid_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
+
+/// Editable settings row that returns whether the value was changed.
+fn settings_edit_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &mut String) -> bool {
     ui.label(StudioTheme::muted_for(mode, label));
-    ui.label(egui::RichText::new(value).monospace());
+    let resp = ui.add(
+        egui::TextEdit::singleline(value)
+            .desired_width(120.0)
+            .font(egui::TextStyle::Monospace),
+    );
+    let changed = resp.changed();
     ui.end_row();
+    changed
 }

@@ -170,6 +170,15 @@ impl NekoSpiceApp {
                 format!("{:.0}%", self.viewport.zoom * 100.0),
             ));
             ui.separator();
+            // Analysis type indicator
+            ui.label(StudioTheme::muted_for(
+                mode,
+                format!(".{}", self.simulation_panel.directive_kind),
+            ));
+            ui.separator();
+            // Waveform status
+            ui.label(StudioTheme::muted_for(mode, &snapshot.waveform_status));
+            ui.separator();
             // Element count from scene
             ui.label(StudioTheme::muted_for(mode, snapshot.selected_item));
             if let Some(message) = &self.status_message {

@@ -150,20 +150,26 @@ pub(crate) fn measurement_row(
 }
 
 /// recommendation row。
+/// Draw a recommendation row with an action button.
+/// Returns `true` when the action button is clicked.
 pub(crate) fn recommendation_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
     title: &str,
     action: &str,
-) {
+) -> bool {
+    let mut clicked = false;
     ui.horizontal(|ui| {
         ui.label(StudioTheme::accent_for(mode, "REC"));
         ui.label(title);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let _ = ui.small_button(action);
+            if ui.small_button(action).clicked() {
+                clicked = true;
+            }
         });
     });
     ui.separator();
+    clicked
 }
 
 fn draw_template_glyph(ui: &mut egui::Ui, mode: StudioThemeMode) {
