@@ -13,6 +13,7 @@ pub struct KicadImage {
 }
 
 impl KicadImage {
+    /// image size mm。
     pub fn image_size_mm(&self) -> Option<KicadSize> {
         png_size_from_base64(&self.data_base64).map(|(width_px, height_px)| {
             let scale = if self.scale.is_finite() && self.scale > 0.0 {
@@ -27,6 +28,7 @@ impl KicadImage {
         })
     }
 
+    /// bounding box。
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
         let at = self.at?;
         let size = self.image_size_mm()?;
@@ -42,6 +44,7 @@ impl KicadImage {
         })
     }
 
+    /// mime type。
     pub fn mime_type(&self) -> &'static str {
         if base64_starts_with(&self.data_base64, b"\x89PNG\r\n\x1a\n") {
             "image/png"
@@ -52,6 +55,7 @@ impl KicadImage {
         }
     }
 
+    /// write image sexpr。
     pub(crate) fn write_image_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(image", pad));
@@ -77,6 +81,7 @@ impl KicadImage {
     }
 }
 
+/// parse image。
 pub(crate) fn parse_image(node: &Sexp) -> Option<KicadImage> {
     let items = list_items(node);
     Some(KicadImage {

@@ -17,6 +17,7 @@ pub(crate) enum ReviewChecklistTab {
 impl ReviewChecklistTab {
     pub(crate) const ALL: [Self; 3] = [Self::Readiness, Self::Electrical, Self::Models];
 
+    /// label。
     pub(crate) fn label(self, locale: StudioLocale) -> &'static str {
         match locale {
             StudioLocale::English => match self {
@@ -45,6 +46,7 @@ pub(crate) enum ReviewSeverityFilter {
 impl ReviewSeverityFilter {
     pub(crate) const ALL: [Self; 4] = [Self::All, Self::Critical, Self::Major, Self::Minor];
 
+    /// label。
     pub(crate) fn label(self, locale: StudioLocale) -> &'static str {
         match locale {
             StudioLocale::English => match self {
@@ -62,6 +64,7 @@ impl ReviewSeverityFilter {
         }
     }
 
+    /// matches。
     pub(crate) fn matches(self, severity: ReviewSeverity) -> bool {
         match self {
             Self::All => true,
@@ -80,6 +83,7 @@ pub(crate) enum ReviewSeverity {
 }
 
 impl ReviewSeverity {
+    /// label。
     pub(crate) fn label(self, locale: StudioLocale) -> &'static str {
         match locale {
             StudioLocale::English => match self {

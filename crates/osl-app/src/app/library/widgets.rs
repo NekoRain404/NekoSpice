@@ -1,6 +1,7 @@
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 
+/// library filter tab。
 pub(crate) fn library_filter_tab(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -36,6 +37,7 @@ pub(crate) fn library_filter_tab(
     .clicked()
 }
 
+/// symbol list row。
 pub(crate) fn symbol_list_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -79,6 +81,7 @@ pub(crate) fn symbol_list_row(
         .clicked()
 }
 
+/// code line。
 pub(crate) fn code_line(ui: &mut egui::Ui, line_number: usize, text: &str) {
     ui.horizontal(|ui| {
         ui.monospace(format!("{line_number:>2}"));
@@ -86,6 +89,7 @@ pub(crate) fn code_line(ui: &mut egui::Ui, line_number: usize, text: &str) {
     });
 }
 
+/// metadata row。
 pub(crate) fn metadata_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
     let palette = StudioTheme::palette(mode);
     ui.horizontal(|ui| {
@@ -96,6 +100,7 @@ pub(crate) fn metadata_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str
     });
 }
 
+/// library metric card。
 pub(crate) fn library_metric_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -112,6 +117,7 @@ pub(crate) fn library_metric_card(
     });
 }
 
+/// pin mapping row。
 pub(crate) fn pin_mapping_row(
     ui: &mut egui::Ui,
     number: &str,
@@ -126,6 +132,7 @@ pub(crate) fn pin_mapping_row(
     ui.end_row();
 }
 
+/// validation row。
 pub(crate) fn validation_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

@@ -10,6 +10,7 @@ pub struct KicadGroup {
 }
 
 impl KicadGroup {
+    /// write group sexpr。
     pub(crate) fn write_group_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(group {}\n", pad, sexpr_string(&self.name)));
@@ -28,6 +29,7 @@ impl KicadGroup {
     }
 }
 
+/// parse group。
 pub(crate) fn parse_group(node: &Sexp) -> Option<KicadGroup> {
     let items = list_items(node);
     Some(KicadGroup {

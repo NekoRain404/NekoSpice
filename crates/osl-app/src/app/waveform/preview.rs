@@ -9,6 +9,7 @@ use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Str
 const STACKED_TRACE_LIMIT: usize = 4;
 const STACKED_NAVIGATOR_HEIGHT: f32 = 30.0;
 
+/// draw single waveform preview。
 pub(crate) fn draw_single_waveform_preview(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -44,6 +45,7 @@ pub(crate) fn draw_single_waveform_preview(
     ));
 }
 
+/// draw stacked waveform preview。
 pub(crate) fn draw_stacked_waveform_preview(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

@@ -39,12 +39,14 @@ pub struct NgspiceCliBackend {
 }
 
 impl NgspiceCliBackend {
+    /// new。
     pub fn new(executable: impl Into<PathBuf>) -> Self {
         Self {
             executable: executable.into(),
         }
     }
 
+    /// executable。
     pub fn executable(&self) -> &Path {
         &self.executable
     }
@@ -343,12 +345,14 @@ pub struct XyceCliBackend {
 }
 
 impl XyceCliBackend {
+    /// new。
     pub fn new(executable: impl Into<PathBuf>) -> Self {
         Self {
             executable: executable.into(),
         }
     }
 
+    /// executable。
     pub fn executable(&self) -> &Path {
         &self.executable
     }

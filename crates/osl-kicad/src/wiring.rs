@@ -15,6 +15,7 @@ pub struct KicadWire {
 }
 
 impl KicadWire {
+    /// write wire sexpr。
     pub(crate) fn write_wire_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(wire", pad));
@@ -34,6 +35,7 @@ pub struct KicadBusAlias {
 }
 
 impl KicadBusAlias {
+    /// write bus alias sexpr。
     pub(crate) fn write_bus_alias_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         let members = self
@@ -59,6 +61,7 @@ pub struct KicadBus {
 }
 
 impl KicadBus {
+    /// write bus sexpr。
     pub(crate) fn write_bus_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(bus", pad));
@@ -80,6 +83,7 @@ pub struct KicadBusEntry {
 }
 
 impl KicadBusEntry {
+    /// end。
     pub fn end(&self) -> KicadPoint {
         KicadPoint {
             x: self.at.x + self.size.width,
@@ -87,6 +91,7 @@ impl KicadBusEntry {
         }
     }
 
+    /// write bus entry sexpr。
     pub(crate) fn write_bus_entry_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -121,6 +126,7 @@ pub struct KicadNetChain {
 }
 
 impl KicadNetChain {
+    /// write net chain sexpr。
     pub(crate) fn write_net_chain_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(net_chain {}", pad, sexpr_string(&self.name)));
@@ -165,6 +171,7 @@ pub struct KicadNetChainEndpoint {
     pub pin: String,
 }
 
+/// parse wire。
 pub(crate) fn parse_wire(node: &Sexp) -> KicadWire {
     let items = list_items(node);
     KicadWire {
@@ -174,6 +181,7 @@ pub(crate) fn parse_wire(node: &Sexp) -> KicadWire {
     }
 }
 
+/// parse bus alias。
 pub(crate) fn parse_bus_alias(node: &Sexp) -> Option<KicadBusAlias> {
     let items = list_items(node);
     Some(KicadBusAlias {
@@ -191,6 +199,7 @@ pub(crate) fn parse_bus_alias(node: &Sexp) -> Option<KicadBusAlias> {
     })
 }
 
+/// parse bus。
 pub(crate) fn parse_bus(node: &Sexp) -> KicadBus {
     let items = list_items(node);
     KicadBus {
@@ -200,6 +209,7 @@ pub(crate) fn parse_bus(node: &Sexp) -> KicadBus {
     }
 }
 
+/// parse bus entry。
 pub(crate) fn parse_bus_entry(node: &Sexp) -> Option<KicadBusEntry> {
     let items = list_items(node);
     let at = child(items, "at").and_then(parse_at)?;
@@ -211,6 +221,7 @@ pub(crate) fn parse_bus_entry(node: &Sexp) -> Option<KicadBusEntry> {
     })
 }
 
+/// parse net chain。
 pub(crate) fn parse_net_chain(node: &Sexp) -> Option<KicadNetChain> {
     let items = list_items(node);
     let known_heads = ["from", "to", "net_class", "color", "nets"];

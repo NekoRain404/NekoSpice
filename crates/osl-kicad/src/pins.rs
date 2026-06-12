@@ -15,6 +15,7 @@ pub struct KicadSymbolPinRef {
 }
 
 impl KicadSymbolPinRef {
+    /// write pin ref sexpr。
     pub(crate) fn write_pin_ref_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         let number = self
@@ -40,10 +41,12 @@ pub struct KicadPinDisplay {
 }
 
 impl KicadPinDisplay {
+    /// write pin names sexpr。
     pub(crate) fn write_pin_names_sexpr(&self, output: &mut String, indent: usize) {
         self.write_pin_display_sexpr(output, indent, "pin_names", true);
     }
 
+    /// write pin numbers sexpr。
     pub(crate) fn write_pin_numbers_sexpr(&self, output: &mut String, indent: usize) {
         self.write_pin_display_sexpr(output, indent, "pin_numbers", false);
     }
@@ -79,22 +82,27 @@ pub struct KicadPinDef {
 }
 
 impl KicadPinDef {
+    /// number。
     pub fn number(&self) -> &str {
         &self.number.text
     }
 
+    /// name。
     pub fn name(&self) -> &str {
         &self.name.text
     }
 
+    /// number effects。
     pub fn number_effects(&self) -> Option<&KicadTextEffects> {
         self.number.effects.as_ref()
     }
 
+    /// name effects。
     pub fn name_effects(&self) -> Option<&KicadTextEffects> {
         self.name.effects.as_ref()
     }
 
+    /// write pin sexpr。
     pub(crate) fn write_pin_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -162,6 +170,7 @@ impl KicadPinText {
     }
 }
 
+/// parse symbol pin ref。
 pub(crate) fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
     let items = list_items(node);
     Some(KicadSymbolPinRef {
@@ -171,6 +180,7 @@ pub(crate) fn parse_symbol_pin_ref(node: &Sexp) -> Option<KicadSymbolPinRef> {
     })
 }
 
+/// parse pin def。
 pub(crate) fn parse_pin_def(node: &Sexp) -> Option<KicadPinDef> {
     let items = list_items(node);
     Some(KicadPinDef {
@@ -198,6 +208,7 @@ fn parse_pin_alternate(node: &Sexp) -> Option<KicadPinAlternate> {
     })
 }
 
+/// parse pin display。
 pub(crate) fn parse_pin_display(node: &Sexp) -> KicadPinDisplay {
     let items = list_items(node);
     KicadPinDisplay {
@@ -220,6 +231,7 @@ fn parse_pin_text(node: &Sexp) -> Option<KicadPinText> {
     ))
 }
 
+/// kicad pin alternate value。
 pub(crate) fn kicad_pin_alternate_value(alternate: &KicadPinAlternate) -> serde_json::Value {
     serde_json::json!({
         "name": alternate.name,
@@ -228,6 +240,7 @@ pub(crate) fn kicad_pin_alternate_value(alternate: &KicadPinAlternate) -> serde_
     })
 }
 
+/// kicad pin display value。
 pub(crate) fn kicad_pin_display_value(display: &KicadPinDisplay) -> serde_json::Value {
     serde_json::json!({
         "offset": display.offset,
@@ -235,6 +248,7 @@ pub(crate) fn kicad_pin_display_value(display: &KicadPinDisplay) -> serde_json::
     })
 }
 
+/// compare pin numbers。
 pub(crate) fn compare_pin_numbers(left: &&KicadPinDef, right: &&KicadPinDef) -> Ordering {
     match (left.number().parse::<u32>(), right.number().parse::<u32>()) {
         (Ok(left), Ok(right)) => left.cmp(&right),

@@ -1,7 +1,5 @@
-/// File open/save dialog integration.
-///
-/// Uses the `rfd` crate for native file dialogs on Linux/macOS/Windows.
-/// Provides async-safe file picker calls that work with egui's event loop.
+//! 文件对话框集成。封装原生文件打开/保存对话框。
+//!
 use super::NekoSpiceApp;
 use super::localization::UiText;
 use std::path::PathBuf;

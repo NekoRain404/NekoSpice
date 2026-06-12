@@ -14,6 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 impl KicadSchematic {
+    /// check report with hierarchy。
     pub fn check_report_with_hierarchy(
         &self,
         base_dir: &Path,
@@ -30,6 +31,7 @@ impl KicadSchematic {
         })
     }
 
+    /// to spice netlist。
     pub fn to_spice_netlist(&self) -> OslResult<String> {
         let graph = self.connectivity_graph();
         let mut lines = vec![format!("* Imported from KiCad schematic: {}", self.source)];
@@ -80,6 +82,7 @@ impl KicadSchematic {
         Ok(format!("{}\n", lines.join("\n")))
     }
 
+    /// to spice netlist with hierarchy。
     pub fn to_spice_netlist_with_hierarchy(
         &self,
         base_dir: &Path,
@@ -122,6 +125,7 @@ impl KicadSchematic {
         })
     }
 
+    /// spice include directives。
     pub fn spice_include_directives(&self) -> Vec<String> {
         let mut includes = BTreeSet::new();
         for symbol in &self.symbols {
@@ -626,6 +630,7 @@ fn sanitize_spice_identifier(value: &str) -> String {
     }
 }
 
+/// spice primitive for device。
 pub(crate) fn spice_primitive_for_device(device: &str) -> Option<String> {
     let device = device.to_ascii_uppercase();
     let primitive = match device.as_str() {

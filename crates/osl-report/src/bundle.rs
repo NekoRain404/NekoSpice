@@ -8,6 +8,7 @@ pub struct ReportBundleFile {
     pub kind: &'static str,
 }
 
+/// write verify report bundle。
 pub fn write_verify_report_bundle(
     output_dir: &Path,
     report: &VerifyReport,
@@ -15,6 +16,7 @@ pub fn write_verify_report_bundle(
     write_report_bundle(output_dir, "verify.json", report)
 }
 
+/// write bench report bundle。
 pub fn write_bench_report_bundle(
     output_dir: &Path,
     report: &VerifyReport,
@@ -22,6 +24,7 @@ pub fn write_bench_report_bundle(
     write_report_bundle(output_dir, "bench.json", report)
 }
 
+/// write json html report bundle。
 pub fn write_json_html_report_bundle(
     output_dir: &Path,
     json_name: &'static str,

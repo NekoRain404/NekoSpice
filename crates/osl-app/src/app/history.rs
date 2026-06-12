@@ -1,9 +1,5 @@
-/// Undo/redo history for schematic edits.
-///
-/// Stores snapshots of the full schematic state so that any edit can be
-/// reversed.  Each call to `push` saves the current state before an edit is
-/// applied, and clears the redo stack (since a new edit invalidates the
-/// forward branch).
+//! 撤销/重做历史栈。基于快照的编辑历史管理。
+//!
 use osl_kicad::KicadSchematic;
 
 #[derive(Debug, Clone)]

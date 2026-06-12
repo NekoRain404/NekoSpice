@@ -12,6 +12,7 @@ use crate::waveform_summary::GuiWaveformSummaryState;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw review center workspace。
     pub(crate) fn draw_review_center_workspace(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.heading("Design Review");
@@ -59,6 +60,7 @@ impl NekoSpiceApp {
             });
     }
 
+    /// draw review workspace panel。
     pub(crate) fn draw_review_workspace_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();

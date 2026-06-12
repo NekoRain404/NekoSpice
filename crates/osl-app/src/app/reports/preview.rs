@@ -3,6 +3,7 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw report preview mock page。
     pub(crate) fn draw_report_preview_mock_page(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = StudioTheme::palette(mode);
@@ -52,6 +53,7 @@ impl NekoSpiceApp {
     }
 }
 
+/// draw grid。
 pub(crate) fn draw_grid(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
     for index in 1..6 {
         let x = egui::lerp(rect.left()..=rect.right(), index as f32 / 6.0);
@@ -67,6 +69,7 @@ pub(crate) fn draw_grid(painter: &egui::Painter, rect: egui::Rect, color: egui::
     }
 }
 
+/// draw curve。
 pub(crate) fn draw_curve(
     painter: &egui::Painter,
     rect: egui::Rect,

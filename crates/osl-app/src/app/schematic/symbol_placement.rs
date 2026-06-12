@@ -3,6 +3,7 @@ use eframe::egui;
 use osl_kicad::{KicadIndexedSymbolBodyStyle, KicadIndexedSymbolPin, KicadIndexedSymbolUnit};
 
 impl NekoSpiceApp {
+    /// draw symbol scope controls。
     pub(crate) fn draw_symbol_scope_controls(&mut self, ui: &mut egui::Ui, symbol_id: &str) {
         let Some((units, body_styles, pins)) = self.library.as_ref().and_then(|library| {
             let symbol = library.symbol(symbol_id)?;

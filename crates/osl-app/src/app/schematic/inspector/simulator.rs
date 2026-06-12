@@ -7,6 +7,7 @@ use eframe::egui;
 use osl_kicad::KicadDiagnosticSeverity;
 
 impl NekoSpiceApp {
+    /// draw schematic simulator tab。
     pub(crate) fn draw_schematic_simulator_tab(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
         let mode = self.theme_mode();

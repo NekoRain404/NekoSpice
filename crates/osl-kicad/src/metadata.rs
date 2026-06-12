@@ -10,6 +10,7 @@ pub struct KicadTitleBlock {
 }
 
 impl KicadTitleBlock {
+    /// write title block sexpr。
     pub(crate) fn write_title_block_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(title_block\n", pad));
@@ -43,6 +44,7 @@ pub struct KicadTitleComment {
     pub text: String,
 }
 
+/// parse title block。
 pub(crate) fn parse_title_block(node: &Sexp) -> KicadTitleBlock {
     let items = list_items(node);
     KicadTitleBlock {

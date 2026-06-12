@@ -2,6 +2,7 @@ use crate::VerifyReport;
 use crate::format::{parameters_text, summary_text};
 use osl_core::html_escape;
 
+/// report html。
 pub(crate) fn report_html(report: &VerifyReport) -> String {
     let failure_rows = report
         .results
@@ -109,6 +110,7 @@ pub(crate) fn report_html(report: &VerifyReport) -> String {
     )
 }
 
+/// report css。
 pub fn report_css() -> &'static str {
     concat!(
         "<style>",

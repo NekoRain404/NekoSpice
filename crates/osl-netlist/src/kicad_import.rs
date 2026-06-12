@@ -6,6 +6,7 @@ use osl_kicad::{
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// resolve import source path。
 pub(crate) fn resolve_import_source_path(path: &Path) -> OslResult<PathBuf> {
     if path.is_dir() {
         let hints = kicad_project_source_hints_for_dir(path);
@@ -21,12 +22,14 @@ pub(crate) fn resolve_import_source_path(path: &Path) -> OslResult<PathBuf> {
     Ok(path.to_path_buf())
 }
 
+/// is kicad schematic。
 pub(crate) fn is_kicad_schematic(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("kicad_sch"))
 }
 
+/// kicad schematic diagnostic to import。
 pub(crate) fn kicad_schematic_diagnostic_to_import(
     diagnostic: &KicadSchematicDiagnostic,
 ) -> ImportDiagnostic {

@@ -46,6 +46,7 @@ pub struct KicadSymbolInstance {
 }
 
 impl KicadSymbolInstance {
+    /// property。
     pub fn property(&self, name: &str) -> Option<&str> {
         self.properties
             .iter()
@@ -53,10 +54,12 @@ impl KicadSymbolInstance {
             .map(|property| property.value.as_str())
     }
 
+    /// reference。
     pub fn reference(&self) -> Option<&str> {
         self.property("Reference")
     }
 
+    /// value。
     pub fn value(&self) -> Option<&str> {
         self.property("Value")
     }
@@ -70,6 +73,7 @@ impl KicadSymbolInstance {
             .or_else(|| definition.and_then(|definition| definition.property_value(name)))
     }
 
+    /// sim enabled。
     pub(crate) fn sim_enabled(
         &self,
         definition: Option<&impl KicadSymbolPropertySource>,
@@ -87,6 +91,7 @@ impl KicadSymbolInstance {
             .and_then(parse_kicad_enable_value)
     }
 
+    /// sim device。
     pub(crate) fn sim_device(
         &self,
         definition: Option<&impl KicadSymbolPropertySource>,
@@ -98,6 +103,7 @@ impl KicadSymbolInstance {
             .map(str::to_string)
     }
 
+    /// sim model value。
     pub(crate) fn sim_model_value(
         &self,
         definition: Option<&impl KicadSymbolPropertySource>,
@@ -116,6 +122,7 @@ impl KicadSymbolInstance {
             .filter(|value| !value.is_empty())
     }
 
+    /// sim params value。
     pub(crate) fn sim_params_value(
         &self,
         definition: Option<&impl KicadSymbolPropertySource>,
@@ -127,6 +134,7 @@ impl KicadSymbolInstance {
             .filter(|value| !value.is_empty())
     }
 
+    /// sim library。
     pub(crate) fn sim_library<'a>(
         &'a self,
         definition: Option<&'a impl KicadSymbolPropertySource>,
@@ -135,6 +143,7 @@ impl KicadSymbolInstance {
             .or_else(|| self.inherited_property(definition, "Spice_Lib_File"))
     }
 
+    /// sim pins。
     pub(crate) fn sim_pins<'a>(
         &'a self,
         definition: Option<&'a impl KicadSymbolPropertySource>,
@@ -143,6 +152,7 @@ impl KicadSymbolInstance {
             .or_else(|| self.inherited_property(definition, "Spice_Node_Sequence"))
     }
 
+    /// has explicit sim model。
     pub(crate) fn has_explicit_sim_model(
         &self,
         definition: Option<&impl KicadSymbolPropertySource>,
@@ -156,6 +166,7 @@ impl KicadSymbolInstance {
             || self.inherited_property(definition, "Spice_Model").is_some()
     }
 
+    /// write instance sexpr。
     pub(crate) fn write_instance_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(symbol\n", pad));
@@ -239,6 +250,7 @@ pub struct KicadSymbolDef {
 }
 
 impl KicadSymbolDef {
+    /// property。
     pub fn property(&self, name: &str) -> Option<&str> {
         self.properties
             .iter()
@@ -246,6 +258,7 @@ impl KicadSymbolDef {
             .map(|property| property.value.as_str())
     }
 
+    /// description。
     pub fn description(&self) -> Option<&str> {
         self.property("Description")
             .filter(|value| !value.is_empty())
@@ -255,17 +268,20 @@ impl KicadSymbolDef {
             })
     }
 
+    /// keywords。
     pub fn keywords(&self) -> Option<&str> {
         self.property("ki_keywords")
             .filter(|value| !value.is_empty())
     }
 
+    /// footprint filters。
     pub fn footprint_filters(&self) -> Vec<String> {
         self.property("ki_fp_filters")
             .map(parse_kicad_footprint_filters)
             .unwrap_or_default()
     }
 
+    /// bounding box。
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
         let mut bounds = KicadBoundingBoxBuilder::default();
         for graphic in scoped_definition_graphics(self, Some(1), None) {
@@ -282,6 +298,7 @@ impl KicadSymbolDef {
         bounds.finish()
     }
 
+    /// local name。
     pub fn local_name(&self) -> &str {
         self.name
             .rsplit_once(':')
@@ -289,6 +306,7 @@ impl KicadSymbolDef {
             .unwrap_or(&self.name)
     }
 
+    /// write symbol sexpr。
     pub(crate) fn write_symbol_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(symbol {}\n", pad, sexpr_string(&self.name)));
@@ -437,6 +455,7 @@ pub(crate) struct KicadResolvedSymbolDef {
 }
 
 impl KicadResolvedSymbolDef {
+    /// from symbol。
     pub(crate) fn from_symbol(symbol: &KicadSymbolDef) -> Self {
         Self {
             name: symbol.name.clone(),
@@ -451,6 +470,7 @@ impl KicadResolvedSymbolDef {
         }
     }
 
+    /// property。
     pub(crate) fn property(&self, name: &str) -> Option<&str> {
         self.properties
             .iter()
@@ -458,6 +478,7 @@ impl KicadResolvedSymbolDef {
             .map(|property| property.value.as_str())
     }
 
+    /// description。
     pub(crate) fn description(&self) -> Option<&str> {
         self.property("Description")
             .filter(|value| !value.is_empty())
@@ -467,17 +488,20 @@ impl KicadResolvedSymbolDef {
             })
     }
 
+    /// keywords。
     pub(crate) fn keywords(&self) -> Option<&str> {
         self.property("ki_keywords")
             .filter(|value| !value.is_empty())
     }
 
+    /// footprint filters。
     pub(crate) fn footprint_filters(&self) -> Vec<String> {
         self.property("ki_fp_filters")
             .map(parse_kicad_footprint_filters)
             .unwrap_or_default()
     }
 
+    /// bounding box。
     pub(crate) fn bounding_box(&self) -> Option<KicadBoundingBox> {
         let mut bounds = KicadBoundingBoxBuilder::default();
         for graphic in self.scoped_graphics(Some(1), None) {
@@ -494,6 +518,7 @@ impl KicadResolvedSymbolDef {
         bounds.finish()
     }
 
+    /// indexed units。
     pub(crate) fn indexed_units(&self) -> Vec<KicadIndexedSymbolUnit> {
         let mut units = self
             .pins
@@ -515,10 +540,12 @@ impl KicadResolvedSymbolDef {
             .collect()
     }
 
+    /// unit count。
     pub(crate) fn unit_count(&self) -> usize {
         self.indexed_units().len()
     }
 
+    /// indexed body styles。
     pub(crate) fn indexed_body_styles(&self) -> Vec<KicadIndexedSymbolBodyStyle> {
         let mut body_styles = self
             .pins
@@ -554,6 +581,7 @@ impl KicadResolvedSymbolDef {
         }
     }
 
+    /// indexed pins。
     pub(crate) fn indexed_pins(&self) -> Vec<KicadIndexedSymbolPin> {
         self.pins
             .iter()
@@ -569,6 +597,7 @@ impl KicadResolvedSymbolDef {
             .collect()
     }
 
+    /// scoped graphics。
     pub(crate) fn scoped_graphics(
         &self,
         unit: Option<u32>,
@@ -579,6 +608,7 @@ impl KicadResolvedSymbolDef {
         })
     }
 
+    /// scoped pins。
     pub(crate) fn scoped_pins(
         &self,
         unit: Option<u32>,
@@ -600,6 +630,7 @@ impl KicadSymbolPropertySource for KicadResolvedSymbolDef {
     }
 }
 
+/// resolve symbol definition。
 pub(crate) fn resolve_symbol_definition(
     symbol: &KicadSymbolDef,
     library_symbols: &[KicadSymbolDef],
@@ -633,6 +664,7 @@ pub(crate) fn resolve_symbol_definition(
     Some(resolved)
 }
 
+/// find symbol inheritance parent。
 pub(crate) fn find_symbol_inheritance_parent<'a>(
     symbol: &KicadSymbolDef,
     parent_name: &str,

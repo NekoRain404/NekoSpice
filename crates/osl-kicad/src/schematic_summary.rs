@@ -3,6 +3,7 @@ use crate::{KicadProperty, KicadSchematic};
 use osl_core::json_escape;
 
 impl KicadSchematic {
+    /// to summary json。
     pub fn to_summary_json(&self) -> String {
         format!(
             concat!(

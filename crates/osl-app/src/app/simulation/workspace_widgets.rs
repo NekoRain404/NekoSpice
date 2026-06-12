@@ -1,6 +1,7 @@
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 
+/// analysis mode button。
 pub(crate) fn analysis_mode_button(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -36,6 +37,7 @@ pub(crate) fn analysis_mode_button(
         .clicked()
 }
 
+/// solver metric card。
 pub(crate) fn solver_metric_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -52,6 +54,7 @@ pub(crate) fn solver_metric_card(
     });
 }
 
+/// code preview line。
 pub(crate) fn code_preview_line(ui: &mut egui::Ui, line_number: usize, text: &str) {
     ui.horizontal(|ui| {
         ui.monospace(format!("{line_number:>2}"));
@@ -59,6 +62,7 @@ pub(crate) fn code_preview_line(ui: &mut egui::Ui, line_number: usize, text: &st
     });
 }
 
+/// profile row。
 pub(crate) fn profile_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

@@ -24,6 +24,7 @@ pub struct KicadTable {
 }
 
 impl KicadTable {
+    /// bounding box。
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
         let mut bounds = KicadBoundingBoxBuilder::default();
         for cell in &self.cells {
@@ -34,6 +35,7 @@ impl KicadTable {
         bounds.finish()
     }
 
+    /// write table sexpr。
     pub(crate) fn write_table_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -97,6 +99,7 @@ pub struct KicadTableCell {
 }
 
 impl KicadTableCell {
+    /// bounding box。
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
         kicad_rotated_rect_bounds(self.at?, self.size?)
     }
@@ -160,6 +163,7 @@ impl KicadTableCell {
     }
 }
 
+/// parse table。
 pub(crate) fn parse_table(node: &Sexp) -> Option<KicadTable> {
     let items = list_items(node);
     Some(KicadTable {

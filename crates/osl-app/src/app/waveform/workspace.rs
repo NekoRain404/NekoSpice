@@ -22,6 +22,7 @@ impl WaveformAnalysisTab {
         Self::Eye,
     ];
 
+    /// text key。
     pub(crate) fn text_key(self) -> UiText {
         match self {
             Self::TimeDomain => UiText::TimeDomain,
@@ -40,6 +41,7 @@ pub(crate) struct WaveformWorkspaceState {
 }
 
 impl NekoSpiceApp {
+    /// draw waveform center workspace。
     pub(crate) fn draw_waveform_center_workspace(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
         let mode = self.theme_mode();

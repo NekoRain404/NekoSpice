@@ -6,6 +6,7 @@ use crate::app::widgets::metric_row;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw home project context。
     pub(crate) fn draw_home_project_context(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let snapshot = self.studio_status_snapshot();

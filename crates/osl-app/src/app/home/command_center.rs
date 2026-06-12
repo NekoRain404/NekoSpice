@@ -7,6 +7,7 @@ use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText, Vec2};
 
 impl NekoSpiceApp {
+    /// draw home command center。
     pub(crate) fn draw_home_command_center(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

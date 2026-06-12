@@ -1,8 +1,11 @@
+//! 中央工作区内容调度。在左侧面板和右侧内容区之间分配空间。
+//!
 use super::NekoSpiceApp;
 use super::navigation::StudioWorkspace;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw center workspace。
     pub(super) fn draw_center_workspace(&mut self, ui: &mut egui::Ui) {
         match self.active_workspace {
             StudioWorkspace::Home => self.draw_home_dashboard(ui),

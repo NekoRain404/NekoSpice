@@ -122,31 +122,37 @@ pub(crate) use symbols::{
 use transform::transform_symbol_point;
 use util::resolve_kicad_uri;
 
+/// read kicad schematic hierarchy netlist。
 pub fn read_kicad_schematic_hierarchy_netlist(path: &Path) -> OslResult<KicadHierarchyNetlist> {
     let schematic = read_kicad_schematic_with_libraries(path)?;
     let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
     schematic.to_spice_netlist_with_hierarchy(base_dir)
 }
 
+/// read kicad project。
 pub fn read_kicad_project(path: &Path) -> OslResult<KicadProject> {
     let content = read_text(path)?;
     parse_kicad_project(&content, &path.display().to_string())
 }
 
+/// read kicad symbol library。
 pub fn read_kicad_symbol_library(path: &Path) -> OslResult<KicadSymbolLibrary> {
     let content = read_text(path)?;
     parse_kicad_symbol_library(&content, &path.display().to_string())
 }
 
+/// write kicad symbol library。
 pub fn write_kicad_symbol_library(path: &Path, library: &KicadSymbolLibrary) -> OslResult<()> {
     write_text(path, &library.to_kicad_symbol_library_sexpr())
 }
 
+/// read kicad symbol library table。
 pub fn read_kicad_symbol_library_table(path: &Path) -> OslResult<KicadSymbolLibraryTable> {
     let content = read_text(path)?;
     parse_kicad_symbol_library_table(&content, &path.display().to_string())
 }
 
+/// read kicad symbol library index。
 pub fn read_kicad_symbol_library_index(path: &Path) -> OslResult<KicadSymbolLibraryIndex> {
     let table = read_kicad_symbol_library_table(path)?;
     let base_dir = path.parent().unwrap_or_else(|| Path::new("."));

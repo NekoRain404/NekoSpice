@@ -10,14 +10,17 @@ pub struct KicadBoundingBox {
 }
 
 impl KicadBoundingBox {
+    /// width。
     pub fn width(self) -> f64 {
         self.max.x - self.min.x
     }
 
+    /// height。
     pub fn height(self) -> f64 {
         self.max.y - self.min.y
     }
 
+    /// padded。
     pub(crate) fn padded(self, padding: f64) -> Self {
         Self {
             min: KicadPoint {
@@ -31,6 +34,7 @@ impl KicadBoundingBox {
         }
     }
 
+    /// contains。
     pub fn contains(self, point: KicadPoint) -> bool {
         point.x >= self.min.x
             && point.x <= self.max.x
@@ -38,6 +42,7 @@ impl KicadBoundingBox {
             && point.y <= self.max.y
     }
 
+    /// intersects。
     pub fn intersects(self, other: KicadBoundingBox) -> bool {
         self.min.x <= other.max.x
             && self.max.x >= other.min.x
@@ -45,10 +50,12 @@ impl KicadBoundingBox {
             && self.max.y >= other.min.y
     }
 
+    /// area。
     pub(crate) fn area(self) -> f64 {
         self.width().abs() * self.height().abs()
     }
 
+    /// union。
     pub(crate) fn union(self, other: KicadBoundingBox) -> Self {
         Self {
             min: KicadPoint {
@@ -63,10 +70,15 @@ impl KicadBoundingBox {
     }
 }
 
+/// `KICAD_CANVAS_POINT_BOUNDS_RADIUS` 常量。
 pub(crate) const KICAD_CANVAS_POINT_BOUNDS_RADIUS: f64 = 1.27;
+/// `KICAD_CANVAS_LINE_BOUNDS_PADDING` 常量。
 pub(crate) const KICAD_CANVAS_LINE_BOUNDS_PADDING: f64 = 0.635;
+/// `KICAD_SHEET_PIN_STUB_LENGTH` 常量。
 pub(crate) const KICAD_SHEET_PIN_STUB_LENGTH: f64 = 2.54;
+/// `KICAD_DEFAULT_JUNCTION_RADIUS` 常量。
 pub(crate) const KICAD_DEFAULT_JUNCTION_RADIUS: f64 = KICAD_CANVAS_POINT_BOUNDS_RADIUS;
+/// `KICAD_NO_CONNECT_ARM_LENGTH` 常量。
 pub(crate) const KICAD_NO_CONNECT_ARM_LENGTH: f64 = KICAD_CANVAS_POINT_BOUNDS_RADIUS;
 
 #[derive(Debug, Default)]
@@ -76,6 +88,7 @@ pub(crate) struct KicadBoundingBoxBuilder {
 }
 
 impl KicadBoundingBoxBuilder {
+    /// include。
     pub(crate) fn include(&mut self, point: KicadPoint) {
         self.min = Some(match self.min {
             Some(min) => KicadPoint {
@@ -93,11 +106,13 @@ impl KicadBoundingBoxBuilder {
         });
     }
 
+    /// include box。
     pub(crate) fn include_box(&mut self, bounds: KicadBoundingBox) {
         self.include(bounds.min);
         self.include(bounds.max);
     }
 
+    /// finish。
     pub(crate) fn finish(self) -> Option<KicadBoundingBox> {
         Some(KicadBoundingBox {
             min: self.min?,
@@ -106,6 +121,7 @@ impl KicadBoundingBoxBuilder {
     }
 }
 
+/// kicad point bounds。
 pub(crate) fn kicad_point_bounds(point: KicadPoint, padding: f64) -> KicadBoundingBox {
     KicadBoundingBox {
         min: point,
@@ -114,6 +130,7 @@ pub(crate) fn kicad_point_bounds(point: KicadPoint, padding: f64) -> KicadBoundi
     .padded(padding)
 }
 
+/// kicad points bounds。
 pub(crate) fn kicad_points_bounds(points: &[KicadPoint], padding: f64) -> Option<KicadBoundingBox> {
     let mut bounds = KicadBoundingBoxBuilder::default();
     for point in points {
@@ -122,11 +139,13 @@ pub(crate) fn kicad_points_bounds(points: &[KicadPoint], padding: f64) -> Option
     bounds.finish().map(|bounds| bounds.padded(padding))
 }
 
+/// kicad sheet pin bounds。
 pub(crate) fn kicad_sheet_pin_bounds(at: KicadAt) -> Option<KicadBoundingBox> {
     let points = [at.point(), pin_body_end(at, KICAD_SHEET_PIN_STUB_LENGTH)];
     kicad_points_bounds(&points, KICAD_CANVAS_LINE_BOUNDS_PADDING)
 }
 
+/// kicad junction radius。
 pub(crate) fn kicad_junction_radius(diameter: Option<f64>) -> f64 {
     diameter
         .filter(|diameter| diameter.is_finite() && *diameter > 0.0)
@@ -134,10 +153,12 @@ pub(crate) fn kicad_junction_radius(diameter: Option<f64>) -> f64 {
         .unwrap_or(KICAD_DEFAULT_JUNCTION_RADIUS)
 }
 
+/// kicad junction bounds。
 pub(crate) fn kicad_junction_bounds(at: KicadPoint, diameter: Option<f64>) -> KicadBoundingBox {
     kicad_point_bounds(at, kicad_junction_radius(diameter))
 }
 
+/// kicad no connect arms。
 pub(crate) fn kicad_no_connect_arms(at: KicadPoint) -> [[KicadPoint; 2]; 2] {
     let arm = KICAD_NO_CONNECT_ARM_LENGTH;
     [
@@ -164,6 +185,7 @@ pub(crate) fn kicad_no_connect_arms(at: KicadPoint) -> [[KicadPoint; 2]; 2] {
     ]
 }
 
+/// kicad no connect bounds。
 pub(crate) fn kicad_no_connect_bounds(at: KicadPoint) -> KicadBoundingBox {
     let arms = kicad_no_connect_arms(at);
     let points = [arms[0][0], arms[0][1], arms[1][0], arms[1][1]];
@@ -171,6 +193,7 @@ pub(crate) fn kicad_no_connect_bounds(at: KicadPoint) -> KicadBoundingBox {
         .expect("KiCad no-connect marker bounds use four points")
 }
 
+/// kicad sheet box bounds。
 pub(crate) fn kicad_sheet_box_bounds(
     at: Option<KicadAt>,
     size: Option<KicadSize>,
@@ -195,6 +218,7 @@ pub(crate) fn kicad_sheet_box_bounds(
     kicad_points_bounds(&corners, 0.0)
 }
 
+/// kicad rotated rect corners。
 pub(crate) fn kicad_rotated_rect_corners(at: KicadAt, size: KicadSize) -> [KicadPoint; 4] {
     let width = size.width.abs();
     let height = size.height.abs();
@@ -216,6 +240,7 @@ pub(crate) fn kicad_rotated_rect_corners(at: KicadAt, size: KicadSize) -> [Kicad
     })
 }
 
+/// kicad rotated rect bounds。
 pub(crate) fn kicad_rotated_rect_bounds(at: KicadAt, size: KicadSize) -> Option<KicadBoundingBox> {
     let mut bounds = KicadBoundingBoxBuilder::default();
     for corner in kicad_rotated_rect_corners(at, size) {
@@ -224,6 +249,7 @@ pub(crate) fn kicad_rotated_rect_bounds(at: KicadAt, size: KicadSize) -> Option<
     bounds.finish()
 }
 
+/// kicad rotated rect contains point。
 pub(crate) fn kicad_rotated_rect_contains_point(
     at: KicadAt,
     size: KicadSize,
@@ -239,6 +265,7 @@ pub(crate) fn kicad_rotated_rect_contains_point(
     local.x >= 0.0 && local.x <= size.width.abs() && local.y >= 0.0 && local.y <= size.height.abs()
 }
 
+/// kicad text bounds。
 pub(crate) fn kicad_text_bounds(
     text: &str,
     at: Option<KicadAt>,
@@ -317,6 +344,7 @@ pub(crate) fn kicad_text_bounds(
         .map(|bounds| bounds.padded(KICAD_CANVAS_LINE_BOUNDS_PADDING))
 }
 
+/// kicad polyline hits point。
 pub(crate) fn kicad_polyline_hits_point(
     points: &[KicadPoint],
     stroke: Option<&KicadStroke>,
@@ -334,6 +362,7 @@ pub(crate) fn kicad_polyline_hits_point(
         .any(|segment| kicad_point_segment_distance(point, segment[0], segment[1]) <= tolerance)
 }
 
+/// kicad closed polyline hits point。
 pub(crate) fn kicad_closed_polyline_hits_point(
     points: &[KicadPoint],
     stroke: Option<&KicadStroke>,
@@ -349,6 +378,7 @@ pub(crate) fn kicad_closed_polyline_hits_point(
         <= kicad_stroke_hit_tolerance(stroke)
 }
 
+/// kicad bezier hits point。
 pub(crate) fn kicad_bezier_hits_point(
     points: &[KicadPoint],
     stroke: Option<&KicadStroke>,
@@ -362,6 +392,7 @@ pub(crate) fn kicad_bezier_hits_point(
     kicad_polyline_hits_point(&sampled, stroke, point)
 }
 
+/// kicad cubic bezier samples。
 pub(crate) fn kicad_cubic_bezier_samples(
     start: KicadPoint,
     control_1: KicadPoint,
@@ -391,6 +422,7 @@ pub(crate) fn kicad_cubic_bezier_samples(
     points
 }
 
+/// sample kicad arc points。
 pub fn sample_kicad_arc_points(
     start: KicadPoint,
     mid: Option<KicadPoint>,
@@ -425,6 +457,7 @@ pub fn sample_kicad_arc_points(
     points
 }
 
+/// kicad arc hits point。
 pub(crate) fn kicad_arc_hits_point(
     start: KicadPoint,
     mid: Option<KicadPoint>,
@@ -436,6 +469,7 @@ pub(crate) fn kicad_arc_hits_point(
     kicad_polyline_hits_point(&sampled, stroke, point)
 }
 
+/// kicad circle from three points。
 pub(crate) fn kicad_circle_from_three_points(
     first: KicadPoint,
     second: KicadPoint,
@@ -465,14 +499,17 @@ pub(crate) fn kicad_circle_from_three_points(
     Some((center, kicad_point_distance(center, first)))
 }
 
+/// kicad angle。
 pub(crate) fn kicad_angle(center: KicadPoint, point: KicadPoint) -> f64 {
     (point.y - center.y).atan2(point.x - center.x)
 }
 
+/// kicad positive angle delta。
 pub(crate) fn kicad_positive_angle_delta(start: f64, end: f64) -> f64 {
     (end - start).rem_euclid(std::f64::consts::TAU)
 }
 
+/// kicad polygon contains point。
 pub(crate) fn kicad_polygon_contains_point(points: &[KicadPoint], point: KicadPoint) -> bool {
     if points.len() < 3 {
         return false;
@@ -498,6 +535,7 @@ pub(crate) fn kicad_polygon_contains_point(points: &[KicadPoint], point: KicadPo
     inside
 }
 
+/// kicad rectangle hits point。
 pub(crate) fn kicad_rectangle_hits_point(
     start: KicadPoint,
     end: KicadPoint,
@@ -528,6 +566,7 @@ pub(crate) fn kicad_rectangle_hits_point(
     kicad_polyline_hits_point(&corners, stroke, point)
 }
 
+/// kicad circle hits point。
 pub(crate) fn kicad_circle_hits_point(
     center: KicadPoint,
     radius: f64,
@@ -543,22 +582,26 @@ pub(crate) fn kicad_circle_hits_point(
     (distance - radius).abs() <= kicad_stroke_hit_tolerance(stroke)
 }
 
+/// kicad fill is solid。
 pub(crate) fn kicad_fill_is_solid(fill: Option<&KicadFill>) -> bool {
     fill.and_then(|fill| fill.fill_type.as_deref())
         .is_some_and(|fill_type| !fill_type.eq_ignore_ascii_case("none"))
 }
 
+/// kicad stroke hit tolerance。
 pub(crate) fn kicad_stroke_hit_tolerance(stroke: Option<&KicadStroke>) -> f64 {
     let stroke_radius = stroke.and_then(|stroke| stroke.width).unwrap_or(0.0).abs() / 2.0;
     KICAD_CANVAS_LINE_BOUNDS_PADDING.max(stroke_radius)
 }
 
+/// kicad point distance。
 pub(crate) fn kicad_point_distance(left: KicadPoint, right: KicadPoint) -> f64 {
     let dx = left.x - right.x;
     let dy = left.y - right.y;
     (dx * dx + dy * dy).sqrt()
 }
 
+/// kicad point segment distance。
 pub(crate) fn kicad_point_segment_distance(
     point: KicadPoint,
     start: KicadPoint,
@@ -581,10 +624,12 @@ pub(crate) fn kicad_point_segment_distance(
     kicad_point_distance(point, closest)
 }
 
+/// kicad at bounds。
 pub(crate) fn kicad_at_bounds(at: Option<KicadAt>, padding: f64) -> Option<KicadBoundingBox> {
     at.map(|at| kicad_point_bounds(at.point(), padding))
 }
 
+/// pin body end。
 pub(crate) fn pin_body_end(at: KicadAt, length: f64) -> KicadPoint {
     let radians = at.rotation.to_radians();
     KicadPoint {

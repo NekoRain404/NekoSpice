@@ -4,6 +4,7 @@ use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw home insights panel。
     pub(crate) fn draw_home_insights_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.heading(self.text(UiText::AiAssistant));

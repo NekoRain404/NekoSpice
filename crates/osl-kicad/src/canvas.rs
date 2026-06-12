@@ -43,6 +43,7 @@ pub struct KicadCanvasScene {
 }
 
 impl KicadCanvasScene {
+    /// from symbol definition。
     pub fn from_symbol_definition(
         source: impl Into<String>,
         symbol: &KicadSymbolDef,
@@ -64,6 +65,7 @@ impl KicadCanvasScene {
         )
     }
 
+    /// from symbol definition at。
     pub fn from_symbol_definition_at(
         source: impl Into<String>,
         symbol: &KicadSymbolDef,
@@ -136,6 +138,7 @@ impl KicadCanvasScene {
         }
     }
 
+    /// from schematic。
     pub fn from_schematic(schematic: &KicadSchematic) -> Self {
         let mut bounds = KicadBoundingBoxBuilder::default();
 
@@ -583,6 +586,7 @@ impl KicadCanvasScene {
         }
     }
 
+    /// to summary json。
     pub fn to_summary_json(&self) -> String {
         let bounds = self
             .bounds
@@ -668,6 +672,7 @@ impl KicadCanvasScene {
         )
     }
 
+    /// to json。
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(&self.to_json_value())
             .expect("KiCad canvas scene JSON should serialize")

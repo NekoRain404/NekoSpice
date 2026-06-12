@@ -6,6 +6,7 @@ use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText};
 
 impl NekoSpiceApp {
+    /// draw review checklist board。
     pub(crate) fn draw_review_checklist_board(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let locale = self.locale();

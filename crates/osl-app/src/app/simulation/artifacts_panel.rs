@@ -4,6 +4,7 @@ use osl_core::Artifact;
 use std::fs;
 use std::path::Path;
 
+/// draw simulation artifacts panel。
 pub(crate) fn draw_simulation_artifacts_panel(ui: &mut egui::Ui, run: &GuiSimulationRun) {
     if run.metadata.artifacts.is_empty() {
         return;

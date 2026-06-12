@@ -1,7 +1,5 @@
-/// Keyboard shortcut handling for the schematic canvas.
-///
-/// Separated from the main canvas panel for clarity. Each shortcut
-/// delegates to the corresponding app method or tool state.
+//! 画布键盘快捷键处理。分发键盘事件到对应编辑操作。
+//!
 use super::EditNudgeDirection;
 use super::NekoSpiceApp;
 use super::schematic::tools::SchematicTool;

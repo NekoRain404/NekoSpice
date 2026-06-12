@@ -9,6 +9,7 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw optimization tabs。
     pub(crate) fn draw_optimization_tabs(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             for tab in OptimizationTab::ALL {
@@ -18,6 +19,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw optimization main panel。
     pub(crate) fn draw_optimization_main_panel(&self, ui: &mut egui::Ui) {
         match self.optimization_workspace.active_tab {
             OptimizationTab::Targets => self.draw_targets_panel(ui),
@@ -26,6 +28,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// draw targets panel。
     pub(crate) fn draw_targets_panel(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -47,6 +50,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw sweep panel。
     pub(crate) fn draw_sweep_panel(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -71,6 +75,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw monte carlo panel。
     pub(crate) fn draw_monte_carlo_panel(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -95,6 +100,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw optimization summary panel。
     pub(crate) fn draw_optimization_summary_panel(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

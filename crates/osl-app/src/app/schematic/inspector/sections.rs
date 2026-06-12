@@ -8,6 +8,7 @@ use crate::app::{EditNudgeDirection, NekoSpiceApp};
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw schematic properties tab。
     pub(crate) fn draw_schematic_properties_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -38,6 +39,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw schematic kicad inspector tab。
     pub(crate) fn draw_schematic_kicad_inspector_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -97,6 +99,7 @@ impl NekoSpiceApp {
         self.draw_document_diagnostics_panel(ui, 180.0);
     }
 
+    /// draw schematic libraries tab。
     pub(crate) fn draw_schematic_libraries_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

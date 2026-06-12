@@ -5,6 +5,7 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw library workspace panel。
     pub(crate) fn draw_library_workspace_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.heading(self.text(UiText::SymbolLibrary));

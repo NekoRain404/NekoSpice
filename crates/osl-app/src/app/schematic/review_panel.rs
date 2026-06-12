@@ -5,6 +5,7 @@ use crate::app::theme::StudioTheme;
 use eframe::egui::{self, RichText};
 
 impl NekoSpiceApp {
+    /// draw schematic review tab。
     pub(crate) fn draw_schematic_review_tab(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical()
             .id_salt("schematic_review_scroll")

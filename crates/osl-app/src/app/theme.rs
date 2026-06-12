@@ -1,3 +1,5 @@
+//! 主题系统。提供 Midnight/Graphite/Light 三种主题的颜色和样式定义。
+//!
 use eframe::egui::{
     self, Color32, CornerRadius, FontFamily, FontId, Frame, Margin, RichText, Stroke, TextStyle,
     Vec2,
@@ -14,6 +16,7 @@ pub(crate) enum StudioThemeMode {
 impl StudioThemeMode {
     pub(super) const ALL: [Self; 3] = [Self::Midnight, Self::Graphite, Self::Light];
 
+    /// label。
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::Midnight => "Midnight",
@@ -22,6 +25,7 @@ impl StudioThemeMode {
         }
     }
 
+    /// label zh。
     pub(super) fn label_zh(self) -> &'static str {
         match self {
             Self::Midnight => "深夜",
@@ -30,6 +34,7 @@ impl StudioThemeMode {
         }
     }
 
+    /// next。
     pub(super) fn next(self) -> Self {
         match self {
             Self::Midnight => Self::Graphite,
@@ -63,6 +68,7 @@ pub(crate) struct StudioPalette {
     pub(super) strip_border: Color32,
 }
 
+/// `StudioTheme` 类型定义。
 pub(crate) struct StudioTheme;
 
 #[allow(dead_code)]
@@ -82,6 +88,7 @@ impl StudioTheme {
     pub(super) const WARNING: Color32 = Color32::from_rgb(235, 174, 64);
     pub(super) const DANGER: Color32 = Color32::from_rgb(238, 91, 91);
 
+    /// palette。
     pub(crate) fn palette(mode: StudioThemeMode) -> StudioPalette {
         match mode {
             StudioThemeMode::Midnight => StudioPalette {
@@ -142,6 +149,7 @@ impl StudioTheme {
         }
     }
 
+    /// apply。
     pub(super) fn apply(ctx: &egui::Context, mode: StudioThemeMode) {
         let palette = Self::palette(mode);
         ctx.set_visuals(if mode.uses_light_visuals() {
@@ -182,6 +190,7 @@ impl StudioTheme {
         ctx.set_global_style(style);
     }
 
+    /// panel frame for。
     pub(super) fn panel_frame_for(mode: StudioThemeMode) -> Frame {
         let palette = Self::palette(mode);
         Frame::new()
@@ -191,22 +200,26 @@ impl StudioTheme {
             .inner_margin(Margin::same(12))
     }
 
+    /// section title for。
     pub(super) fn section_title_for(mode: StudioThemeMode, text: impl Into<String>) -> RichText {
         RichText::new(text.into())
             .strong()
             .color(Self::palette(mode).text)
     }
 
+    /// muted for。
     pub(super) fn muted_for(mode: StudioThemeMode, text: impl Into<String>) -> RichText {
         RichText::new(text.into()).color(Self::palette(mode).text_muted)
     }
 
+    /// accent for。
     pub(super) fn accent_for(mode: StudioThemeMode, text: impl Into<String>) -> RichText {
         RichText::new(text.into())
             .strong()
             .color(Self::palette(mode).accent)
     }
 
+    /// status dot。
     pub(super) fn status_dot(color: Color32) -> RichText {
         RichText::new("*").color(color)
     }

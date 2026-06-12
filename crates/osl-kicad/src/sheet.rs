@@ -32,6 +32,7 @@ pub struct KicadSheet {
 }
 
 impl KicadSheet {
+    /// property。
     pub fn property(&self, name: &str) -> Option<&str> {
         self.properties
             .iter()
@@ -39,14 +40,17 @@ impl KicadSheet {
             .map(|property| property.value.as_str())
     }
 
+    /// sheet name。
     pub fn sheet_name(&self) -> Option<&str> {
         self.property("Sheetname")
     }
 
+    /// sheet file。
     pub fn sheet_file(&self) -> Option<&str> {
         self.property("Sheetfile")
     }
 
+    /// bounding box。
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
         let at = self.at?;
         let size = self.size?;
@@ -59,6 +63,7 @@ impl KicadSheet {
         })
     }
 
+    /// write sheet sexpr。
     pub(crate) fn write_sheet_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(sheet\n", pad));
@@ -152,6 +157,7 @@ impl KicadSheetPin {
     }
 }
 
+/// parse sheet。
 pub(crate) fn parse_sheet(node: &Sexp) -> Option<KicadSheet> {
     let items = list_items(node);
     Some(KicadSheet {
@@ -188,6 +194,7 @@ fn parse_sheet_pin(node: &Sexp) -> Option<KicadSheetPin> {
     })
 }
 
+/// sheet properties。
 pub(crate) fn sheet_properties(
     name: &str,
     file: &str,

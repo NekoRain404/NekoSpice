@@ -5,6 +5,7 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw reference measurement rows。
     pub(crate) fn draw_reference_measurement_rows(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         if ui.available_width() >= 720.0 {

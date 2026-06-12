@@ -2,6 +2,7 @@ use crate::app::NekoSpiceApp;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 
+/// two column。
 pub(crate) fn two_column(
     app: &mut NekoSpiceApp,
     ui: &mut egui::Ui,
@@ -35,6 +36,7 @@ pub(crate) fn two_column(
     });
 }
 
+/// section header。
 pub(crate) fn section_header(ui: &mut egui::Ui, mode: StudioThemeMode, title: &str, action: &str) {
     ui.horizontal(|ui| {
         ui.label(StudioTheme::section_title_for(mode, title));
@@ -63,6 +65,7 @@ pub(crate) fn section_header_clickable(
     clicked
 }
 
+/// project row。
 pub(crate) fn project_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -80,6 +83,7 @@ pub(crate) fn project_row(
     ui.separator();
 }
 
+/// template card。
 pub(crate) fn template_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -105,6 +109,7 @@ pub(crate) fn template_card(
     clicked
 }
 
+/// queue row。
 pub(crate) fn queue_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -125,6 +130,7 @@ pub(crate) fn queue_row(
     });
 }
 
+/// measurement row。
 pub(crate) fn measurement_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -143,6 +149,7 @@ pub(crate) fn measurement_row(
     ui.separator();
 }
 
+/// recommendation row。
 pub(crate) fn recommendation_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

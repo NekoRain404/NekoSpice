@@ -1,3 +1,5 @@
+//! 波形汇总数据结构。
+//!
 use osl_waveform::{
     Waveform, WaveformEnvelopeBucket, WaveformSummary, WaveformViewportQuery, read_ngspice_raw,
 };
@@ -16,6 +18,7 @@ pub(crate) enum GuiWaveformSummaryState {
 }
 
 impl GuiWaveformSummaryState {
+    /// from run dir。
     pub(crate) fn from_run_dir(output_dir: &Path) -> Self {
         let raw_path = output_dir.join(WAVEFORM_RAW_FILE);
         if !raw_path.is_file() {
@@ -43,20 +46,24 @@ pub(crate) struct GuiWaveformSummary {
 }
 
 impl GuiWaveformSummary {
+    /// default signal name。
     pub(crate) fn default_signal_name(&self) -> Option<&str> {
         self.previews.first().map(|preview| preview.signal.as_str())
     }
 
+    /// has preview signal。
     pub(crate) fn has_preview_signal(&self, signal: &str) -> bool {
         self.preview_for_signal(signal).is_some()
     }
 
+    /// preview for signal。
     pub(crate) fn preview_for_signal(&self, signal: &str) -> Option<&GuiWaveformPreview> {
         self.previews
             .iter()
             .find(|preview| same_signal(&preview.signal, signal))
     }
 
+    /// variable summary for signal。
     pub(crate) fn variable_summary_for_signal(
         &self,
         signal: &str,

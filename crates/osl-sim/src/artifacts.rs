@@ -3,6 +3,7 @@ use osl_waveform::read_ngspice_raw;
 use std::fs;
 use std::path::Path;
 
+/// finalize run artifacts。
 pub fn finalize_run_artifacts(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
     if metadata.status == RunStatus::Passed {
         export_waveform_artifacts(output_dir)?;
@@ -13,6 +14,7 @@ pub fn finalize_run_artifacts(output_dir: &Path, metadata: &mut RunMetadata) -> 
     write_text(&output_dir.join("run.json"), &metadata.to_json())
 }
 
+/// export waveform artifacts。
 pub fn export_waveform_artifacts(output_dir: &Path) -> OslResult<()> {
     let raw_path = output_dir.join("waveform.raw");
     if !raw_path.is_file() {
@@ -27,10 +29,12 @@ pub fn export_waveform_artifacts(output_dir: &Path) -> OslResult<()> {
     )
 }
 
+/// write run report。
 pub fn write_run_report(output_dir: &Path, metadata: &RunMetadata) -> OslResult<()> {
     write_text(&output_dir.join("report.html"), &run_report_html(metadata))
 }
 
+/// run report html。
 pub fn run_report_html(metadata: &RunMetadata) -> String {
     let artifact_items = metadata
         .artifacts
@@ -93,6 +97,7 @@ pub fn run_report_html(metadata: &RunMetadata) -> String {
     )
 }
 
+/// refresh run artifacts。
 pub fn refresh_run_artifacts(output_dir: &Path, metadata: &mut RunMetadata) -> OslResult<()> {
     metadata.artifacts = collect_run_artifacts(output_dir)?;
     metadata
@@ -101,6 +106,7 @@ pub fn refresh_run_artifacts(output_dir: &Path, metadata: &mut RunMetadata) -> O
     Ok(())
 }
 
+/// collect run artifacts。
 pub fn collect_run_artifacts(output_dir: &Path) -> OslResult<Vec<Artifact>> {
     let mut artifacts = Vec::new();
     for entry in fs::read_dir(output_dir)
@@ -126,6 +132,7 @@ pub fn collect_run_artifacts(output_dir: &Path) -> OslResult<Vec<Artifact>> {
     Ok(artifacts)
 }
 
+/// run artifact kind。
 pub fn run_artifact_kind(file_name: &str) -> &'static str {
     if file_name == "waveform-summary.json"
         || file_name.ends_with(".raw")

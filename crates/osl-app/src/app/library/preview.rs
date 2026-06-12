@@ -6,6 +6,7 @@ use osl_kicad::{KicadCanvasScene, KicadIndexedSymbol};
 
 const SPICE_PREVIEW_LINES: usize = 16;
 
+/// draw symbol preview。
 pub(crate) fn draw_symbol_preview(ui: &mut egui::Ui, scene: &KicadCanvasScene, fill: Color32, mode: crate::app::theme::StudioThemeMode) {
     let available_width = ui.available_width().clamp(220.0, 520.0);
     let desired_size = Vec2::new(available_width, 260.0);
@@ -35,6 +36,7 @@ pub(crate) fn draw_symbol_preview(ui: &mut egui::Ui, scene: &KicadCanvasScene, f
     }
 }
 
+/// draw spice preview。
 pub(crate) fn draw_spice_preview(ui: &mut egui::Ui, symbol: &KicadIndexedSymbol) {
     egui::ScrollArea::both()
         .id_salt("library_workspace_spice_preview")

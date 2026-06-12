@@ -40,6 +40,7 @@ pub struct KicadVariantInstance {
     pub dnp: Option<bool>,
 }
 
+/// parse sheet instances。
 pub(crate) fn parse_sheet_instances(node: &Sexp) -> Vec<KicadSheetInstance> {
     direct_children(list_items(node), "path")
         .filter_map(parse_sheet_instance)
@@ -54,6 +55,7 @@ fn parse_sheet_instance(node: &Sexp) -> Option<KicadSheetInstance> {
     })
 }
 
+/// parse symbol path instances。
 pub(crate) fn parse_symbol_path_instances(node: &Sexp) -> Vec<KicadSymbolPathInstance> {
     direct_children(list_items(node), "path")
         .filter_map(parse_symbol_path_instance)
@@ -72,6 +74,7 @@ fn parse_symbol_path_instance(node: &Sexp) -> Option<KicadSymbolPathInstance> {
     })
 }
 
+/// parse project instances。
 pub(crate) fn parse_project_instances(node: &Sexp) -> Vec<KicadProjectInstance> {
     direct_children(list_items(node), "project")
         .filter_map(parse_project_instance)
@@ -111,6 +114,7 @@ fn parse_variant_instance(node: &Sexp) -> Option<KicadVariantInstance> {
     })
 }
 
+/// write sheet instances sexpr。
 pub(crate) fn write_sheet_instances_sexpr(
     output: &mut String,
     instances: &[KicadSheetInstance],
@@ -128,6 +132,7 @@ pub(crate) fn write_sheet_instances_sexpr(
     output.push_str(&format!("{})\n", pad));
 }
 
+/// write symbol path instances sexpr。
 pub(crate) fn write_symbol_path_instances_sexpr(
     output: &mut String,
     instances: &[KicadSymbolPathInstance],
@@ -169,6 +174,7 @@ pub(crate) fn write_symbol_path_instances_sexpr(
     output.push_str(&format!("{})\n", pad));
 }
 
+/// write project instances sexpr。
 pub(crate) fn write_project_instances_sexpr(
     output: &mut String,
     instances: &[KicadProjectInstance],

@@ -2,6 +2,7 @@ use crate::app::theme::{StudioTheme, StudioThemeMode};
 use crate::waveform_summary::GuiWaveformPreview;
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke};
 
+/// draw plot grid。
 pub(crate) fn draw_plot_grid(painter: &egui::Painter, rect: Rect, color: Color32) {
     for index in 1..5 {
         let x = rect.left() + rect.width() * index as f32 / 5.0;
@@ -19,6 +20,7 @@ pub(crate) fn draw_plot_grid(painter: &egui::Painter, rect: Rect, color: Color32
     }
 }
 
+/// draw waveform zero axis。
 pub(crate) fn draw_waveform_zero_axis(
     painter: &egui::Painter,
     rect: Rect,
@@ -35,6 +37,7 @@ pub(crate) fn draw_waveform_zero_axis(
     );
 }
 
+/// draw waveform buckets。
 pub(crate) fn draw_waveform_buckets(
     painter: &egui::Painter,
     rect: Rect,
@@ -61,6 +64,7 @@ pub(crate) fn draw_waveform_buckets(
     }
 }
 
+/// trace color。
 pub(crate) fn trace_color(mode: StudioThemeMode, index: usize) -> Color32 {
     let palette = StudioTheme::palette(mode);
     match index {
@@ -72,6 +76,7 @@ pub(crate) fn trace_color(mode: StudioThemeMode, index: usize) -> Color32 {
     }
 }
 
+/// plot fill。
 pub(crate) fn plot_fill(mode: StudioThemeMode) -> Color32 {
     let palette = StudioTheme::palette(mode);
     if matches!(mode, StudioThemeMode::Light) {
@@ -81,6 +86,7 @@ pub(crate) fn plot_fill(mode: StudioThemeMode) -> Color32 {
     }
 }
 
+/// format compact f64。
 pub(crate) fn format_compact_f64(value: f64) -> String {
     if !value.is_finite() {
         return value.to_string();

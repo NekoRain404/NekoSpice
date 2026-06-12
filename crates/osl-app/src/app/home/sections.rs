@@ -10,6 +10,7 @@ use eframe::egui::{self, Vec2};
 use osl_core::RunStatus;
 
 impl NekoSpiceApp {
+    /// draw recent projects panel。
     pub(crate) fn draw_recent_projects_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -46,6 +47,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw quick actions panel。
     pub(crate) fn draw_quick_actions_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -58,6 +60,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw template row。
     pub(crate) fn draw_template_row(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         if section_header_clickable(
@@ -109,6 +112,7 @@ impl NekoSpiceApp {
             });
     }
 
+    /// draw simulation queue panel。
     pub(crate) fn draw_simulation_queue_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -149,6 +153,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw solver health panel。
     pub(crate) fn draw_solver_health_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -175,6 +180,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw recent measurements panel。
     pub(crate) fn draw_recent_measurements_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -200,6 +206,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw recommendations panel。
     pub(crate) fn draw_recommendations_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

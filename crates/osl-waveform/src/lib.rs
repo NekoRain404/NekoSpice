@@ -12,22 +12,27 @@ pub struct Waveform {
 }
 
 impl Waveform {
+    /// title。
     pub fn title(&self) -> &str {
         &self.title
     }
 
+    /// plot name。
     pub fn plot_name(&self) -> &str {
         &self.plot_name
     }
 
+    /// variables。
     pub fn variables(&self) -> &[WaveformVariable] {
         &self.variables
     }
 
+    /// point count。
     pub fn point_count(&self) -> usize {
         self.columns.first().map(Vec::len).unwrap_or(0)
     }
 
+    /// signal values。
     pub fn signal_values(&self, signal: &str) -> OslResult<&[f64]> {
         let target = normalize_signal(signal);
         let index = self
@@ -54,6 +59,7 @@ impl Waveform {
         })
     }
 
+    /// signal values in window。
     pub fn signal_values_in_window(
         &self,
         signal: &str,
@@ -93,6 +99,7 @@ impl Waveform {
         Ok(selected)
     }
 
+    /// to csv。
     pub fn to_csv(&self) -> OslResult<String> {
         self.validate_column_lengths()?;
 
@@ -121,6 +128,7 @@ impl Waveform {
         Ok(output)
     }
 
+    /// to summary json。
     pub fn to_summary_json(&self) -> OslResult<String> {
         self.validate_column_lengths()?;
 
@@ -173,6 +181,7 @@ impl Waveform {
         ))
     }
 
+    /// viewport envelope。
     pub fn viewport_envelope(&self, query: &WaveformViewportQuery) -> OslResult<WaveformEnvelope> {
         self.validate_column_lengths()?;
         if query.max_points == 0 {
@@ -273,6 +282,7 @@ pub struct WaveformViewportQuery {
 }
 
 impl WaveformViewportQuery {
+    /// new。
     pub fn new(signal: impl Into<String>, max_points: usize) -> Self {
         Self {
             signal: signal.into(),
@@ -282,6 +292,7 @@ impl WaveformViewportQuery {
         }
     }
 
+    /// with window。
     pub fn with_window(mut self, from: Option<f64>, to: Option<f64>) -> Self {
         self.from = from;
         self.to = to;
@@ -300,6 +311,7 @@ pub struct WaveformEnvelope {
 }
 
 impl WaveformEnvelope {
+    /// to json。
     pub fn to_json(&self) -> String {
         let buckets = self
             .buckets
@@ -373,6 +385,7 @@ pub enum MeasurementKind {
 }
 
 impl MeasurementKind {
+    /// parse。
     pub fn parse(input: &str) -> OslResult<Self> {
         match input {
             "final_value" => Ok(Self::FinalValue),
@@ -402,6 +415,7 @@ pub struct WaveformSummary {
 }
 
 impl WaveformSummary {
+    /// summarize。
     pub fn summarize(values: &[f64]) -> OslResult<Self> {
         if values.is_empty() {
             return Err(OslError::InvalidInput(
@@ -422,6 +436,7 @@ impl WaveformSummary {
     }
 }
 
+/// measure。
 pub fn measure(kind: MeasurementKind, values: &[f64]) -> OslResult<f64> {
     if values.is_empty() {
         return Err(OslError::InvalidInput(

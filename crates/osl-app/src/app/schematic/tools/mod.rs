@@ -1,3 +1,5 @@
+//! 绘图工具状态机模块。管理工具的激活、切换和预览渲染。
+//!
 use crate::app::NekoSpiceApp;
 use crate::canvas::colors::SchematicColors;
 use eframe::egui::{self, Rect};
@@ -12,6 +14,7 @@ pub(crate) use state::SchematicToolState;
 pub(crate) use state::SchematicTool;
 
 impl NekoSpiceApp {
+    /// draw schematic tool preview。
     pub(crate) fn draw_schematic_tool_preview(
         &self,
         painter: &egui::Painter,

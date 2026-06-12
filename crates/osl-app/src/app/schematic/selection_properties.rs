@@ -99,6 +99,7 @@ impl SymbolMirrorSelection {
 }
 
 impl NekoSpiceApp {
+    /// draw selection property editor。
     pub(crate) fn draw_selection_property_editor(&mut self, ui: &mut egui::Ui) {
         let Some(symbol) = self.selected_symbol_for_property_editor() else {
             return;
@@ -150,6 +151,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// sync property editor from selection。
     pub(crate) fn sync_property_editor_from_selection(&mut self) {
         let Some(symbol) = self.selected_symbol_for_property_editor() else {
             self.clear_property_editor();
@@ -163,6 +165,7 @@ impl NekoSpiceApp {
         self.selection_properties.sync_from_snapshot(uuid, snapshot);
     }
 
+    /// clear property editor。
     pub(crate) fn clear_property_editor(&mut self) {
         self.selection_properties.clear();
     }

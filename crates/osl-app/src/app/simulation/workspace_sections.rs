@@ -9,6 +9,7 @@ use osl_kicad::KicadDiagnosticSeverity;
 const NETLIST_CENTER_PREVIEW_LINES: usize = 18;
 
 impl NekoSpiceApp {
+    /// draw simulation analysis setup。
     pub(crate) fn draw_simulation_analysis_setup(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -35,6 +36,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw simulation netlist preview。
     pub(crate) fn draw_simulation_netlist_preview(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -72,6 +74,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw simulation run output。
     pub(crate) fn draw_simulation_run_output(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

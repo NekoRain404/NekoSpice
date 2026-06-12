@@ -18,6 +18,7 @@ pub struct KicadSymbolLibraryIndex {
 }
 
 impl KicadSymbolLibraryIndex {
+    /// from table。
     pub fn from_table(table: KicadSymbolLibraryTable, base_dir: &Path) -> Self {
         let mut libraries = Vec::new();
         let mut symbols = Vec::new();
@@ -91,10 +92,12 @@ impl KicadSymbolLibraryIndex {
         }
     }
 
+    /// symbol。
     pub fn symbol(&self, lib_id: &str) -> Option<&KicadIndexedSymbol> {
         self.symbols.iter().find(|symbol| symbol.id == lib_id)
     }
 
+    /// query。
     pub fn query(&self, query: &KicadSymbolLibraryIndexQuery) -> Self {
         let symbols = self
             .symbols
@@ -131,6 +134,7 @@ impl KicadSymbolLibraryIndex {
         }
     }
 
+    /// to json。
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(&self.to_json_value())
             .expect("KiCad symbol library index JSON should serialize")
@@ -154,6 +158,7 @@ impl KicadSymbolLibraryIndex {
         })
     }
 
+    /// to summary json。
     pub fn to_summary_json(&self) -> String {
         let diagnostics = self
             .diagnostics
@@ -252,6 +257,7 @@ pub struct KicadSymbolLibraryIndexQuery {
 }
 
 impl KicadSymbolLibraryIndexQuery {
+    /// is empty。
     pub fn is_empty(&self) -> bool {
         self.text.as_deref().is_none_or(str::is_empty)
             && self.library.as_deref().is_none_or(str::is_empty)

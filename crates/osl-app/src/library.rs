@@ -1,3 +1,5 @@
+//! 符号库抽象层。提供符号库的加载和查找功能。
+//!
 use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadIndexedSymbol, KicadSymbolDef, KicadSymbolLibraryIndex,
@@ -25,20 +27,24 @@ pub(crate) struct KicadGuiSymbolPreview {
 }
 
 impl KicadGuiLibrary {
+    /// load。
     pub(crate) fn load(path: PathBuf) -> Result<Self, String> {
         read_kicad_symbol_library_index(&path)
             .map(|index| Self { path, index })
             .map_err(|error| error.to_string())
     }
 
+    /// path。
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }
 
+    /// index。
     pub(crate) fn index(&self) -> &KicadSymbolLibraryIndex {
         &self.index
     }
 
+    /// filtered index。
     pub(crate) fn filtered_index(&self, text: &str) -> KicadSymbolLibraryIndex {
         let text = text.trim();
         let query = KicadSymbolLibraryIndexQuery {
@@ -53,10 +59,12 @@ impl KicadGuiLibrary {
         }
     }
 
+    /// symbol。
     pub(crate) fn symbol(&self, lib_id: &str) -> Option<&KicadIndexedSymbol> {
         self.index.symbol(lib_id)
     }
 
+    /// symbol definition。
     pub(crate) fn symbol_definition(
         &self,
         lib_id: &str,
@@ -83,6 +91,7 @@ impl KicadGuiLibrary {
         })
     }
 
+    /// symbol preview。
     pub(crate) fn symbol_preview(
         &self,
         lib_id: &str,
@@ -102,6 +111,7 @@ impl KicadGuiLibrary {
         })
     }
 
+    /// symbol placement preview。
     pub(crate) fn symbol_placement_preview(
         &self,
         lib_id: &str,

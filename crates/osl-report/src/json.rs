@@ -2,6 +2,7 @@ use crate::VerifyReport;
 use crate::format::{option_f64_json, summary_json};
 use osl_core::{json_escape, parameters_json};
 
+/// report json。
 pub(crate) fn report_json(report: &VerifyReport) -> String {
     let failures = report
         .results

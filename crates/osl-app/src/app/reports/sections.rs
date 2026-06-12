@@ -11,6 +11,7 @@ const MEASUREMENT_LIMIT: usize = 8;
 const ARTIFACT_LIMIT: usize = 10;
 
 impl NekoSpiceApp {
+    /// draw report measurements section。
     pub(crate) fn draw_report_measurements_section(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -49,6 +50,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw report plot annotation section。
     pub(crate) fn draw_report_plot_annotation_section(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = StudioTheme::palette(mode);
@@ -89,6 +91,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw report formula editor section。
     pub(crate) fn draw_report_formula_editor_section(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -108,6 +111,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw report details section。
     pub(crate) fn draw_report_details_section(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -127,6 +131,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw report artifacts section。
     pub(crate) fn draw_report_artifacts_section(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -149,6 +154,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw report preview section。
     pub(crate) fn draw_report_preview_section(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -193,6 +199,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw report export section。
     pub(crate) fn draw_report_export_section(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

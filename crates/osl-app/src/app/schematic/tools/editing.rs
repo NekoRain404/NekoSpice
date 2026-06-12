@@ -4,6 +4,7 @@ use crate::document::KicadGuiDocument;
 use osl_kicad::{KicadAt, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSheetPin, KicadSize};
 
 impl NekoSpiceApp {
+    /// cancel schematic tool pending。
     pub(in crate::app) fn cancel_schematic_tool_pending(&mut self) {
         if self.schematic_tools.has_pending() {
             self.schematic_tools.clear_pending();
@@ -11,6 +12,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// handle schematic tool click。
     pub(in crate::app) fn handle_schematic_tool_click(&mut self, point: KicadPoint) -> bool {
         match self.schematic_tools.active {
             SchematicTool::Select => false,

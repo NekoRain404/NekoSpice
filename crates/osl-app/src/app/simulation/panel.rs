@@ -28,6 +28,7 @@ pub(crate) enum SimulationBackendKind {
 impl SimulationBackendKind {
     pub(crate) const ALL: [Self; 2] = [Self::Ngspice, Self::Xyce];
 
+    /// label。
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Ngspice => "ngspice",
@@ -35,6 +36,7 @@ impl SimulationBackendKind {
         }
     }
 
+    /// label zh。
     pub(crate) fn label_zh(self) -> &'static str {
         match self {
             Self::Ngspice => "ngspice",

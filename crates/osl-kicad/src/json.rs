@@ -2,6 +2,7 @@ use osl_core::json_escape;
 
 use crate::{KicadBoundingBox, KicadProperty, kicad_at_value, kicad_text_effects_value};
 
+/// json option。
 pub(crate) fn json_option(value: Option<&str>) -> String {
     match value {
         Some(value) => format!("\"{}\"", json_escape(value)),
@@ -9,12 +10,14 @@ pub(crate) fn json_option(value: Option<&str>) -> String {
     }
 }
 
+/// json u64 option。
 pub(crate) fn json_u64_option(value: Option<u64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "null".to_string())
 }
 
+/// json bool option。
 pub(crate) fn json_bool_option(value: Option<bool>) -> &'static str {
     match value {
         Some(true) => "true",
@@ -23,6 +26,7 @@ pub(crate) fn json_bool_option(value: Option<bool>) -> &'static str {
     }
 }
 
+/// kicad bounding box json。
 pub(crate) fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
     format!(
         concat!(
@@ -42,6 +46,7 @@ pub(crate) fn kicad_bounding_box_json(bounds: KicadBoundingBox) -> String {
     )
 }
 
+/// kicad bounding box value。
 pub(crate) fn kicad_bounding_box_value(bounds: KicadBoundingBox) -> serde_json::Value {
     serde_json::json!({
         "min": {
@@ -57,6 +62,7 @@ pub(crate) fn kicad_bounding_box_value(bounds: KicadBoundingBox) -> serde_json::
     })
 }
 
+/// kicad property value。
 pub(crate) fn kicad_property_value(property: &KicadProperty) -> serde_json::Value {
     serde_json::json!({
         "name": property.name,

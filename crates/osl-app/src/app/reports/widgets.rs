@@ -1,6 +1,7 @@
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 
+/// report metric card。
 pub(crate) fn report_metric_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -18,6 +19,7 @@ pub(crate) fn report_metric_card(
     });
 }
 
+/// report row。
 pub(crate) fn report_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
     let palette = StudioTheme::palette(mode);
     ui.horizontal(|ui| {
@@ -28,6 +30,7 @@ pub(crate) fn report_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, 
     });
 }
 
+/// artifact row。
 pub(crate) fn artifact_row(ui: &mut egui::Ui, kind: &str, file: &str, selected: bool) {
     ui.horizontal(|ui| {
         if selected {
@@ -40,6 +43,7 @@ pub(crate) fn artifact_row(ui: &mut egui::Ui, kind: &str, file: &str, selected: 
     });
 }
 
+/// report status card。
 pub(crate) fn report_status_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -62,6 +66,7 @@ pub(crate) fn report_status_card(
     });
 }
 
+/// formula token。
 pub(crate) fn formula_token(ui: &mut egui::Ui, mode: StudioThemeMode, token: &str) {
     let palette = StudioTheme::palette(mode);
     egui::Frame::new()
@@ -74,6 +79,7 @@ pub(crate) fn formula_token(ui: &mut egui::Ui, mode: StudioThemeMode, token: &st
         });
 }
 
+/// export toggle。
 pub(crate) fn export_toggle(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, enabled: bool) {
     let palette = StudioTheme::palette(mode);
     ui.horizontal(|ui| {

@@ -1,6 +1,7 @@
 use crate::report_summary::{GuiReportSummary, GuiReportSummaryState};
 use eframe::egui;
 
+/// draw simulation report panel。
 pub(crate) fn draw_simulation_report_panel(ui: &mut egui::Ui, report: &GuiReportSummaryState) {
     match report {
         GuiReportSummaryState::Ready(summary) => draw_ready_report_summary(ui, summary),

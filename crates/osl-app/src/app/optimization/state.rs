@@ -11,6 +11,7 @@ pub(crate) enum OptimizationTab {
 impl OptimizationTab {
     pub(crate) const ALL: [Self; 3] = [Self::Targets, Self::Sweep, Self::MonteCarlo];
 
+    /// text key。
     pub(crate) fn text_key(self) -> UiText {
         match self {
             Self::Targets => UiText::Optimization,

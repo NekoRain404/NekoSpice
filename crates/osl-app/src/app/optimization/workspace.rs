@@ -5,6 +5,7 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw optimization center workspace。
     pub(crate) fn draw_optimization_center_workspace(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -53,6 +54,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw optimization workspace panel。
     pub(crate) fn draw_optimization_workspace_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.heading(self.text(UiText::OptimizationStudio));

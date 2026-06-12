@@ -1,7 +1,5 @@
-/// Vertical tool palette for the schematic workspace.
-///
-/// Renders as a narrow vertical strip on the left side of the schematic canvas,
-/// with icon buttons for each drawing tool. Matches the reference UI's left tool panel.
+//! 垂直工具面板。在原理图工作区左侧绘制可切换的绘图工具图标列。
+//!
 use super::NekoSpiceApp;
 use super::schematic::tools::SchematicTool;
 // StudioThemeMode used below for palette access

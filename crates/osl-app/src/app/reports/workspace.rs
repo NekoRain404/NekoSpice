@@ -6,6 +6,7 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw reports center workspace。
     pub(crate) fn draw_reports_center_workspace(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
         let mode = self.theme_mode();

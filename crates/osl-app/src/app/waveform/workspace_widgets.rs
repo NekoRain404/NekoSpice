@@ -3,6 +3,7 @@ use super::preview::format_compact_f64;
 use crate::waveform_summary::GuiWaveformVariableSummary;
 use eframe::egui::{self, RichText};
 
+/// waveform mode tab。
 pub(crate) fn waveform_mode_tab(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -31,6 +32,7 @@ pub(crate) fn waveform_mode_tab(
     .clicked()
 }
 
+/// trace chip。
 pub(crate) fn trace_chip(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -64,6 +66,7 @@ pub(crate) fn trace_chip(
     .clicked()
 }
 
+/// waveform empty state。
 pub(crate) fn waveform_empty_state(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -79,6 +82,7 @@ pub(crate) fn waveform_empty_state(
     });
 }
 
+/// measurement table。
 pub(crate) fn measurement_table(
     ui: &mut egui::Ui,
     labels: &MeasurementTableLabels<'_>,
@@ -116,6 +120,7 @@ pub(crate) fn measurement_table(
     }
 }
 
+/// `MeasurementTableLabels` 类型定义。
 pub(crate) struct MeasurementTableLabels<'a> {
     pub(crate) signal: &'a str,
     pub(crate) last: &'a str,
@@ -126,6 +131,7 @@ pub(crate) struct MeasurementTableLabels<'a> {
     pub(crate) more_variables: &'a str,
 }
 
+/// run stat row。
 pub(crate) fn run_stat_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
     let palette = StudioTheme::palette(mode);
     ui.horizontal(|ui| {
@@ -137,6 +143,7 @@ pub(crate) fn run_stat_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str
     ui.separator();
 }
 
+/// cursor row。
 pub(crate) fn cursor_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -154,6 +161,7 @@ pub(crate) fn cursor_row(
     });
 }
 
+/// waveform summary card。
 pub(crate) fn waveform_summary_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

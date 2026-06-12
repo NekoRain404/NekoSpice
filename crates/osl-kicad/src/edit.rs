@@ -116,6 +116,7 @@ pub struct KicadSymbolPlacement {
     pub uuid: Option<String>,
 }
 
+/// remove by uuid。
 pub(crate) fn remove_by_uuid<T>(
     items: &mut Vec<T>,
     uuid: &str,
@@ -129,6 +130,7 @@ pub(crate) fn remove_by_uuid<T>(
     }
 }
 
+/// remove table cell by uuid。
 pub(crate) fn remove_table_cell_by_uuid(tables: &mut [KicadTable], uuid: &str) -> bool {
     for table in tables {
         if remove_by_uuid(&mut table.cells, uuid, |cell| cell.uuid.as_deref()) {
@@ -138,6 +140,7 @@ pub(crate) fn remove_table_cell_by_uuid(tables: &mut [KicadTable], uuid: &str) -
     false
 }
 
+/// remove sheet pin by uuid。
 pub(crate) fn remove_sheet_pin_by_uuid(sheets: &mut [KicadSheet], uuid: &str) -> bool {
     for sheet in sheets {
         if remove_by_uuid(&mut sheet.pins, uuid, |pin| pin.uuid.as_deref()) {
@@ -147,6 +150,7 @@ pub(crate) fn remove_sheet_pin_by_uuid(sheets: &mut [KicadSheet], uuid: &str) ->
     false
 }
 
+/// move table cell by uuid。
 pub(crate) fn move_table_cell_by_uuid(
     tables: &mut [KicadTable],
     uuid: &str,
@@ -165,6 +169,7 @@ pub(crate) fn move_table_cell_by_uuid(
     false
 }
 
+/// move sheet pin by uuid。
 pub(crate) fn move_sheet_pin_by_uuid(
     sheets: &mut [KicadSheet],
     uuid: &str,
@@ -183,40 +188,47 @@ pub(crate) fn move_sheet_pin_by_uuid(
     false
 }
 
+/// translate point。
 pub(crate) fn translate_point(point: &mut KicadPoint, delta: KicadPoint) {
     point.x += delta.x;
     point.y += delta.y;
 }
 
+/// translate optional point。
 pub(crate) fn translate_optional_point(point: &mut Option<KicadPoint>, delta: KicadPoint) {
     if let Some(point) = point {
         translate_point(point, delta);
     }
 }
 
+/// translate points。
 pub(crate) fn translate_points(points: &mut [KicadPoint], delta: KicadPoint) {
     for point in points {
         translate_point(point, delta);
     }
 }
 
+/// translate at。
 pub(crate) fn translate_at(at: &mut KicadAt, delta: KicadPoint) {
     at.x += delta.x;
     at.y += delta.y;
 }
 
+/// translate optional at。
 pub(crate) fn translate_optional_at(at: &mut Option<KicadAt>, delta: KicadPoint) {
     if let Some(at) = at {
         translate_at(at, delta);
     }
 }
 
+/// translate properties。
 pub(crate) fn translate_properties(properties: &mut [KicadProperty], delta: KicadPoint) {
     for property in properties {
         translate_optional_at(&mut property.at, delta);
     }
 }
 
+/// translate graphic。
 pub(crate) fn translate_graphic(graphic: &mut KicadGraphic, delta: KicadPoint) {
     match graphic {
         KicadGraphic::Polyline { points } | KicadGraphic::Bezier { points } => {
@@ -236,6 +248,7 @@ pub(crate) fn translate_graphic(graphic: &mut KicadGraphic, delta: KicadPoint) {
     }
 }
 
+/// move summary。
 pub(crate) fn move_summary(kind: &str, uuid: &str) -> KicadEditSummary {
     KicadEditSummary {
         operation: format!("move-{kind}"),
@@ -243,6 +256,7 @@ pub(crate) fn move_summary(kind: &str, uuid: &str) -> KicadEditSummary {
     }
 }
 
+/// delete summary。
 pub(crate) fn delete_summary(kind: &str, uuid: &str) -> KicadEditSummary {
     KicadEditSummary {
         operation: format!("delete-{kind}"),
@@ -250,6 +264,7 @@ pub(crate) fn delete_summary(kind: &str, uuid: &str) -> KicadEditSummary {
     }
 }
 
+/// validate point。
 pub(crate) fn validate_point(point: KicadPoint, context: &str) -> OslResult<()> {
     if point.x.is_finite() && point.y.is_finite() {
         Ok(())
@@ -260,6 +275,7 @@ pub(crate) fn validate_point(point: KicadPoint, context: &str) -> OslResult<()> 
     }
 }
 
+/// validate at。
 pub(crate) fn validate_at(at: KicadAt, context: &str) -> OslResult<()> {
     validate_point(KicadPoint { x: at.x, y: at.y }, context)?;
     if at.rotation.is_finite() {
@@ -271,6 +287,7 @@ pub(crate) fn validate_at(at: KicadAt, context: &str) -> OslResult<()> {
     }
 }
 
+/// validate size。
 pub(crate) fn validate_size(size: KicadSize, context: &str) -> OslResult<()> {
     if size.width.is_finite() && size.height.is_finite() && size.width > 0.0 && size.height > 0.0 {
         Ok(())
@@ -281,6 +298,7 @@ pub(crate) fn validate_size(size: KicadSize, context: &str) -> OslResult<()> {
     }
 }
 
+/// validate bus entry size。
 pub(crate) fn validate_bus_entry_size(size: KicadSize, context: &str) -> OslResult<()> {
     if is_valid_bus_entry_size(size) {
         Ok(())
@@ -291,6 +309,7 @@ pub(crate) fn validate_bus_entry_size(size: KicadSize, context: &str) -> OslResu
     }
 }
 
+/// is valid bus entry size。
 pub(crate) fn is_valid_bus_entry_size(size: KicadSize) -> bool {
     size.width.is_finite()
         && size.height.is_finite()
@@ -298,6 +317,7 @@ pub(crate) fn is_valid_bus_entry_size(size: KicadSize) -> bool {
         && coordinate_key(size.height) != 0
 }
 
+/// points payload。
 pub(crate) fn points_payload(points: &[KicadPoint]) -> String {
     points
         .iter()
@@ -306,6 +326,7 @@ pub(crate) fn points_payload(points: &[KicadPoint]) -> String {
         .join(";")
 }
 
+/// fnv1a64。
 pub(crate) fn fnv1a64(input: &str) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in input.as_bytes() {
@@ -315,6 +336,7 @@ pub(crate) fn fnv1a64(input: &str) -> u64 {
     hash
 }
 
+/// uuid from hashes。
 pub(crate) fn uuid_from_hashes(left: u64, right: u64) -> String {
     let mut bytes = [0_u8; 16];
     bytes[..8].copy_from_slice(&left.to_be_bytes());

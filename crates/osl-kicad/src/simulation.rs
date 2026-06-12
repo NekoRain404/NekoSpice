@@ -22,6 +22,7 @@ pub enum KicadSimulationDirectiveKind {
 }
 
 impl KicadSimulationDirectiveKind {
+    /// keyword。
     pub fn keyword(self) -> Option<&'static str> {
         match self {
             Self::Tran => Some(".tran"),
@@ -40,6 +41,7 @@ impl KicadSimulationDirectiveKind {
         }
     }
 
+    /// from directive text。
     pub fn from_directive_text(text: &str) -> Option<Self> {
         let keyword = directive_keyword(text)?;
         Some(match keyword.as_str() {
@@ -60,6 +62,7 @@ impl KicadSimulationDirectiveKind {
         })
     }
 
+    /// is analysis。
     pub fn is_analysis(self) -> bool {
         matches!(self, Self::Tran | Self::Ac | Self::Dc | Self::Op)
     }
@@ -124,6 +127,7 @@ pub struct KicadSimulationDirective {
 }
 
 impl KicadSimulationDirective {
+    /// from text item。
     pub fn from_text_item(item: &KicadTextItem) -> Option<Self> {
         let text = item.text.trim();
         if !is_spice_directive_text(text) {
@@ -149,11 +153,13 @@ pub struct KicadSimulationDirectiveUpdate {
 }
 
 impl KicadSimulationDirectiveUpdate {
+    /// normalized text。
     pub fn normalized_text(&self) -> OslResult<String> {
         normalize_simulation_directive_text(self.kind, &self.body)
     }
 }
 
+/// simulation directives from text items。
 pub(crate) fn simulation_directives_from_text_items(
     text_items: &[KicadTextItem],
 ) -> Vec<KicadSimulationDirective> {
@@ -164,10 +170,12 @@ pub(crate) fn simulation_directives_from_text_items(
 }
 
 impl KicadSchematic {
+    /// simulation directives。
     pub fn simulation_directives(&self) -> Vec<KicadSimulationDirective> {
         simulation_directives_from_text_items(&self.text_items)
     }
 
+    /// spice directives。
     pub fn spice_directives(&self) -> Vec<&KicadTextItem> {
         self.text_items
             .iter()
@@ -175,6 +183,7 @@ impl KicadSchematic {
             .collect()
     }
 
+    /// set simulation directive。
     pub fn set_simulation_directive(
         &mut self,
         update: KicadSimulationDirectiveUpdate,
@@ -235,6 +244,7 @@ impl KicadSchematic {
     }
 }
 
+/// find simulation directive index。
 pub(crate) fn find_simulation_directive_index(
     text_items: &[KicadTextItem],
     kind: KicadSimulationDirectiveKind,
@@ -247,6 +257,7 @@ pub(crate) fn find_simulation_directive_index(
     })
 }
 
+/// normalize simulation directive text。
 pub(crate) fn normalize_simulation_directive_text(
     kind: KicadSimulationDirectiveKind,
     body: &str,
@@ -281,10 +292,12 @@ pub(crate) fn normalize_simulation_directive_text(
     Ok(format!("{keyword} {body}"))
 }
 
+/// is spice analysis directive text。
 pub(crate) fn is_spice_analysis_directive_text(text: &str) -> bool {
     KicadSimulationDirectiveKind::from_directive_text(text).is_some_and(|kind| kind.is_analysis())
 }
 
+/// is spice directive text。
 pub(crate) fn is_spice_directive_text(text: &str) -> bool {
     text.trim_start().starts_with('.')
 }

@@ -21,6 +21,7 @@ impl ReportsTab {
         Self::ExportHistory,
     ];
 
+    /// text key。
     pub(crate) fn text_key(self) -> UiText {
         match self {
             Self::Overview => UiText::Overview,

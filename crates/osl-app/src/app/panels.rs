@@ -1,3 +1,5 @@
+//! 根面板布局调度。实现画布渲染和 UI 面板的完整布局。
+//!
 use super::NekoSpiceApp;
 use super::theme::StudioTheme;
 use eframe::egui::{self, Rect, UiBuilder, pos2};

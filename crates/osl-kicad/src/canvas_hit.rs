@@ -28,6 +28,7 @@ pub struct KicadCanvasHitReport {
 }
 
 impl KicadCanvasHitReport {
+    /// to json。
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(&serde_json::json!({
             "source": self.source,
@@ -52,6 +53,7 @@ impl KicadCanvasHit {
 }
 
 impl KicadCanvasScene {
+    /// hit test。
     pub fn hit_test(&self, point: KicadPoint) -> KicadCanvasHitReport {
         let mut hits = Vec::new();
         for symbol in &self.symbols {

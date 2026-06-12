@@ -6,6 +6,7 @@ use osl_kicad::KicadPoint;
 
 use super::state::{SchematicTool, SchematicToolState};
 
+/// draw schematic tool preview。
 pub(crate) fn draw_schematic_tool_preview(
     painter: &egui::Painter,
     rect: Rect,

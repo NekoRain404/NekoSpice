@@ -27,10 +27,12 @@ pub struct KicadSymbolGraphic {
 }
 
 impl KicadSymbolGraphic {
+    /// include in bounds。
     pub(crate) fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
         self.graphic.include_in_bounds(bounds);
     }
 
+    /// transformed。
     pub(crate) fn transformed(
         &self,
         symbol_at: KicadAt,
@@ -42,6 +44,7 @@ impl KicadSymbolGraphic {
             .with_style(self.stroke.clone(), self.fill.clone())
     }
 
+    /// write symbol graphic sexpr。
     pub(crate) fn write_symbol_graphic_sexpr(&self, output: &mut String, indent: usize) {
         self.graphic.write_symbol_graphic_sexpr(
             output,
@@ -95,6 +98,7 @@ pub enum KicadGraphic {
 }
 
 impl KicadGraphic {
+    /// include in bounds。
     pub(crate) fn include_in_bounds(&self, bounds: &mut KicadBoundingBoxBuilder) {
         match self {
             Self::Polyline { points } => {
@@ -136,6 +140,7 @@ impl KicadGraphic {
         }
     }
 
+    /// transformed。
     pub(crate) fn transformed(
         &self,
         symbol_at: KicadAt,
@@ -193,6 +198,7 @@ impl KicadGraphic {
         }
     }
 
+    /// to canvas graphic。
     pub(crate) fn to_canvas_graphic(&self) -> KicadCanvasGraphic {
         match self {
             Self::Polyline { points } => KicadCanvasGraphic::Polyline {
@@ -240,6 +246,7 @@ impl KicadGraphic {
         }
     }
 
+    /// write symbol graphic sexpr。
     pub(crate) fn write_symbol_graphic_sexpr(
         &self,
         output: &mut String,
@@ -352,6 +359,7 @@ pub struct KicadSchematicGraphic {
 }
 
 impl KicadSchematicGraphic {
+    /// to canvas graphic。
     pub(crate) fn to_canvas_graphic(&self) -> KicadCanvasGraphic {
         self.graphic
             .to_canvas_graphic()
@@ -359,6 +367,7 @@ impl KicadSchematicGraphic {
             .with_style(self.stroke.clone(), self.fill.clone())
     }
 
+    /// write schematic graphic sexpr。
     pub(crate) fn write_schematic_graphic_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         match &self.graphic {
@@ -475,6 +484,7 @@ pub struct KicadRuleArea {
 }
 
 impl KicadRuleArea {
+    /// write rule area sexpr。
     pub(crate) fn write_rule_area_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(rule_area\n", pad));
@@ -506,6 +516,7 @@ impl KicadRuleArea {
     }
 }
 
+/// parse schematic graphic。
 pub(crate) fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraphic> {
     match head(node)? {
         "polyline" | "bezier" | "rectangle" | "circle" | "arc" => {
@@ -522,6 +533,7 @@ pub(crate) fn parse_schematic_graphic(node: &Sexp) -> Option<KicadSchematicGraph
     }
 }
 
+/// parse rule area。
 pub(crate) fn parse_rule_area(node: &Sexp) -> Option<KicadRuleArea> {
     let items = list_items(node);
     let polyline = child(items, "polyline")?;
@@ -541,6 +553,7 @@ pub(crate) fn parse_rule_area(node: &Sexp) -> Option<KicadRuleArea> {
     })
 }
 
+/// parse symbol graphic。
 pub(crate) fn parse_symbol_graphic(node: &Sexp) -> Option<KicadSymbolGraphic> {
     match head(node)? {
         "polyline" | "bezier" | "rectangle" | "circle" | "arc" | "text" => {

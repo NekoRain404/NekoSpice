@@ -1,6 +1,7 @@
 use osl_core::ParameterOverride;
 use osl_waveform::WaveformSummary;
 
+/// option f64 json。
 pub(crate) fn option_f64_json(value: Option<f64>) -> String {
     value
         .map(|value| {
@@ -13,12 +14,14 @@ pub(crate) fn option_f64_json(value: Option<f64>) -> String {
         .unwrap_or_else(|| "null".to_string())
 }
 
+/// option f64 text。
 pub(crate) fn option_f64_text(value: Option<f64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "none".to_string())
 }
 
+/// summary json。
 pub(crate) fn summary_json(summary: Option<WaveformSummary>) -> String {
     match summary {
         Some(summary) => format!(
@@ -39,6 +42,7 @@ pub(crate) fn summary_json(summary: Option<WaveformSummary>) -> String {
     }
 }
 
+/// summary text。
 pub(crate) fn summary_text(summary: Option<WaveformSummary>) -> String {
     match summary {
         Some(summary) => format!(
@@ -56,6 +60,7 @@ pub(crate) fn summary_text(summary: Option<WaveformSummary>) -> String {
     }
 }
 
+/// parameters text。
 pub(crate) fn parameters_text(parameters: &[ParameterOverride]) -> String {
     if parameters.is_empty() {
         "none".to_string()
@@ -68,10 +73,12 @@ pub(crate) fn parameters_text(parameters: &[ParameterOverride]) -> String {
     }
 }
 
+/// junit seconds。
 pub(crate) fn junit_seconds(duration_ms: u128) -> String {
     format!("{:.6}", duration_ms as f64 / 1000.0)
 }
 
+/// xml escape。
 pub(crate) fn xml_escape(input: &str) -> String {
     let mut escaped = String::with_capacity(input.len());
     for character in input.chars() {
@@ -87,20 +94,24 @@ pub(crate) fn xml_escape(input: &str) -> String {
     escaped
 }
 
+/// cdata escape。
 pub(crate) fn cdata_escape(input: &str) -> String {
     input.replace("]]>", "]]]]><![CDATA[>")
 }
 
+/// markdown cell。
 pub(crate) fn markdown_cell(input: &str) -> String {
     markdown_inline(input)
         .replace('|', "\\|")
         .replace('\n', "<br>")
 }
 
+/// markdown link cell。
 pub(crate) fn markdown_link_cell(input: &str) -> String {
     input.replace('|', "\\|").replace('\n', "<br>")
 }
 
+/// markdown inline。
 pub(crate) fn markdown_inline(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     for character in input.chars() {
@@ -113,6 +124,7 @@ pub(crate) fn markdown_inline(input: &str) -> String {
     output
 }
 
+/// markdown link。
 pub(crate) fn markdown_link(label: &str, href: &str) -> String {
     format!(
         "[{}]({})",

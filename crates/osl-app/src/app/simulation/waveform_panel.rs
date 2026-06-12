@@ -5,6 +5,7 @@ use crate::waveform_summary::{
 };
 use eframe::egui::{self, Color32};
 
+/// draw simulation waveform panel。
 pub(crate) fn draw_simulation_waveform_panel(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

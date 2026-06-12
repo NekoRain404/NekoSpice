@@ -5,9 +5,11 @@ use crate::app::navigation::StudioWorkspace;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
+/// `SECTION_GAP` 常量。
 pub(crate) const SECTION_GAP: f32 = 10.0;
 
 impl NekoSpiceApp {
+    /// draw home dashboard。
     pub(crate) fn draw_home_dashboard(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         egui::ScrollArea::vertical()

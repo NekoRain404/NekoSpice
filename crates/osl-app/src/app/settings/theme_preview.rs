@@ -4,6 +4,7 @@ use crate::app::theme::{StudioPalette, StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
 impl NekoSpiceApp {
+    /// draw settings theme gallery。
     pub(crate) fn draw_settings_theme_gallery(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

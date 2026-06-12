@@ -12,6 +12,7 @@ pub struct KicadSchematicCheckReport {
 }
 
 impl KicadSchematicCheckReport {
+    /// error count。
     pub fn error_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -19,6 +20,7 @@ impl KicadSchematicCheckReport {
             .count()
     }
 
+    /// warning count。
     pub fn warning_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -26,6 +28,7 @@ impl KicadSchematicCheckReport {
             .count()
     }
 
+    /// info count。
     pub fn info_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -33,6 +36,7 @@ impl KicadSchematicCheckReport {
             .count()
     }
 
+    /// to json。
     pub fn to_json(&self) -> String {
         let diagnostics = self
             .diagnostics
@@ -109,6 +113,7 @@ pub enum KicadDiagnosticSeverity {
 }
 
 impl KicadDiagnosticSeverity {
+    /// as str。
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Info => "info",
@@ -118,6 +123,7 @@ impl KicadDiagnosticSeverity {
     }
 }
 
+/// kicad schematic diagnostic。
 pub(crate) fn kicad_schematic_diagnostic(
     severity: KicadDiagnosticSeverity,
     code: &str,

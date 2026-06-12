@@ -1,14 +1,5 @@
-/// Canvas drawing primitives for KiCad schematic rendering.
-///
-/// Organized into focused sub-modules:
-/// - `grid` — background grid lines
-/// - `sheet` — hierarchical sheet boxes
-/// - `symbol` — symbol graphic elements and pin shapes
-/// - `text` — rotated text rendering
-///
-/// This barrel module re-exports all public drawing functions and
-/// contains shared utilities (polyline, line, bus entry, bounds, bezier).
-
+//! 画布绘制图元模块。聚合网格、图纸、符号和文本子模块。
+//!
 mod grid;
 mod sheet;
 mod symbol;

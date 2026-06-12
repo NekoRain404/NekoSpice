@@ -22,11 +22,13 @@ use crate::{KicadLabelKind, KicadSchematic, parse_sexpr};
 use osl_core::{OslResult, read_text, write_text};
 use std::path::Path;
 
+/// read kicad schematic。
 pub fn read_kicad_schematic(path: &Path) -> OslResult<KicadSchematic> {
     let content = read_text(path)?;
     parse_kicad_schematic(&content, &path.display().to_string())
 }
 
+/// read kicad schematic with libraries。
 pub fn read_kicad_schematic_with_libraries(path: &Path) -> OslResult<KicadSchematic> {
     let mut schematic = read_kicad_schematic(path)?;
     if let Some(project_dir) = path.parent() {
@@ -35,10 +37,12 @@ pub fn read_kicad_schematic_with_libraries(path: &Path) -> OslResult<KicadSchema
     Ok(schematic)
 }
 
+/// write kicad schematic。
 pub fn write_kicad_schematic(path: &Path, schematic: &KicadSchematic) -> OslResult<()> {
     write_text(path, &schematic.to_kicad_schematic_sexpr())
 }
 
+/// parse kicad schematic。
 pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchematic> {
     let root = parse_sexpr(input)?;
     let root_list = expect_root_list(&root, "kicad_sch")?;
@@ -130,6 +134,7 @@ pub fn parse_kicad_schematic(input: &str, source: &str) -> OslResult<KicadSchema
 }
 
 impl KicadSchematic {
+    /// to kicad schematic sexpr。
     pub fn to_kicad_schematic_sexpr(&self) -> String {
         let mut output = String::new();
         output.push_str("(kicad_sch\n");

@@ -1,11 +1,11 @@
-/// KiCad hierarchical sheet box rendering.
-///
-/// Draws sheet rectangles with fill, border, name label, and pin stubs.
+//! 图纸边界渲染图元。绘制原理图边框和标题栏。
+//!
 use crate::viewport::CanvasViewport;
 use super::super::colors::SchematicColors;
 use eframe::egui::{self, Align2, FontId, Rect, Stroke, StrokeKind, Vec2};
 use osl_kicad::{KicadCanvasSheet, KicadPoint};
 
+/// draw sheet。
 pub(crate) fn draw_sheet(
     painter: &egui::Painter,
     rect: Rect,

@@ -1,7 +1,5 @@
-/// Right-click context menu for the schematic canvas.
-///
-/// Provides actions relevant to the clicked position or selected item,
-/// including cut/copy/paste, delete, rotate, and tool switching.
+//! 画布右键上下文菜单。根据选中项类型动态构建上下文操作。
+//!
 use super::NekoSpiceApp;
 use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText, Stroke};

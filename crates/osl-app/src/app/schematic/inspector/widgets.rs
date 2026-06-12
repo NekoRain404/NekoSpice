@@ -1,6 +1,7 @@
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText};
 
+/// inspector tab。
 pub(crate) fn inspector_tab(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -33,6 +34,7 @@ pub(crate) fn inspector_tab(
     .clicked()
 }
 
+/// property row。
 pub(crate) fn property_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
     let palette = StudioTheme::palette(mode);
     ui.horizontal(|ui| {
@@ -43,6 +45,7 @@ pub(crate) fn property_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str
     });
 }
 
+/// status pill。
 pub(crate) fn status_pill(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, color: Color32) {
     let palette = StudioTheme::palette(mode);
     egui::Frame::new()
@@ -58,6 +61,7 @@ pub(crate) fn status_pill(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str,
         });
 }
 
+/// compact action。
 pub(crate) fn compact_action(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str) -> bool {
     let palette = StudioTheme::palette(mode);
     ui.add(
@@ -69,6 +73,7 @@ pub(crate) fn compact_action(ui: &mut egui::Ui, mode: StudioThemeMode, label: &s
     .clicked()
 }
 
+/// section caption。
 pub(crate) fn section_caption(ui: &mut egui::Ui, mode: StudioThemeMode, text: &str) {
     ui.label(StudioTheme::muted_for(mode, text));
 }

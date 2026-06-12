@@ -30,6 +30,7 @@ impl SchematicTool {
         Self::NoConnect,
     ];
 
+    /// label。
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Select => "Select",
@@ -85,11 +86,13 @@ impl Default for SchematicToolState {
 }
 
 impl SchematicToolState {
+    /// clear pending。
     pub(crate) fn clear_pending(&mut self) {
         self.pending_wire_start = None;
         self.pending_bus_start = None;
     }
 
+    /// set active。
     pub(crate) fn set_active(&mut self, tool: SchematicTool) {
         if self.active != tool {
             self.active = tool;
@@ -97,6 +100,7 @@ impl SchematicToolState {
         }
     }
 
+    /// has pending。
     pub(crate) fn has_pending(&self) -> bool {
         self.pending_wire_start.is_some() || self.pending_bus_start.is_some()
     }

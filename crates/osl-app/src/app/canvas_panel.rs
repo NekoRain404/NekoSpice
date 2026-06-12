@@ -1,8 +1,5 @@
-/// Main canvas panel: rendering, interaction, and viewport management.
-///
-/// Handles mouse interaction (pan/zoom/select), coordinate transforms,
-/// and delegates rendering to the canvas module. Keyboard shortcuts and
-/// context menu logic live in separate files for clarity.
+//! 主画布面板。实现原理图画布的渲染、鼠标交互和坐标变换。
+//!
 use super::NekoSpiceApp;
 use crate::canvas;
 use crate::canvas::colors::SchematicColors;

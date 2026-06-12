@@ -1,8 +1,5 @@
-/// Symbol graphic and pin rendering.
-///
-/// Handles polyline, bezier, rectangle, circle, arc, and text graphics
-/// for KiCad symbols, plus detailed pin shape drawing (line, clock,
-/// inverted, non_logic, etc.).
+//! 符号渲染图元。绘制引脚、轮廓和标号文本。
+//!
 use crate::viewport::CanvasViewport;
 use super::super::colors::SchematicColors;
 use super::{draw_polyline, draw_line, quadratic_bezier_sample};
@@ -125,6 +122,7 @@ pub(crate) fn draw_graphic(
 
 
 
+/// draw pin。
 pub(crate) fn draw_pin(
     painter: &egui::Painter,
     rect: Rect,

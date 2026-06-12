@@ -1,3 +1,5 @@
+//! 仿真任务分发器。根据后端选择调度 ngspice/Xyce 仿真任务。
+//!
 use crate::document::KicadGuiDocument;
 use crate::report_summary::{GuiReportSummary, GuiReportSummaryState};
 use crate::waveform_summary::GuiWaveformSummaryState;
@@ -18,6 +20,7 @@ pub(crate) struct GuiSimulationRun {
 }
 
 impl GuiSimulationRun {
+    /// from output dir。
     pub(crate) fn from_output_dir(output_dir: PathBuf) -> Result<Self, String> {
         crate::simulation_run_loader::load_gui_simulation_run(output_dir)
     }
@@ -31,6 +34,7 @@ pub(crate) struct GuiSimulationJob {
 }
 
 impl GuiSimulationJob {
+    /// from document。
     pub(crate) fn from_document(
         document: &KicadGuiDocument,
         runs_root: &Path,
@@ -49,14 +53,17 @@ pub(crate) struct GuiSimulationTask {
 }
 
 impl GuiSimulationTask {
+    /// spawn ngspice。
     pub(crate) fn spawn_ngspice(job: GuiSimulationJob) -> Self {
         Self::spawn(job, || Box::new(NgspiceCliBackend::default()))
     }
 
+    /// spawn xyce。
     pub(crate) fn spawn_xyce(job: GuiSimulationJob) -> Self {
         Self::spawn(job, || Box::new(XyceCliBackend::default()))
     }
 
+    /// spawn with backend。
     pub(crate) fn spawn_with_backend(job: GuiSimulationJob, backend: &str) -> Self {
         match backend {
             "xyce" => Self::spawn_xyce(job),
@@ -64,6 +71,7 @@ impl GuiSimulationTask {
         }
     }
 
+    /// try finish。
     pub(crate) fn try_finish(&self) -> Option<Result<GuiSimulationRun, String>> {
         match self.receiver.try_recv() {
             Ok(result) => Some(result),

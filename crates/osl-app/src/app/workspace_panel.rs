@@ -1,3 +1,5 @@
+//! 工作区面板路由。根据活跃工作区枚举分发绘制调用。
+//!
 use super::NekoSpiceApp;
 use super::localization::UiText;
 use super::navigation::StudioWorkspace;
@@ -5,6 +7,7 @@ use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw left context panel。
     pub(super) fn draw_left_context_panel(&mut self, ui: &mut egui::Ui) {
         match self.active_workspace {
             StudioWorkspace::Home => self.draw_home_project_context(ui),
@@ -19,6 +22,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// draw right workspace panel。
     pub(super) fn draw_right_workspace_panel(&mut self, ui: &mut egui::Ui) {
         match self.active_workspace {
             StudioWorkspace::Home => self.draw_home_insights_panel(ui),

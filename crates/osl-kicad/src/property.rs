@@ -16,6 +16,7 @@ pub struct KicadProperty {
 }
 
 impl KicadProperty {
+    /// write property sexpr。
     pub(crate) fn write_property_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -52,6 +53,7 @@ impl KicadProperty {
     }
 }
 
+/// parse property。
 pub(crate) fn parse_property(node: &Sexp) -> Option<KicadProperty> {
     let items = list_items(node);
     Some(KicadProperty {

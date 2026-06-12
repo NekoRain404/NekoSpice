@@ -1,3 +1,5 @@
+//! 国际化框架。定义 [`UiText`] 枚举和中英文翻译实现。
+//!
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) enum StudioLocale {
     #[default]
@@ -8,6 +10,7 @@ pub(super) enum StudioLocale {
 impl StudioLocale {
     pub(super) const ALL: [Self; 2] = [Self::English, Self::SimplifiedChinese];
 
+    /// native name。
     pub(super) fn native_name(self) -> &'static str {
         match self {
             Self::English => "English",
@@ -15,6 +18,7 @@ impl StudioLocale {
         }
     }
 
+    /// short code。
     pub(super) fn short_code(self) -> &'static str {
         match self {
             Self::English => "EN",
@@ -22,6 +26,7 @@ impl StudioLocale {
         }
     }
 
+    /// next。
     pub(super) fn next(self) -> Self {
         match self {
             Self::English => Self::SimplifiedChinese,
@@ -29,6 +34,7 @@ impl StudioLocale {
         }
     }
 
+    /// text。
     pub(super) fn text(self, key: UiText) -> &'static str {
         match self {
             Self::English => key.en(),

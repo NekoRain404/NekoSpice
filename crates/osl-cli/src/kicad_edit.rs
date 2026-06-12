@@ -6,6 +6,7 @@ use osl_kicad::{
 };
 use std::collections::BTreeMap;
 
+/// parse kicad edit ops。
 pub(crate) fn parse_kicad_edit_ops(
     args: &[String],
     symbol_definitions: &[KicadSymbolDef],
@@ -529,6 +530,7 @@ fn parse_kicad_pin_alternates(value: &str) -> OslResult<BTreeMap<String, String>
     Ok(alternates)
 }
 
+/// parse kicad point。
 pub(crate) fn parse_kicad_point(value: &str, context: &str) -> OslResult<KicadPoint> {
     let parts = value.split(',').collect::<Vec<_>>();
     if parts.len() != 2 {

@@ -2,6 +2,7 @@ use crate::{KicadAt, KicadPoint};
 use osl_core::{OslError, OslResult};
 use std::collections::BTreeSet;
 
+/// transform symbol point。
 pub(crate) fn transform_symbol_point(
     pin_at: KicadAt,
     symbol_at: KicadAt,
@@ -10,6 +11,7 @@ pub(crate) fn transform_symbol_point(
     transform_local_point(pin_at.point(), symbol_at, mirror)
 }
 
+/// transform local point。
 pub(crate) fn transform_local_point(
     local: KicadPoint,
     symbol_at: KicadAt,
@@ -22,6 +24,7 @@ pub(crate) fn transform_local_point(
     }
 }
 
+/// transform local at。
 pub(crate) fn transform_local_at(
     local_at: KicadAt,
     symbol_at: KicadAt,
@@ -37,6 +40,7 @@ pub(crate) fn transform_local_at(
     }
 }
 
+/// rotate point。
 pub(crate) fn rotate_point(point: KicadPoint, rotation: f64) -> KicadPoint {
     let normalized = normalized_rotation(rotation).round() as i32;
     match normalized {
@@ -92,6 +96,7 @@ fn mirror_has_axis(mirror: Option<&str>, axis: &str) -> bool {
         .any(|candidate| candidate == axis)
 }
 
+/// normalize symbol mirror。
 pub fn normalize_symbol_mirror(value: &str) -> OslResult<Option<String>> {
     let trimmed = value.trim();
     if trimmed.eq_ignore_ascii_case("none") || trimmed.eq_ignore_ascii_case("normal") {
@@ -136,6 +141,7 @@ fn symbol_mirror_from_axes(axes: BTreeSet<&str>) -> Option<String> {
     (!mirror.is_empty()).then_some(mirror)
 }
 
+/// normalized rotation。
 pub(crate) fn normalized_rotation(rotation: f64) -> f64 {
     let normalized = rotation % 360.0;
     if normalized < 0.0 {

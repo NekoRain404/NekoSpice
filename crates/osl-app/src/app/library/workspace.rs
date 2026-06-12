@@ -6,6 +6,7 @@ use eframe::egui;
 use std::path::PathBuf;
 
 impl NekoSpiceApp {
+    /// draw library center workspace。
     pub(crate) fn draw_library_center_workspace(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

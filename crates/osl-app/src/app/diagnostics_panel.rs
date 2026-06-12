@@ -1,3 +1,5 @@
+//! 诊断信息面板。显示 ERC 错误、警告和仿真诊断结果。
+//!
 use super::localization::UiText;
 use super::status_strip::severity_color;
 use super::{NekoSpiceApp, theme::StudioTheme};
@@ -5,6 +7,7 @@ use eframe::egui;
 use osl_kicad::KicadDiagnosticSeverity;
 
 impl NekoSpiceApp {
+    /// draw document diagnostics panel。
     pub(super) fn draw_document_diagnostics_panel(&self, ui: &mut egui::Ui, max_height: f32) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

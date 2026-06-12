@@ -7,6 +7,7 @@ use eframe::egui;
 use osl_kicad::KicadIndexedSymbol;
 
 impl NekoSpiceApp {
+    /// draw library model browser。
     pub(crate) fn draw_library_model_browser(&mut self, ui: &mut egui::Ui) {
         let Some(symbol) = self.selected_library_symbol_snapshot() else {
             let mode = self.theme_mode();
@@ -149,6 +150,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw library model status cards。
     pub(crate) fn draw_library_model_status_cards(&self, ui: &mut egui::Ui) {
         if ui.available_width() >= 760.0 {
             ui.columns(4, |columns| {

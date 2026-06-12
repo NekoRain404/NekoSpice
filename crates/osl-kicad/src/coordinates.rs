@@ -20,6 +20,7 @@ pub struct KicadAt {
 }
 
 impl KicadAt {
+    /// point。
     pub(crate) fn point(self) -> KicadPoint {
         KicadPoint {
             x: self.x,
@@ -28,12 +29,14 @@ impl KicadAt {
     }
 }
 
+/// parse points。
 pub(crate) fn parse_points(node: &Sexp) -> Vec<KicadPoint> {
     direct_children(list_items(node), "xy")
         .filter_map(parse_xy)
         .collect()
 }
 
+/// parse xy。
 pub(crate) fn parse_xy(node: &Sexp) -> Option<KicadPoint> {
     let items = list_items(node);
     Some(KicadPoint {
@@ -42,6 +45,7 @@ pub(crate) fn parse_xy(node: &Sexp) -> Option<KicadPoint> {
     })
 }
 
+/// parse image at。
 pub(crate) fn parse_image_at(node: &Sexp) -> Option<KicadPoint> {
     let items = list_items(node);
     Some(KicadPoint {
@@ -50,6 +54,7 @@ pub(crate) fn parse_image_at(node: &Sexp) -> Option<KicadPoint> {
     })
 }
 
+/// parse size。
 pub(crate) fn parse_size(node: &Sexp) -> Option<KicadSize> {
     let items = list_items(node);
     Some(KicadSize {
@@ -58,6 +63,7 @@ pub(crate) fn parse_size(node: &Sexp) -> Option<KicadSize> {
     })
 }
 
+/// parse at。
 pub(crate) fn parse_at(node: &Sexp) -> Option<KicadAt> {
     let items = list_items(node);
     Some(KicadAt {
@@ -71,6 +77,7 @@ pub(crate) fn parse_at(node: &Sexp) -> Option<KicadAt> {
     })
 }
 
+/// write points sexpr。
 pub(crate) fn write_points_sexpr(output: &mut String, points: &[KicadPoint]) {
     let points = points
         .iter()
@@ -80,6 +87,7 @@ pub(crate) fn write_points_sexpr(output: &mut String, points: &[KicadPoint]) {
     output.push_str(&format!(" (pts {})", points));
 }
 
+/// kicad point value。
 pub(crate) fn kicad_point_value(point: KicadPoint) -> serde_json::Value {
     serde_json::json!({
         "x": point.x,
@@ -87,6 +95,7 @@ pub(crate) fn kicad_point_value(point: KicadPoint) -> serde_json::Value {
     })
 }
 
+/// kicad points value。
 pub(crate) fn kicad_points_value(points: &[KicadPoint]) -> serde_json::Value {
     serde_json::Value::Array(
         points
@@ -96,6 +105,7 @@ pub(crate) fn kicad_points_value(points: &[KicadPoint]) -> serde_json::Value {
     )
 }
 
+/// kicad size value。
 pub(crate) fn kicad_size_value(size: KicadSize) -> serde_json::Value {
     serde_json::json!({
         "width": size.width,
@@ -103,6 +113,7 @@ pub(crate) fn kicad_size_value(size: KicadSize) -> serde_json::Value {
     })
 }
 
+/// kicad at value。
 pub(crate) fn kicad_at_value(at: KicadAt) -> serde_json::Value {
     serde_json::json!({
         "x": at.x,

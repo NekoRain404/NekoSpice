@@ -8,6 +8,7 @@ pub struct KicadNetGraph {
 }
 
 impl KicadNetGraph {
+    /// build。
     pub(crate) fn build(schematic: &KicadSchematic) -> Self {
         let mut points = BTreeMap::<PointKey, KicadPoint>::new();
         for wire in &schematic.wires {
@@ -127,6 +128,7 @@ impl KicadNetGraph {
         }
     }
 
+    /// net at。
     pub fn net_at(&self, point: KicadPoint) -> Option<&str> {
         self.nets_by_point
             .get(&PointKey::from(point))
@@ -206,20 +208,24 @@ fn between_inclusive(value: f64, left: f64, right: f64) -> bool {
     value >= min && value <= max
 }
 
+/// coordinate key。
 pub(crate) fn coordinate_key(value: f64) -> i64 {
     (value * 1_000_000.0).round() as i64
 }
 
+/// same point。
 pub(crate) fn same_point(left: KicadPoint, right: KicadPoint) -> bool {
     coordinate_key(left.x) == coordinate_key(right.x)
         && coordinate_key(left.y) == coordinate_key(right.y)
 }
 
+/// same size。
 pub(crate) fn same_size(left: KicadSize, right: KicadSize) -> bool {
     coordinate_key(left.width) == coordinate_key(right.width)
         && coordinate_key(left.height) == coordinate_key(right.height)
 }
 
+/// normalize net name。
 pub(crate) fn normalize_net_name(name: &str) -> String {
     match name.trim().to_ascii_lowercase().as_str() {
         "gnd" | "agnd" | "dgnd" | "earth" => "0".to_string(),

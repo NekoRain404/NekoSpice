@@ -11,6 +11,7 @@ pub struct KicadJunction {
 }
 
 impl KicadJunction {
+    /// write junction sexpr。
     pub(crate) fn write_junction_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -46,6 +47,7 @@ pub struct KicadNoConnect {
 }
 
 impl KicadNoConnect {
+    /// write no connect sexpr。
     pub(crate) fn write_no_connect_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -62,6 +64,7 @@ impl KicadNoConnect {
     }
 }
 
+/// parse junction。
 pub(crate) fn parse_junction(node: &Sexp) -> Option<KicadJunction> {
     let items = list_items(node);
     let at = child(items, "at").and_then(parse_at)?;
@@ -73,6 +76,7 @@ pub(crate) fn parse_junction(node: &Sexp) -> Option<KicadJunction> {
     })
 }
 
+/// parse no connect。
 pub(crate) fn parse_no_connect(node: &Sexp) -> Option<KicadNoConnect> {
     let items = list_items(node);
     let at = child(items, "at").and_then(parse_at)?;

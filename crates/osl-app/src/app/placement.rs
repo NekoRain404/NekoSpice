@@ -1,3 +1,5 @@
+//! 符号放置状态管理。跟踪放置过程中的临时状态。
+//!
 use super::NekoSpiceApp;
 use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{KicadAt, KicadCanvasHit, KicadCanvasScene, KicadPoint};
@@ -10,6 +12,7 @@ pub(crate) struct SymbolPlacementState {
 }
 
 impl NekoSpiceApp {
+    /// start symbol placement。
     pub(super) fn start_symbol_placement(&mut self) {
         let Some(symbol_id) = self.selected_symbol_id.clone() else {
             self.status_message = Some("Select a symbol before placing".to_string());
@@ -24,12 +27,14 @@ impl NekoSpiceApp {
         self.status_message = Some(format!("Click canvas to place {symbol_id}"));
     }
 
+    /// cancel symbol placement。
     pub(super) fn cancel_symbol_placement(&mut self) {
         if self.placement.take().is_some() {
             self.status_message = Some("Canceled symbol placement".to_string());
         }
     }
 
+    /// place selected symbol at point。
     pub(super) fn place_selected_symbol_at_point(&mut self, point: KicadPoint) {
         let Some(symbol_id) = self
             .placement

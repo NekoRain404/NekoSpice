@@ -4,6 +4,7 @@ use crate::format::{
 use crate::{VerifyReport, VerifyRunResult};
 use osl_core::RunStatus;
 
+/// junit xml。
 pub(crate) fn junit_xml(report: &VerifyReport) -> String {
     let testcases = report
         .results

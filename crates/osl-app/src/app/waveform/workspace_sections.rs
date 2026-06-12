@@ -13,6 +13,7 @@ use eframe::egui;
 const MEASUREMENT_LIMIT: usize = 8;
 
 impl NekoSpiceApp {
+    /// draw waveform workspace toolbar。
     pub(crate) fn draw_waveform_workspace_toolbar(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.horizontal_wrapped(|ui| {
@@ -42,6 +43,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw waveform plot section。
     pub(crate) fn draw_waveform_plot_section(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -68,6 +70,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw waveform detail sections。
     pub(crate) fn draw_waveform_detail_sections(&mut self, ui: &mut egui::Ui) {
         let width = ui.available_width();
         if width < 720.0 {
@@ -90,6 +93,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw waveform workspace panel。
     pub(crate) fn draw_waveform_workspace_panel(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
         let mode = self.theme_mode();

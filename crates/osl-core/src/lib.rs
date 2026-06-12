@@ -5,6 +5,7 @@ use std::io;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// `OslResult` 类型别名。
 pub type OslResult<T> = Result<T, OslError>;
 
 #[derive(Debug)]
@@ -15,6 +16,7 @@ pub enum OslError {
 }
 
 impl OslError {
+    /// io。
     pub fn io(action: impl Into<String>, source: io::Error) -> Self {
         Self::Io {
             action: action.into(),
@@ -49,6 +51,7 @@ pub enum RunStatus {
 }
 
 impl RunStatus {
+    /// as str。
     pub fn as_str(self) -> &'static str {
         match self {
             RunStatus::Passed => "passed",
@@ -70,6 +73,7 @@ pub struct ParameterOverride {
 }
 
 impl ParameterOverride {
+    /// new。
     pub fn new(name: impl Into<String>, value: f64) -> Self {
         Self {
             name: name.into(),
@@ -96,6 +100,7 @@ pub struct RunMetadata {
 }
 
 impl RunMetadata {
+    /// to json。
     pub fn to_json(&self) -> String {
         let artifacts = self
             .artifacts
@@ -149,6 +154,7 @@ impl RunMetadata {
     }
 }
 
+/// now unix ms。
 pub fn now_unix_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -156,10 +162,12 @@ pub fn now_unix_ms() -> u128 {
         .unwrap_or_default()
 }
 
+/// make run id。
 pub fn make_run_id(prefix: &str) -> String {
     format!("{prefix}-{}", now_unix_ms())
 }
 
+/// write text。
 pub fn write_text(path: &Path, content: &str) -> OslResult<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -168,10 +176,12 @@ pub fn write_text(path: &Path, content: &str) -> OslResult<()> {
     fs::write(path, content).map_err(|err| OslError::io(format!("write {}", path.display()), err))
 }
 
+/// read text。
 pub fn read_text(path: &Path) -> OslResult<String> {
     fs::read_to_string(path).map_err(|err| OslError::io(format!("read {}", path.display()), err))
 }
 
+/// json escape。
 pub fn json_escape(input: &str) -> String {
     let mut escaped = String::with_capacity(input.len());
     for character in input.chars() {
@@ -192,6 +202,7 @@ pub fn json_escape(input: &str) -> String {
     escaped
 }
 
+/// html escape。
 pub fn html_escape(input: &str) -> String {
     let mut escaped = String::with_capacity(input.len());
     for character in input.chars() {
@@ -214,6 +225,7 @@ fn option_i32_json(value: Option<i32>) -> String {
     }
 }
 
+/// parameters json。
 pub fn parameters_json(parameters: &[ParameterOverride], indent: usize) -> String {
     let pad = " ".repeat(indent);
     parameters

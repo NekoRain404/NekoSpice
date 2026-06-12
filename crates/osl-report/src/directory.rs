@@ -47,10 +47,12 @@ const REPORT_SOURCES: &[DirectoryReportSource] = &[
     },
 ];
 
+/// write report directory html。
 pub fn write_report_directory_html(dir: &Path) -> OslResult<PathBuf> {
     write_report_directory_summary(dir).map(|summary| summary.report_path)
 }
 
+/// write report directory summary。
 pub fn write_report_directory_summary(dir: &Path) -> OslResult<ReportDirectorySummary> {
     let output_path = dir.join(REPORT_HTML);
     if output_path.is_file() {

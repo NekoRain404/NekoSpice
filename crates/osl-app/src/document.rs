@@ -1,3 +1,5 @@
+//! 原理图文档抽象层。封装 KiCad 原理图的加载、保存和编辑接口。
+//!
 use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
     KicadAt, KicadCanvasScene, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSchematic,
@@ -22,6 +24,7 @@ pub(crate) struct KicadGuiDocument {
 }
 
 impl KicadGuiDocument {
+    /// load。
     pub(crate) fn load(path: PathBuf) -> Result<Self, String> {
         read_kicad_schematic_with_libraries(&path)
             .map(|schematic| Self {
@@ -32,38 +35,46 @@ impl KicadGuiDocument {
             .map_err(|error| error.to_string())
     }
 
+    /// path。
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }
 
+    /// is dirty。
     pub(crate) fn is_dirty(&self) -> bool {
         self.dirty
     }
 
+    /// scene。
     pub(crate) fn scene(&self) -> KicadCanvasScene {
         self.schematic.canvas_scene()
     }
 
+    /// simulation directives。
     pub(crate) fn simulation_directives(&self) -> Vec<KicadSimulationDirective> {
         self.schematic.simulation_directives()
     }
 
+    /// check report。
     pub(crate) fn check_report(&self) -> KicadSchematicCheckReport {
         self.schematic.check_report()
     }
 
+    /// spice netlist preview。
     pub(crate) fn spice_netlist_preview(&self) -> Result<String, String> {
         self.schematic
             .to_spice_netlist()
             .map_err(|error| error.to_string())
     }
 
+    /// delete item。
     pub(crate) fn delete_item(&mut self, uuid: &str) -> Result<KicadEditSummary, String> {
         self.apply_edit(KicadSchematicEdit::DeleteItem {
             uuid: uuid.to_string(),
         })
     }
 
+    /// move item。
     pub(crate) fn move_item(
         &mut self,
         uuid: &str,
@@ -75,6 +86,7 @@ impl KicadGuiDocument {
         })
     }
 
+    /// rotate item。
     pub(crate) fn rotate_item(
         &mut self,
         uuid: &str,
@@ -86,6 +98,7 @@ impl KicadGuiDocument {
         })
     }
 
+    /// set symbol property。
     pub(crate) fn set_symbol_property(
         &mut self,
         reference: String,
@@ -100,6 +113,7 @@ impl KicadGuiDocument {
         })
     }
 
+    /// configure symbol mirror。
     pub(crate) fn configure_symbol_mirror(
         &mut self,
         reference: String,
@@ -114,6 +128,7 @@ impl KicadGuiDocument {
         })
     }
 
+    /// place symbol from definition。
     pub(crate) fn place_symbol_from_definition(
         &mut self,
         definition: KicadSymbolDef,
@@ -142,14 +157,17 @@ impl KicadGuiDocument {
         })
     }
 
+    /// add wire。
     pub(crate) fn add_wire(&mut self, points: Vec<KicadPoint>) -> Result<KicadEditSummary, String> {
         self.apply_edit(KicadSchematicEdit::AddWire { points, uuid: None })
     }
 
+    /// add bus。
     pub(crate) fn add_bus(&mut self, points: Vec<KicadPoint>) -> Result<KicadEditSummary, String> {
         self.apply_edit(KicadSchematicEdit::AddBus { points, uuid: None })
     }
 
+    /// add bus entry。
     pub(crate) fn add_bus_entry(
         &mut self,
         at: KicadPoint,
@@ -162,14 +180,17 @@ impl KicadGuiDocument {
         })
     }
 
+    /// add junction。
     pub(crate) fn add_junction(&mut self, at: KicadPoint) -> Result<KicadEditSummary, String> {
         self.apply_edit(KicadSchematicEdit::AddJunction { at, uuid: None })
     }
 
+    /// add no connect。
     pub(crate) fn add_no_connect(&mut self, at: KicadPoint) -> Result<KicadEditSummary, String> {
         self.apply_edit(KicadSchematicEdit::AddNoConnect { at, uuid: None })
     }
 
+    /// add label。
     pub(crate) fn add_label(
         &mut self,
         text: String,
@@ -184,6 +205,7 @@ impl KicadGuiDocument {
         })
     }
 
+    /// add text。
     pub(crate) fn add_text(
         &mut self,
         text: String,
@@ -196,6 +218,7 @@ impl KicadGuiDocument {
         })
     }
 
+    /// set simulation directive。
     pub(crate) fn set_simulation_directive(
         &mut self,
         kind: KicadSimulationDirectiveKind,
@@ -210,6 +233,7 @@ impl KicadGuiDocument {
         })
     }
 
+    /// add sheet。
     pub(crate) fn add_sheet(
         &mut self,
         name: String,
@@ -228,6 +252,7 @@ impl KicadGuiDocument {
         })
     }
 
+    /// save。
     pub(crate) fn save(&mut self) -> Result<(), String> {
         write_kicad_schematic(&self.path, &self.schematic)
             .inspect(|_| {

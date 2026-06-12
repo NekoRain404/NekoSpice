@@ -1,9 +1,12 @@
+//! 仿真运行结果加载器。解析 ngspice raw 文件和 Xyce 输出。
+//!
 use crate::report_summary::GuiReportSummary;
 use crate::simulation::GuiSimulationRun;
 use crate::waveform_summary::GuiWaveformSummaryState;
 use osl_core::{Artifact, RunMetadata, RunStatus, read_text};
 use std::path::{Path, PathBuf};
 
+/// load gui simulation run。
 pub(crate) fn load_gui_simulation_run(output_dir: PathBuf) -> Result<GuiSimulationRun, String> {
     let metadata = read_run_metadata(&output_dir.join("run.json"))?;
     let report = GuiReportSummary::from_report_dir(&output_dir);

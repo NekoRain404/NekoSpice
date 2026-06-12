@@ -1,11 +1,10 @@
-/// Background grid drawing for the schematic canvas.
-///
-/// Renders minor lines at 2.54mm (100mil) steps and major lines
-/// at 12.7mm (500mil) steps, adapted to the current viewport zoom.
+//! 网格渲染图元。绘制参考网格线。
+//!
 use crate::viewport::CanvasViewport;
 use super::super::colors::SchematicColors;
 use eframe::egui::{self, Pos2, Rect, Stroke};
 
+/// draw grid。
 pub(crate) fn draw_grid(
     painter: &egui::Painter,
     rect: Rect,

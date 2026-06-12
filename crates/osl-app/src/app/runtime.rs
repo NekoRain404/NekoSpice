@@ -1,3 +1,5 @@
+//! 原生窗口运行时入口。封装 eframe 启动配置和应用初始化。
+//!
 use super::NekoSpiceApp;
 use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self};
@@ -9,6 +11,7 @@ const CJK_FONT_CANDIDATES: [&str; 3] = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 ];
 
+/// run native。
 pub fn run_native() -> eframe::Result {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

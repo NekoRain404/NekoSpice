@@ -1,8 +1,5 @@
-/// Keyboard shortcut help overlay for the schematic canvas.
-///
-/// Shows a semi-transparent panel listing all available keyboard shortcuts.
-/// Toggled by pressing the ? key.
-
+//! 快捷键帮助叠加层。按 F1 弹出的全屏快捷键说明面板。
+//!
 use super::NekoSpiceApp;
 use super::theme::StudioTheme;
 use crate::canvas::colors::SchematicColors;

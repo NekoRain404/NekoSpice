@@ -29,4 +29,5 @@ pub(crate) const DEFAULT_SYMBOL_LIBRARY_TABLE: &str = "examples/kicad_schematic/
 
 /// GUI startup schematic -- CM5 Minima demo board (KiCad demo project).
 pub(crate) const DEFAULT_GUI_SCHEMATIC: &str = "examples/cm5_minima/CM5.kicad_sch";
+/// `DEFAULT_GUI_LIBRARY_TABLE` 常量。
 pub(crate) const DEFAULT_GUI_LIBRARY_TABLE: &str = "examples/cm5_minima/sym-lib-table";

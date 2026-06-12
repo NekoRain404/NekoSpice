@@ -1,3 +1,5 @@
+//! NekoSpice 应用程序主模块。定义 [`NekoSpiceApp`] 核心结构体及其编辑操作（移动、旋转、删除、撤销/重做）。所有工作区子模块通过此处声明的模块层次访问共享的应用状态。
+//!
 use crate::document::KicadGuiDocument;
 use crate::library::KicadGuiLibrary;
 use crate::placement_config::SymbolPlacementConfig;
@@ -121,6 +123,7 @@ pub(super) enum EditNudgeDirection {
 }
 
 impl EditNudgeDirection {
+    /// delta。
     pub(super) fn delta(self) -> KicadPoint {
         match self {
             Self::Left => KicadPoint {
@@ -209,6 +212,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// load schematic。
     pub(super) fn load_schematic(&mut self, path: PathBuf) {
         match KicadGuiDocument::load(path.clone()) {
             Ok(document) => {
@@ -231,6 +235,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// load symbol library。
     pub(super) fn load_symbol_library(&mut self, path: PathBuf) {
         match KicadGuiLibrary::load(path.clone()) {
             Ok(library) => {
@@ -256,6 +261,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// delete selected。
     pub(super) fn delete_selected(&mut self) {
         let Some(uuid) = self.selected_hit.as_ref().and_then(|hit| hit.uuid.clone()) else {
             self.status_message = Some("Selected item has no KiCad UUID".to_string());
@@ -317,10 +323,12 @@ impl NekoSpiceApp {
         }
     }
 
+    /// nudge selected。
     pub(super) fn nudge_selected(&mut self, direction: EditNudgeDirection) {
         self.move_selected(direction.delta());
     }
 
+    /// rotate selected。
     pub(super) fn rotate_selected(&mut self) {
         let Some(uuid) = self.selected_hit.as_ref().and_then(|hit| hit.uuid.clone()) else {
             self.status_message = Some("Selected item has no KiCad UUID".to_string());
@@ -391,6 +399,7 @@ impl NekoSpiceApp {
         self.status_message = Some("Redo".to_string());
     }
 
+    /// save document。
     pub(super) fn save_document(&mut self) {
         let Some(document) = &mut self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());

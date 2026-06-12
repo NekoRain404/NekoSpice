@@ -8,6 +8,7 @@ pub(crate) struct LibraryFilter {
 }
 
 impl NekoSpiceApp {
+    /// library filters。
     pub(crate) fn library_filters(&self) -> Vec<LibraryFilter> {
         let Some(library) = &self.library else {
             return vec![LibraryFilter {
@@ -32,6 +33,7 @@ impl NekoSpiceApp {
         filters
     }
 
+    /// filtered library symbols。
     pub(crate) fn filtered_library_symbols(&self) -> Vec<KicadIndexedSymbol> {
         self.library
             .as_ref()
@@ -39,6 +41,7 @@ impl NekoSpiceApp {
             .unwrap_or_default()
     }
 
+    /// selected library symbol snapshot。
     pub(crate) fn selected_library_symbol_snapshot(&self) -> Option<KicadIndexedSymbol> {
         let symbol_id = self.selected_symbol_id.as_deref()?;
         self.library
@@ -48,6 +51,7 @@ impl NekoSpiceApp {
     }
 }
 
+/// spice preview lines。
 pub(crate) fn spice_preview_lines(symbol: &KicadIndexedSymbol) -> Vec<String> {
     let pin_numbers = symbol
         .pins

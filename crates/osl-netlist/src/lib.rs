@@ -17,6 +17,7 @@ pub struct ImportInput {
     pub report: ImportReport,
 }
 
+/// read import input。
 pub fn read_import_input(path: &Path) -> OslResult<ImportInput> {
     let path = resolve_import_source_path(path)?;
     let source = path.display().to_string();
@@ -73,15 +74,18 @@ pub struct ImportReport {
 }
 
 impl ImportReport {
+    /// parse。
     pub fn parse(path: &Path) -> OslResult<Self> {
         let content = read_text(path)?;
         parse_netlist(&content, &path.display().to_string())
     }
 
+    /// component count。
     pub fn component_count(&self) -> usize {
         self.components.len()
     }
 
+    /// symbol count。
     pub fn symbol_count(&self) -> usize {
         self.components
             .iter()
@@ -89,10 +93,12 @@ impl ImportReport {
             .count()
     }
 
+    /// directive count。
     pub fn directive_count(&self) -> usize {
         self.directives.len()
     }
 
+    /// error count。
     pub fn error_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -100,6 +106,7 @@ impl ImportReport {
             .count()
     }
 
+    /// warning count。
     pub fn warning_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -107,11 +114,13 @@ impl ImportReport {
             .count()
     }
 
+    /// compatibility score。
     pub fn compatibility_score(&self) -> u32 {
         let penalty = self.error_count() as u32 * 25 + self.warning_count() as u32 * 8;
         100_u32.saturating_sub(penalty)
     }
 
+    /// to json。
     pub fn to_json(&self) -> String {
         let components = self
             .components
@@ -183,6 +192,7 @@ impl ImportReport {
         )
     }
 
+    /// to html。
     pub fn to_html(&self, css: &str) -> String {
         let component_rows = if self.components.is_empty() {
             "<tr><td colspan=\"6\">No components found.</td></tr>".to_string()
@@ -269,10 +279,12 @@ impl ImportReport {
         )
     }
 
+    /// normalized project。
     pub fn normalized_project(&self, source_netlist: &str) -> NormalizedImportProject {
         self.normalized_project_with_dependencies(source_netlist, &[])
     }
 
+    /// normalized project with dependencies。
     pub fn normalized_project_with_dependencies(
         &self,
         source_netlist: &str,
@@ -374,6 +386,7 @@ impl ImportReport {
         }
     }
 
+    /// suggested signals。
     pub fn suggested_signals(&self) -> Vec<SuggestedSignal> {
         let mut voltage_signals = BTreeMap::new();
         let mut source_current_signals = BTreeMap::new();
@@ -406,6 +419,7 @@ impl ImportReport {
             .collect()
     }
 
+    /// suggested checks。
     pub fn suggested_checks(&self) -> Vec<SuggestedCheck> {
         let signals = self.suggested_signals();
         self.suggested_checks_from_signals(&signals)
@@ -454,6 +468,7 @@ pub struct NormalizedDependency {
 }
 
 impl NormalizedDependency {
+    /// to json。
     pub fn to_json(&self) -> String {
         format!(
             "    {{ \"source\": \"{}\", \"project_path\": \"{}\" }}",
@@ -522,6 +537,7 @@ pub enum NetlistFlavor {
 }
 
 impl NetlistFlavor {
+    /// as str。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::KiCad => "kicad",
@@ -606,6 +622,7 @@ pub enum ComponentKind {
 }
 
 impl ComponentKind {
+    /// as str。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Resistor => "resistor",
@@ -691,6 +708,7 @@ pub enum ImportSeverity {
 }
 
 impl ImportSeverity {
+    /// as str。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Error => "error",

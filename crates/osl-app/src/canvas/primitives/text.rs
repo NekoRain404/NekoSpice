@@ -1,10 +1,9 @@
-/// Rotated text rendering for KiCad schematics.
-///
-/// Egui lacks native rotated text support, so we use character-by-character
-/// placement through a 2D rotation transform. Cardinal angles are optimized.
+//! 文本渲染图元。处理文本对象的渲染。
+//!
 use crate::viewport::CanvasViewport;
 use eframe::egui::{self, Align2, Color32, FontId, Rect, Vec2};
 
+/// draw rotated text。
 pub(crate) fn draw_rotated_text(
     painter: &egui::Painter,
     rect: Rect,

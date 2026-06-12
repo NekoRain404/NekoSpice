@@ -14,6 +14,7 @@ pub struct KicadProject {
 }
 
 impl KicadProject {
+    /// schematic stem candidates。
     pub fn schematic_stem_candidates(&self) -> Vec<String> {
         let mut candidates = Vec::new();
         push_unique_nonempty(&mut candidates, self.project_name.as_deref());
@@ -31,6 +32,7 @@ impl KicadProject {
         candidates
     }
 
+    /// to summary json。
     pub fn to_summary_json(&self) -> String {
         let sheet_names = self
             .sheets
@@ -69,6 +71,7 @@ pub struct KicadProjectSheet {
     pub name: String,
 }
 
+/// parse kicad project。
 pub fn parse_kicad_project(input: &str, source: &str) -> OslResult<KicadProject> {
     let root: serde_json::Value = serde_json::from_str(input).map_err(|error| {
         OslError::InvalidInput(format!(

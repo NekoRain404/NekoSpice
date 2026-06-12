@@ -20,6 +20,7 @@ pub struct KicadLabel {
 }
 
 impl KicadLabel {
+    /// write label sexpr。
     pub(crate) fn write_label_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -74,6 +75,7 @@ pub struct KicadDirectiveLabel {
 }
 
 impl KicadDirectiveLabel {
+    /// property。
     pub fn property(&self, name: &str) -> Option<&str> {
         self.properties
             .iter()
@@ -81,6 +83,7 @@ impl KicadDirectiveLabel {
             .map(|property| property.value.as_str())
     }
 
+    /// display text。
     pub fn display_text(&self) -> &str {
         ["Netclass", "Net Class", "Component Class"]
             .into_iter()
@@ -88,6 +91,7 @@ impl KicadDirectiveLabel {
             .unwrap_or(&self.text)
     }
 
+    /// write directive label sexpr。
     pub(crate) fn write_directive_label_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!(
@@ -139,6 +143,7 @@ pub enum KicadLabelKind {
 }
 
 impl KicadLabelKind {
+    /// as str。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Local => "local",
@@ -147,6 +152,7 @@ impl KicadLabelKind {
         }
     }
 
+    /// sexpr name。
     pub(crate) fn sexpr_name(self) -> &'static str {
         match self {
             Self::Local => "label",
@@ -156,6 +162,7 @@ impl KicadLabelKind {
     }
 }
 
+/// parse label。
 pub(crate) fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabel> {
     let items = list_items(node);
     Some(KicadLabel {
@@ -172,6 +179,7 @@ pub(crate) fn parse_label(node: &Sexp, kind: KicadLabelKind) -> Option<KicadLabe
     })
 }
 
+/// parse directive label。
 pub(crate) fn parse_directive_label(node: &Sexp) -> Option<KicadDirectiveLabel> {
     let items = list_items(node);
     Some(KicadDirectiveLabel {

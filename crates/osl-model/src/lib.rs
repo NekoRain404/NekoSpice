@@ -22,10 +22,12 @@ pub struct ModelCheckOptions {
 }
 
 impl ModelCheckReport {
+    /// scan。
     pub fn scan(root: &Path) -> OslResult<Self> {
         Self::scan_with_options(root, &ModelCheckOptions::default())
     }
 
+    /// scan with options。
     pub fn scan_with_options(root: &Path, options: &ModelCheckOptions) -> OslResult<Self> {
         let files = find_model_files(root)?;
         if files.is_empty() {
@@ -89,6 +91,7 @@ impl ModelCheckReport {
         Ok(report)
     }
 
+    /// error count。
     pub fn error_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -96,6 +99,7 @@ impl ModelCheckReport {
             .count()
     }
 
+    /// warning count。
     pub fn warning_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -103,6 +107,7 @@ impl ModelCheckReport {
             .count()
     }
 
+    /// info count。
     pub fn info_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -110,11 +115,13 @@ impl ModelCheckReport {
             .count()
     }
 
+    /// compatibility score。
     pub fn compatibility_score(&self) -> u32 {
         let penalty = self.error_count() as u32 * 25 + self.warning_count() as u32 * 8;
         100_u32.saturating_sub(penalty)
     }
 
+    /// to json。
     pub fn to_json(&self) -> String {
         let files = self
             .files
@@ -208,6 +215,7 @@ impl ModelCheckReport {
         )
     }
 
+    /// to html。
     pub fn to_html(&self, css: &str) -> String {
         let diagnostic_rows = if self.diagnostics.is_empty() {
             "<tr><td colspan=\"6\">No diagnostics.</td></tr>".to_string()
@@ -548,6 +556,7 @@ pub enum DiagnosticSeverity {
 }
 
 impl DiagnosticSeverity {
+    /// as str。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Error => "error",

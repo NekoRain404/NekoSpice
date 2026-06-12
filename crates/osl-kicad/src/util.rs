@@ -2,6 +2,7 @@ use crate::sexpr::{Sexp, child, list_value};
 use std::env;
 use std::path::{Path, PathBuf};
 
+/// parse kicad footprint filters。
 pub(crate) fn parse_kicad_footprint_filters(value: &str) -> Vec<String> {
     value
         .split_whitespace()
@@ -10,12 +11,14 @@ pub(crate) fn parse_kicad_footprint_filters(value: &str) -> Vec<String> {
         .collect()
 }
 
+/// case insensitive contains。
 pub(crate) fn case_insensitive_contains(value: &str, needle: &str) -> bool {
     value
         .to_ascii_lowercase()
         .contains(&needle.to_ascii_lowercase())
 }
 
+/// kicad wildcard match。
 pub(crate) fn kicad_wildcard_match(pattern: &str, value: &str) -> bool {
     wildcard_match(
         pattern.to_ascii_lowercase().as_bytes(),
@@ -153,6 +156,7 @@ fn expand_kicad_uri(uri: &str, base_dir: &Path) -> String {
     expanded
 }
 
+/// parse kicad bool value。
 pub(crate) fn parse_kicad_bool_value(value: String) -> Option<bool> {
     match value.trim().to_ascii_lowercase().as_str() {
         "yes" | "true" | "1" => Some(true),
@@ -161,6 +165,7 @@ pub(crate) fn parse_kicad_bool_value(value: String) -> Option<bool> {
     }
 }
 
+/// parse optional bool child。
 pub(crate) fn parse_optional_bool_child(items: &[Sexp], name: &str) -> Option<bool> {
     child(items, name).map(|node| {
         list_value(node, 1)

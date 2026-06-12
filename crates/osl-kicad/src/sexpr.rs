@@ -6,6 +6,7 @@ pub enum Sexp {
     List(Vec<Sexp>),
 }
 
+/// parse sexpr。
 pub fn parse_sexpr(input: &str) -> OslResult<Sexp> {
     let mut parser = SexpParser { input, offset: 0 };
     let expr = parser.parse_expr()?;
@@ -140,6 +141,7 @@ impl SexpParser<'_> {
     }
 }
 
+/// expect root list。
 pub(crate) fn expect_root_list<'a>(root: &'a Sexp, expected: &str) -> OslResult<&'a [Sexp]> {
     let items = list_items(root);
     if head(root) == Some(expected) {
@@ -151,6 +153,7 @@ pub(crate) fn expect_root_list<'a>(root: &'a Sexp, expected: &str) -> OslResult<
     }
 }
 
+/// direct children。
 pub(crate) fn direct_children<'a>(
     items: &'a [Sexp],
     name: &str,
@@ -161,14 +164,17 @@ pub(crate) fn direct_children<'a>(
         .filter(move |item| matches!(item, Sexp::List(_)) && head(item) == Some(name.as_str()))
 }
 
+/// child。
 pub(crate) fn child<'a>(items: &'a [Sexp], name: &str) -> Option<&'a Sexp> {
     direct_children(items, name).next()
 }
 
+/// child value。
 pub(crate) fn child_value(items: &[Sexp], name: &str) -> Option<String> {
     child(items, name).and_then(|node| list_value(node, 1))
 }
 
+/// list value。
 pub(crate) fn list_value(node: &Sexp, index: usize) -> Option<String> {
     list_items(node)
         .get(index)
@@ -176,6 +182,7 @@ pub(crate) fn list_value(node: &Sexp, index: usize) -> Option<String> {
         .map(str::to_string)
 }
 
+/// list items。
 pub(crate) fn list_items(node: &Sexp) -> &[Sexp] {
     match node {
         Sexp::List(items) => items,
@@ -183,10 +190,12 @@ pub(crate) fn list_items(node: &Sexp) -> &[Sexp] {
     }
 }
 
+/// head。
 pub(crate) fn head(node: &Sexp) -> Option<&str> {
     list_items(node).first().and_then(atom_text)
 }
 
+/// atom text。
 pub(crate) fn atom_text(node: &Sexp) -> Option<&str> {
     match node {
         Sexp::Atom(value) => Some(value),
@@ -194,6 +203,7 @@ pub(crate) fn atom_text(node: &Sexp) -> Option<&str> {
     }
 }
 
+/// sexpr string。
 pub(crate) fn sexpr_string(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len() + 2);
     escaped.push('"');
@@ -211,6 +221,7 @@ pub(crate) fn sexpr_string(value: &str) -> String {
     escaped
 }
 
+/// sexpr atom or string。
 pub(crate) fn sexpr_atom_or_string(value: &str) -> String {
     if is_plain_sexpr_atom(value) {
         value.to_string()
@@ -219,6 +230,7 @@ pub(crate) fn sexpr_atom_or_string(value: &str) -> String {
     }
 }
 
+/// write sexpr inline。
 pub(crate) fn write_sexpr_inline(output: &mut String, node: &Sexp) {
     match node {
         Sexp::Atom(value) => output.push_str(&sexpr_string(value)),
@@ -248,6 +260,7 @@ fn is_plain_sexpr_atom(value: &str) -> bool {
             .all(|byte| !byte.is_ascii_whitespace() && !matches!(byte, b'(' | b')' | b'"' | b';'))
 }
 
+/// format number。
 pub(crate) fn format_number(value: f64) -> String {
     let normalized = if value == -0.0 { 0.0 } else { value };
     let mut formatted = format!("{normalized:.12}");

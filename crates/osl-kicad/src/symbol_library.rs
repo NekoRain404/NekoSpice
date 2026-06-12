@@ -17,16 +17,19 @@ pub struct KicadSymbolLibrary {
 }
 
 impl KicadSymbolLibrary {
+    /// symbol。
     pub fn symbol(&self, name: &str) -> Option<&KicadSymbolDef> {
         self.symbols.iter().find(|symbol| symbol.name == name)
     }
 
+    /// symbol by name or local name。
     pub fn symbol_by_name_or_local_name(&self, name: &str) -> Option<&KicadSymbolDef> {
         self.symbols
             .iter()
             .find(|symbol| symbol.name == name || symbol.local_name() == name)
     }
 
+    /// to kicad symbol library sexpr。
     pub fn to_kicad_symbol_library_sexpr(&self) -> String {
         let mut output = String::new();
         output.push_str("(kicad_symbol_lib\n");
@@ -49,6 +52,7 @@ impl KicadSymbolLibrary {
         output
     }
 
+    /// to summary json。
     pub fn to_summary_json(&self) -> String {
         let pin_count = self
             .symbols
@@ -253,12 +257,14 @@ pub struct KicadSymbolLibraryTable {
 }
 
 impl KicadSymbolLibraryTable {
+    /// enabled kicad libraries。
     pub fn enabled_kicad_libraries(&self) -> impl Iterator<Item = &KicadSymbolLibraryTableRow> {
         self.libraries
             .iter()
             .filter(|row| !row.disabled && row.library_type.eq_ignore_ascii_case("KiCad"))
     }
 
+    /// to summary json。
     pub fn to_summary_json(&self) -> String {
         format!(
             concat!(
@@ -292,6 +298,7 @@ pub struct KicadSymbolLibraryTableRow {
     pub disabled: bool,
 }
 
+/// parse kicad symbol library。
 pub fn parse_kicad_symbol_library(input: &str, source: &str) -> OslResult<KicadSymbolLibrary> {
     let root = parse_sexpr(input)?;
     let root_list = expect_root_list(&root, "kicad_symbol_lib")?;
@@ -307,6 +314,7 @@ pub fn parse_kicad_symbol_library(input: &str, source: &str) -> OslResult<KicadS
     })
 }
 
+/// parse kicad symbol library table。
 pub fn parse_kicad_symbol_library_table(
     input: &str,
     source: &str,

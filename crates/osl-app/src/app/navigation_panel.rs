@@ -1,8 +1,5 @@
-/// Navigation panel: workspace switcher with icons and system info.
-///
-/// Uses Unicode symbols as icons for each workspace. The panel includes
-/// a branding header, workspace buttons with active/hover states,
-/// and a compact system info footer.
+//! 左侧导航栏面板。绘制垂直导航图标列表并响应工作区切换。
+//!
 use super::NekoSpiceApp;
 use super::localization::UiText;
 use super::navigation::StudioWorkspace;
@@ -97,6 +94,7 @@ fn draw_workspace_button(
 }
 
 impl NekoSpiceApp {
+    /// draw workspace navigation。
     pub(super) fn draw_workspace_navigation(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();

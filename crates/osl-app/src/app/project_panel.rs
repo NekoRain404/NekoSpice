@@ -1,3 +1,5 @@
+//! 项目侧边栏面板。显示当前项目结构和文件树。
+//!
 use super::localization::UiText;
 use super::widgets::metric_row;
 use super::{NekoSpiceApp, theme::StudioTheme};
@@ -5,6 +7,7 @@ use eframe::egui;
 use std::path::PathBuf;
 
 impl NekoSpiceApp {
+    /// draw project sidebar。
     pub(super) fn draw_project_sidebar(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();

@@ -3,6 +3,7 @@ use crate::app::NekoSpiceApp;
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw schematic tool controls。
     pub(in crate::app) fn draw_schematic_tool_controls(&mut self, ui: &mut egui::Ui) {
         ui.heading("Tools");
         ui.horizontal_wrapped(|ui| {
@@ -80,6 +81,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// select schematic tool。
     pub(in crate::app) fn select_schematic_tool(&mut self) {
         self.schematic_tools.set_active(SchematicTool::Select);
     }

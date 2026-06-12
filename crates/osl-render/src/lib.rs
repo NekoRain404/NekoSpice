@@ -26,6 +26,7 @@ impl Default for SvgRenderOptions {
     }
 }
 
+/// render kicad scene svg。
 pub fn render_kicad_scene_svg(scene: &KicadCanvasScene) -> String {
     render_kicad_scene_svg_with_options(scene, SvgRenderOptions::default())
 }

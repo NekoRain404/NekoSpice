@@ -1,3 +1,5 @@
+//! 报告汇总数据结构。
+//!
 use osl_report::write_report_directory_summary;
 use std::fs;
 use std::path::Path;
@@ -18,6 +20,7 @@ pub(crate) struct GuiReportSummary {
 }
 
 impl GuiReportSummary {
+    /// from report dir。
     pub(crate) fn from_report_dir(output_dir: &Path) -> GuiReportSummaryState {
         match write_report_directory_summary(output_dir) {
             Ok(summary) => {

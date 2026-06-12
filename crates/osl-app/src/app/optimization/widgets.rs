@@ -1,6 +1,7 @@
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText, Stroke};
 
+/// metric card。
 pub(crate) fn metric_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -16,6 +17,7 @@ pub(crate) fn metric_card(
     });
 }
 
+/// parameter row。
 pub(crate) fn parameter_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -32,6 +34,7 @@ pub(crate) fn parameter_row(
     });
 }
 
+/// result row。
 pub(crate) fn result_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -48,6 +51,7 @@ pub(crate) fn result_row(
     });
 }
 
+/// sweep row。
 pub(crate) fn sweep_row(
     ui: &mut egui::Ui,
     parameter: &str,
@@ -62,6 +66,7 @@ pub(crate) fn sweep_row(
     ui.end_row();
 }
 
+/// definition row。
 pub(crate) fn definition_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -85,6 +90,7 @@ pub(crate) fn definition_row(
     ui.end_row();
 }
 
+/// measurement row。
 pub(crate) fn measurement_row(
     ui: &mut egui::Ui,
     measurement: &str,
@@ -99,6 +105,7 @@ pub(crate) fn measurement_row(
     ui.end_row();
 }
 
+/// progress bar。
 pub(crate) fn progress_bar(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: f32) {
     let palette = StudioTheme::palette(mode);
     ui.horizontal(|ui| {
@@ -111,6 +118,7 @@ pub(crate) fn progress_bar(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str
     });
 }
 
+/// mini donut。
 pub(crate) fn mini_donut(ui: &mut egui::Ui, mode: StudioThemeMode, pass_ratio: f32) {
     let palette = StudioTheme::palette(mode);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(76.0, 76.0), egui::Sense::hover());
@@ -132,6 +140,7 @@ pub(crate) fn mini_donut(ui: &mut egui::Ui, mode: StudioThemeMode, pass_ratio: f
     );
 }
 
+/// status chip。
 pub(crate) fn status_chip(ui: &mut egui::Ui, text: &str, color: Color32) {
     ui.label(RichText::new(text).strong().color(color));
 }

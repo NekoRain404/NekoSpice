@@ -17,6 +17,7 @@ pub struct KicadTextItem {
 }
 
 impl KicadTextItem {
+    /// write text sexpr。
     pub(crate) fn write_text_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(text {}", pad, sexpr_string(&self.text)));
@@ -51,10 +52,12 @@ pub struct KicadTextBox {
 }
 
 impl KicadTextBox {
+    /// bounding box。
     pub fn bounding_box(&self) -> Option<KicadBoundingBox> {
         kicad_rotated_rect_bounds(self.at?, self.size?)
     }
 
+    /// write text box sexpr。
     pub(crate) fn write_text_box_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(text_box {}\n", pad, sexpr_string(&self.text)));
@@ -109,6 +112,7 @@ impl KicadTextBox {
     }
 }
 
+/// parse text item。
 pub(crate) fn parse_text_item(node: &Sexp) -> Option<KicadTextItem> {
     let items = list_items(node);
     Some(KicadTextItem {
@@ -119,6 +123,7 @@ pub(crate) fn parse_text_item(node: &Sexp) -> Option<KicadTextItem> {
     })
 }
 
+/// parse text box。
 pub(crate) fn parse_text_box(node: &Sexp) -> Option<KicadTextBox> {
     let items = list_items(node);
     Some(KicadTextBox {

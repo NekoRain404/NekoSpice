@@ -1,3 +1,5 @@
+//! 导航状态定义。定义 [`StudioWorkspace`] 枚举列举所有可用工作区。
+//!
 use super::localization::StudioLocale;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
@@ -27,6 +29,7 @@ impl StudioWorkspace {
         Self::Settings,
     ];
 
+    /// label。
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::Home => "Home",
@@ -41,6 +44,7 @@ impl StudioWorkspace {
         }
     }
 
+    /// localized label。
     pub(super) fn localized_label(self, locale: StudioLocale) -> &'static str {
         match locale {
             StudioLocale::English => self.label(),
@@ -106,6 +110,7 @@ impl StudioWorkspace {
         }
     }
 
+    /// from slug。
     pub(super) fn from_slug(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "home" => Some(Self::Home),

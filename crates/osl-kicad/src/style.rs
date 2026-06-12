@@ -31,6 +31,7 @@ pub struct KicadTextEffects {
 }
 
 impl KicadTextEffects {
+    /// write effects sexpr。
     pub(crate) fn write_effects_sexpr(&self, output: &mut String, indent: usize) {
         let pad = " ".repeat(indent);
         output.push_str(&format!("{}(effects", pad));
@@ -39,6 +40,7 @@ impl KicadTextEffects {
         output.push_str(")\n");
     }
 
+    /// write inline effects sexpr。
     pub(crate) fn write_inline_effects_sexpr(&self, output: &mut String) {
         output.push_str(" (effects");
         self.write_font_sexpr(output);
@@ -94,6 +96,7 @@ pub struct KicadColor {
 }
 
 impl KicadColor {
+    /// write inline color sexpr。
     pub(crate) fn write_inline_color_sexpr(self, output: &mut String) {
         output.push_str(&format!(
             " (color {} {} {} {})",
@@ -113,6 +116,7 @@ pub struct KicadMargins {
     pub bottom: f64,
 }
 
+/// default kicad text effects。
 pub(crate) fn default_kicad_text_effects() -> KicadTextEffects {
     KicadTextEffects {
         font_size: Some(KicadSize {
@@ -129,6 +133,7 @@ pub(crate) fn default_kicad_text_effects() -> KicadTextEffects {
     }
 }
 
+/// parse text effects。
 pub(crate) fn parse_text_effects(node: &Sexp) -> KicadTextEffects {
     let items = list_items(node);
     let font = child(items, "font");
@@ -167,6 +172,7 @@ fn has_effect_flag(items: &[Sexp], name: &str) -> bool {
         .any(|item| atom_text(item) == Some(name) || head(item) == Some(name))
 }
 
+/// parse color。
 pub(crate) fn parse_color(node: &Sexp) -> Option<KicadColor> {
     let items = list_items(node);
     Some(KicadColor {
@@ -177,6 +183,7 @@ pub(crate) fn parse_color(node: &Sexp) -> Option<KicadColor> {
     })
 }
 
+/// parse stroke。
 pub(crate) fn parse_stroke(node: &Sexp) -> KicadStroke {
     let items = list_items(node);
     KicadStroke {
@@ -186,6 +193,7 @@ pub(crate) fn parse_stroke(node: &Sexp) -> KicadStroke {
     }
 }
 
+/// parse fill。
 pub(crate) fn parse_fill(node: &Sexp) -> KicadFill {
     let items = list_items(node);
     KicadFill {
@@ -194,6 +202,7 @@ pub(crate) fn parse_fill(node: &Sexp) -> KicadFill {
     }
 }
 
+/// parse margins。
 pub(crate) fn parse_margins(node: &Sexp) -> Option<KicadMargins> {
     let items = list_items(node);
     Some(KicadMargins {
@@ -204,6 +213,7 @@ pub(crate) fn parse_margins(node: &Sexp) -> Option<KicadMargins> {
     })
 }
 
+/// write optional bool sexpr。
 pub(crate) fn write_optional_bool_sexpr(
     output: &mut String,
     indent: usize,
@@ -221,6 +231,7 @@ pub(crate) fn write_optional_bool_sexpr(
     }
 }
 
+/// write inline optional bool sexpr。
 pub(crate) fn write_inline_optional_bool_sexpr(
     output: &mut String,
     name: &str,
@@ -231,6 +242,7 @@ pub(crate) fn write_inline_optional_bool_sexpr(
     }
 }
 
+/// write inline text effects。
 pub(crate) fn write_inline_text_effects(output: &mut String, effects: Option<&KicadTextEffects>) {
     match effects {
         Some(effects) => effects.write_inline_effects_sexpr(output),
@@ -238,6 +250,7 @@ pub(crate) fn write_inline_text_effects(output: &mut String, effects: Option<&Ki
     }
 }
 
+/// write text effects line。
 pub(crate) fn write_text_effects_line(
     output: &mut String,
     indent: usize,
@@ -252,6 +265,7 @@ pub(crate) fn write_text_effects_line(
     }
 }
 
+/// write inline stroke。
 pub(crate) fn write_inline_stroke(
     output: &mut String,
     stroke: Option<&KicadStroke>,
@@ -281,12 +295,14 @@ pub(crate) fn write_inline_stroke(
     }
 }
 
+/// write inline optional fill。
 pub(crate) fn write_inline_optional_fill(output: &mut String, fill: Option<&KicadFill>) {
     if let Some(fill) = fill {
         write_inline_fill(output, Some(fill));
     }
 }
 
+/// write inline fill。
 pub(crate) fn write_inline_fill(output: &mut String, fill: Option<&KicadFill>) {
     match fill {
         Some(fill) => {
@@ -305,6 +321,7 @@ pub(crate) fn write_inline_fill(output: &mut String, fill: Option<&KicadFill>) {
     }
 }
 
+/// kicad margins value。
 pub(crate) fn kicad_margins_value(margins: KicadMargins) -> serde_json::Value {
     serde_json::json!({
         "left": margins.left,
@@ -314,6 +331,7 @@ pub(crate) fn kicad_margins_value(margins: KicadMargins) -> serde_json::Value {
     })
 }
 
+/// kicad color value。
 pub(crate) fn kicad_color_value(color: KicadColor) -> serde_json::Value {
     serde_json::json!({
         "red": color.red,
@@ -323,6 +341,7 @@ pub(crate) fn kicad_color_value(color: KicadColor) -> serde_json::Value {
     })
 }
 
+/// kicad stroke value。
 pub(crate) fn kicad_stroke_value(stroke: &KicadStroke) -> serde_json::Value {
     serde_json::json!({
         "width": stroke.width,
@@ -331,6 +350,7 @@ pub(crate) fn kicad_stroke_value(stroke: &KicadStroke) -> serde_json::Value {
     })
 }
 
+/// kicad fill value。
 pub(crate) fn kicad_fill_value(fill: &KicadFill) -> serde_json::Value {
     serde_json::json!({
         "type": fill.fill_type,
@@ -338,6 +358,7 @@ pub(crate) fn kicad_fill_value(fill: &KicadFill) -> serde_json::Value {
     })
 }
 
+/// kicad text effects value。
 pub(crate) fn kicad_text_effects_value(effects: &KicadTextEffects) -> serde_json::Value {
     serde_json::json!({
         "font_size": effects.font_size.map(crate::kicad_size_value),

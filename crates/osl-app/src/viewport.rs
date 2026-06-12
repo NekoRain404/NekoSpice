@@ -1,3 +1,5 @@
+//! 画布视口管理。管理缩放级别、平移偏移和坐标变换。
+//!
 use eframe::egui::{Pos2, Rect, Vec2};
 use osl_kicad::{KicadBoundingBox, KicadPoint};
 
@@ -20,16 +22,19 @@ impl Default for CanvasViewport {
 }
 
 impl CanvasViewport {
+    /// for rect。
     pub(crate) fn for_rect(rect: Rect, bounds: Option<KicadBoundingBox>) -> Self {
         let mut viewport = Self::default();
         viewport.fit_rect(rect, bounds);
         viewport
     }
 
+    /// fit scene。
     pub(crate) fn fit_scene(&mut self, bounds: Option<KicadBoundingBox>) {
         self.fit_size(Vec2::new(900.0, 560.0), bounds, 4.0..=32.0);
     }
 
+    /// fit rect。
     pub(crate) fn fit_rect(&mut self, rect: Rect, bounds: Option<KicadBoundingBox>) {
         self.fit_size(rect.size() - Vec2::splat(24.0), bounds, 6.0..=48.0);
     }
@@ -57,10 +62,12 @@ impl CanvasViewport {
         }
     }
 
+    /// world to screen。
     pub(crate) fn world_to_screen(self, rect: Rect, point: KicadPoint) -> Pos2 {
         rect.center() + self.pan + Vec2::new(point.x as f32 * self.zoom, point.y as f32 * self.zoom)
     }
 
+    /// screen to world。
     pub(crate) fn screen_to_world(self, rect: Rect, point: Pos2) -> KicadPoint {
         let local = point - rect.center() - self.pan;
         KicadPoint {
@@ -69,6 +76,7 @@ impl CanvasViewport {
         }
     }
 
+    /// zoom around。
     pub(crate) fn zoom_around(&mut self, rect: Rect, screen_point: Pos2, zoom_delta: f32) {
         let before = self.screen_to_world(rect, screen_point);
         self.zoom = (self.zoom * zoom_delta).clamp(MIN_ZOOM, MAX_ZOOM);
@@ -76,6 +84,7 @@ impl CanvasViewport {
         self.pan += screen_point - after_screen;
     }
 
+    /// visible world bounds。
     pub(crate) fn visible_world_bounds(self, rect: Rect) -> KicadBoundingBox {
         let top_left = self.screen_to_world(rect, rect.left_top());
         let bottom_right = self.screen_to_world(rect, rect.right_bottom());
@@ -92,6 +101,7 @@ impl CanvasViewport {
     }
 }
 
+/// item visible。
 pub(crate) fn item_visible(
     bounds: Option<KicadBoundingBox>,
     visible_bounds: KicadBoundingBox,

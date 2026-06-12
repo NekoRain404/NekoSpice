@@ -4,6 +4,7 @@ use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 
 impl NekoSpiceApp {
+    /// draw settings center workspace。
     pub(crate) fn draw_settings_center_workspace(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {

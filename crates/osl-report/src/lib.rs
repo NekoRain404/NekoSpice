@@ -31,6 +31,7 @@ pub struct VerifyRunResult {
 }
 
 impl VerifyRunResult {
+    /// status。
     pub fn status(&self) -> RunStatus {
         if self.metadata.status == RunStatus::Passed && self.checks.iter().all(|check| check.passed)
         {
@@ -40,6 +41,7 @@ impl VerifyRunResult {
         }
     }
 
+    /// failed checks。
     pub fn failed_checks(&self) -> impl Iterator<Item = &CheckResult> {
         self.checks.iter().filter(|check| !check.passed)
     }
@@ -52,6 +54,7 @@ impl VerifyRunResult {
             .to_string()
     }
 
+    /// artifact href。
     pub(crate) fn artifact_href(&self, artifact: &str) -> String {
         let run_dir = Path::new(&self.run_dir);
         let run_dir_name = self.run_dir_name();
@@ -84,6 +87,7 @@ pub struct CheckResult {
 }
 
 impl CheckResult {
+    /// status text。
     pub fn status_text(&self) -> &'static str {
         if self.passed { "pass" } else { "fail" }
     }
@@ -96,6 +100,7 @@ pub struct VerifyReport {
 }
 
 impl VerifyReport {
+    /// passed count。
     pub fn passed_count(&self) -> usize {
         self.results
             .iter()
@@ -103,10 +108,12 @@ impl VerifyReport {
             .count()
     }
 
+    /// failed count。
     pub fn failed_count(&self) -> usize {
         self.results.len() - self.passed_count()
     }
 
+    /// failure count。
     pub fn failure_count(&self) -> usize {
         self.results
             .iter()
@@ -114,18 +121,22 @@ impl VerifyReport {
             .sum()
     }
 
+    /// to json。
     pub fn to_json(&self) -> String {
         json::report_json(self)
     }
 
+    /// to html。
     pub fn to_html(&self) -> String {
         html::report_html(self)
     }
 
+    /// to junit xml。
     pub fn to_junit_xml(&self) -> String {
         junit::junit_xml(self)
     }
 
+    /// to markdown。
     pub fn to_markdown(&self) -> String {
         markdown::report_markdown(self)
     }

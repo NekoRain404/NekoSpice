@@ -9,6 +9,7 @@ pub(crate) struct ReviewFinding {
     pub(crate) detail: &'static str,
 }
 
+/// `REVIEW_FINDINGS` 常量。
 pub(crate) const REVIEW_FINDINGS: [ReviewFinding; 4] = [
     ReviewFinding {
         severity: ReviewSeverity::Critical,
@@ -32,6 +33,7 @@ pub(crate) const REVIEW_FINDINGS: [ReviewFinding; 4] = [
     },
 ];
 
+/// severity color。
 pub(crate) fn severity_color(palette: StudioPalette, severity: ReviewSeverity) -> Color32 {
     match severity {
         ReviewSeverity::Critical => palette.danger,
@@ -40,6 +42,7 @@ pub(crate) fn severity_color(palette: StudioPalette, severity: ReviewSeverity) -
     }
 }
 
+/// review metric row。
 pub(crate) fn review_metric_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -54,6 +57,7 @@ pub(crate) fn review_metric_row(
     });
 }
 
+/// review filter row。
 pub(crate) fn review_filter_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -77,6 +81,7 @@ pub(crate) fn review_filter_row(
     });
 }
 
+/// review stat row。
 pub(crate) fn review_stat_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -92,6 +97,7 @@ pub(crate) fn review_stat_row(
     });
 }
 
+/// review issue row。
 pub(crate) fn review_issue_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -109,6 +115,7 @@ pub(crate) fn review_issue_row(
     });
 }
 
+/// review recommendation row。
 pub(crate) fn review_recommendation_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,

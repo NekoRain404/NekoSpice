@@ -1,9 +1,12 @@
+//! 顶部工具栏。绘制文件操作、编辑操作和视图切换的图标按钮行。
+//!
 use super::localization::UiText;
 use super::navigation::StudioWorkspace;
 use super::{NekoSpiceApp, theme::StudioTheme};
 use eframe::egui;
 
 impl NekoSpiceApp {
+    /// draw studio top bar。
     pub(super) fn draw_studio_top_bar(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         ui.horizontal(|ui| {

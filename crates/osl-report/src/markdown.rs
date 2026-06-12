@@ -4,6 +4,7 @@ use crate::format::{
 };
 use crate::{CheckResult, VerifyReport, VerifyRunResult};
 
+/// report markdown。
 pub(crate) fn report_markdown(report: &VerifyReport) -> String {
     let mut output = String::new();
     output.push_str("# NekoSpice Verification Report\n\n");

@@ -2,6 +2,8 @@
 // Draws sheets, graphics, symbols, wires, buses, labels, text,
 // junctions, no-connects, and selection highlights.
 
+//! 画布渲染管线模块。组织图元渲染管线。
+//!
 use crate::viewport::{CanvasViewport, item_visible};
 use eframe::egui::{self, Align2, FontId, Pos2, Rect, Stroke};
 use osl_kicad::{KicadAt, KicadBoundingBox, KicadCanvasScene, KicadPoint};

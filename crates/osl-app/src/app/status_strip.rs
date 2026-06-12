@@ -1,3 +1,5 @@
+//! 底部状态栏。显示仿真状态、最近运行结果和全局操作按钮。
+//!
 use super::NekoSpiceApp;
 use super::localization::UiText;
 use super::theme::{StudioTheme, StudioThemeMode};
@@ -31,6 +33,7 @@ impl DiagnosticCounts {
 }
 
 impl NekoSpiceApp {
+    /// studio status snapshot。
     pub(super) fn studio_status_snapshot(&self) -> StudioStatusSnapshot {
         let project_name = self
             .document
@@ -85,6 +88,7 @@ impl NekoSpiceApp {
         }
     }
 
+    /// draw top status strip。
     pub(super) fn draw_top_status_strip(&self, ui: &mut egui::Ui) {
         let snapshot = self.studio_status_snapshot();
         let mode = self.theme_mode();
@@ -109,6 +113,7 @@ impl NekoSpiceApp {
         });
     }
 
+    /// draw bottom status strip。
     pub(super) fn draw_bottom_status_strip(&self, ui: &mut egui::Ui) {
         let snapshot = self.studio_status_snapshot();
         let mode = self.theme_mode();
@@ -205,6 +210,7 @@ fn diagnostic_text(mode: StudioThemeMode, counts: DiagnosticCounts) -> RichText 
     .color(color)
 }
 
+/// severity color。
 pub(super) fn severity_color(
     mode: StudioThemeMode,
     severity: KicadDiagnosticSeverity,

@@ -8,6 +8,7 @@ use osl_kicad::KicadIndexedSymbol;
 const SYMBOL_LIST_LIMIT: usize = 80;
 
 impl NekoSpiceApp {
+    /// draw library symbol list。
     pub(crate) fn draw_library_symbol_list(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
