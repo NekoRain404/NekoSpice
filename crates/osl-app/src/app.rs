@@ -119,6 +119,14 @@ pub struct NekoSpiceApp {
     pub(super) last_canvas_rect: Option<eframe::egui::Rect>,
     /// Current cursor world coordinates for status bar display.
     pub(super) cursor_world: Option<osl_kicad::KicadPoint>,
+    /// TI/ADI 厂商模型目录
+    pub(crate) vendor_catalog: osl_model::VendorModelCatalog,
+    /// 厂商模型搜索关键词
+    pub(crate) vendor_search: String,
+    /// 厂商模型目录路径
+    pub(crate) vendor_model_path: String,
+    /// 是否显示厂商模型面板
+    pub(crate) show_vendor_panel: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -188,6 +196,10 @@ impl Default for NekoSpiceApp {
             history: history::EditHistory::default(),
             last_canvas_rect: None,
             cursor_world: None,
+            vendor_catalog: osl_model::VendorModelCatalog::default(),
+            vendor_search: String::new(),
+            vendor_model_path: String::new(),
+            show_vendor_panel: false,
         };
         app.load_schematic(PathBuf::from(DEFAULT_GUI_SCHEMATIC));
         app.load_symbol_library(PathBuf::from(DEFAULT_GUI_LIBRARY_TABLE));

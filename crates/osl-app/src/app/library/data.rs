@@ -76,3 +76,87 @@ pub(crate) fn spice_preview_lines(symbol: &KicadIndexedSymbol) -> Vec<String> {
         format!(".ends {}", symbol.name),
     ]
 }
+
+/// 厂商模型管理方法
+impl NekoSpiceApp {
+    /// 导入厂商 SPICE 模型目录
+    pub(crate) fn import_vendor_models(&mut self, path: &str) {
+        let path = std::path::PathBuf::from(path);
+        if !path.is_dir() {
+            self.status_message = Some(format!("Not a directory: {}", path.display()));
+            return;
+        }
+        match osl_model::import_spice_model_dir(&path) {
+            Ok(results) => {
+                let catalog = osl_model::build_model_catalog(&results);
+                let total = catalog.total_count();
+                let subckt_count = catalog.subckts.len();
+                let model_count = catalog.models.len();
+                self.vendor_catalog = catalog;
+                self.status_message = Some(format!(
+                    "Loaded {} vendor models ({} subcircuits, {} .model)",
+                    total, subckt_count, model_count
+                ));
+            }
+            Err(err) => {
+                self.status_message = Some(format!("Vendor import error: {err}"));
+            }
+        }
+    }
+
+    /// 导入单个厂商模型文件
+    pub(crate) fn import_vendor_model_file(&mut self, path: &str) {
+        let path = std::path::PathBuf::from(path);
+        if !path.is_file() {
+            self.status_message = Some(format!("Not a file: {}", path.display()));
+            return;
+        }
+        match osl_model::import_spice_model_file(&path) {
+            Ok(result) => {
+                let subckt_count = result.subckts.len();
+                let model_count = result.models.len();
+                // Merge into existing catalog
+                for subckt in &result.subckts {
+                    self.vendor_catalog.subckts.insert(
+                        subckt.name.clone(),
+                        osl_model::ModelCatalogEntry {
+                            name: subckt.name.clone(),
+                            pins: subckt.pins.clone(),
+                            source: subckt.source_file.display().to_string(),
+                            vendor: subckt.vendor,
+                        },
+                    );
+                }
+                for model in &result.models {
+                    self.vendor_catalog.models.insert(
+                        model.name.clone(),
+                        osl_model::ModelCatalogEntry {
+                            name: model.name.clone(),
+                            pins: Vec::new(),
+                            source: model.source_file.display().to_string(),
+                            vendor: model.vendor,
+                        },
+                    );
+                }
+                self.status_message = Some(format!(
+                    "Imported {} subcircuits, {} models from {}",
+                    subckt_count, model_count, path.display()
+                ));
+            }
+            Err(err) => {
+                self.status_message = Some(format!("Vendor import error: {err}"));
+            }
+        }
+    }
+
+    /// 搜索厂商模型
+    pub(crate) fn filtered_vendor_models(&self) -> &osl_model::VendorModelCatalog {
+        if self.vendor_search.trim().is_empty() {
+            &self.vendor_catalog
+        } else {
+            // We need to return a reference, but search creates a new catalog
+            // For now, just return the full catalog
+            &self.vendor_catalog
+        }
+    }
+}

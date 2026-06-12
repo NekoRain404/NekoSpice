@@ -2089,6 +2089,7 @@ dependencies = [
  "eframe",
  "osl-core",
  "osl-kicad",
+ "osl-model",
  "osl-report",
  "osl-sim",
  "osl-waveform",

@@ -16,3 +16,4 @@ osl-report = { path = "../osl-report" }
 osl-sim = { path = "../osl-sim" }
 osl-waveform = { path = "../osl-waveform" }
 rfd = "0.15"
+osl-model = { path = "../osl-model" }

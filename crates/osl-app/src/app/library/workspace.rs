@@ -18,6 +18,20 @@ impl NekoSpiceApp {
                     ui.add_space(8.0);
                     self.draw_library_filter_tabs(ui);
                     ui.add_space(8.0);
+
+                    // Vendor models toggle
+                    ui.horizontal(|ui| {
+                        if ui.selectable_label(self.show_vendor_panel, "Vendor Models (TI/ADI)").clicked() {
+                            self.show_vendor_panel = !self.show_vendor_panel;
+                        }
+                    });
+                    ui.add_space(4.0);
+
+                    if self.show_vendor_panel {
+                        self.draw_vendor_model_panel(ui);
+                        ui.add_space(8.0);
+                    }
+
                     self.draw_library_model_status_cards(ui);
                     ui.add_space(8.0);
                     if ui.available_width() >= 920.0 {
