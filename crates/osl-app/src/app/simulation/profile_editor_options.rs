@@ -20,15 +20,31 @@ use osl_core::RunStatus;
 /// Draw the complete right-column options panel with all sections.
 pub(crate) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     let mode = app.theme_mode();
+    let palette = StudioTheme::palette(mode);
     draw_environment_section(app, ui, mode);
     ui.add_space(8.0);
-    draw_transient_solver_section(app, ui, mode);
+    egui::CollapsingHeader::new(egui::RichText::new("Transient Solver").color(palette.text))
+        .id_salt("collapsible_transient")
+        .default_open(false)
+        .show(ui, |ui| {
+            draw_transient_solver_section(app, ui, mode);
+        });
     ui.add_space(8.0);
-    draw_convergence_section(app, ui, mode);
+    egui::CollapsingHeader::new(egui::RichText::new("Convergence").color(palette.text))
+        .id_salt("collapsible_convergence")
+        .default_open(false)
+        .show(ui, |ui| {
+            draw_convergence_section(app, ui, mode);
+        });
     ui.add_space(8.0);
     draw_output_section(app, ui, mode);
     ui.add_space(8.0);
-    draw_initial_conditions_section(app, ui, mode);
+    egui::CollapsingHeader::new(egui::RichText::new("Initial Conditions").color(palette.text))
+        .id_salt("collapsible_ic")
+        .default_open(false)
+        .show(ui, |ui| {
+            draw_initial_conditions_section(app, ui, mode);
+        });
     ui.add_space(8.0);
     draw_run_status_summary(app, ui, mode);
     ui.add_space(8.0);

@@ -1,4 +1,4 @@
-//! 快捷键帮助叠加层。按 F1 弹出的全屏快捷键说明面板。
+//! 快捷键帮助叠加层。按 ? 弹出的全屏快捷键说明面板。
 //!
 use super::NekoSpiceApp;
 use super::theme::StudioTheme;
@@ -7,6 +7,7 @@ use eframe::egui::{self, Align2, CornerRadius, FontId, Rect, Stroke, Vec2};
 
 /// Shortcut entry: (key combination, description)
 const SHORTCUTS: &[(&str, &str)] = &[
+    // Tools
     ("V", "Select tool"),
     ("W", "Wire tool"),
     ("L", "Label tool"),
@@ -14,17 +15,27 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("S", "Sheet tool"),
     ("J", "Junction tool"),
     ("Q", "No-connect tool"),
+    // Edit
     ("R", "Rotate selected 90\u{00B0}"),
-    ("F", "Fit view to schematic"),
     ("Del", "Delete selected"),
     ("\u{2190}\u{2191}\u{2192}\u{2193}", "Nudge selected item"),
-    ("Ctrl+Z", "Undo"),
-    ("Ctrl+Shift+Z", "Redo"),
-    ("Ctrl+Y", "Redo"),
-    ("?", "Toggle this help"),
-    ("Esc", "Cancel / Switch to Select"),
+    // Navigation
+    ("F", "Fit view to schematic"),
     ("Scroll", "Zoom in/out"),
     ("Middle drag", "Pan canvas"),
+    // History
+    ("Ctrl+Z", "Undo"),
+    ("Ctrl+Shift+Z / Ctrl+Y", "Redo"),
+    // File
+    ("Ctrl+O", "Open schematic"),
+    ("Ctrl+S", "Save"),
+    ("Ctrl+Shift+S", "Save As"),
+    // Simulation
+    ("F5", "Run simulation"),
+    ("Ctrl+Shift+E", "Export netlist"),
+    // Help
+    ("?", "Toggle this help"),
+    ("Esc", "Cancel / Switch to Select"),
 ];
 
 impl NekoSpiceApp {
@@ -38,8 +49,7 @@ impl NekoSpiceApp {
         let mode = self.theme_mode();
         let palette = StudioTheme::palette(mode);
 
-        // Position the overlay in the top-right corner of the canvas
-        let panel_width = 280.0;
+        let panel_width = 300.0;
         let line_height = 20.0;
         let padding = 12.0;
         let header_height = 28.0;
@@ -50,7 +60,6 @@ impl NekoSpiceApp {
             Vec2::new(panel_width, panel_height),
         );
 
-        // Semi-transparent background
         painter.rect_filled(
             panel_rect,
             CornerRadius::same(8),
@@ -63,7 +72,6 @@ impl NekoSpiceApp {
             egui::StrokeKind::Inside,
         );
 
-        // Header
         painter.text(
             panel_rect.left_top() + Vec2::new(padding, padding),
             Align2::LEFT_TOP,
@@ -72,7 +80,6 @@ impl NekoSpiceApp {
             palette.accent,
         );
 
-        // Shortcut entries
         let mut y = panel_rect.top() + header_height + padding;
         for (key, desc) in SHORTCUTS {
             painter.text(
@@ -83,7 +90,7 @@ impl NekoSpiceApp {
                 palette.text,
             );
             painter.text(
-                panel_rect.left_top() + Vec2::new(padding + 100.0, y),
+                panel_rect.left_top() + Vec2::new(padding + 140.0, y),
                 Align2::LEFT_TOP,
                 desc,
                 FontId::proportional(11.0),
