@@ -77,3 +77,10 @@ pub(crate) fn status_pill(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str,
             });
         });
 }
+
+/// Labeled text field with consistent sizing for grid layouts.
+pub(crate) fn labeled_field(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &mut String, width: f32) {
+    ui.label(StudioTheme::muted_for(mode, label));
+    ui.add(egui::TextEdit::singleline(value).desired_width(width));
+    ui.end_row();
+}
