@@ -1,12 +1,13 @@
-//! 原理图工作区顶部工具栏。包含文件操作、编辑操作、缩放控制、绘图工具切换、DRC 状态。
+//! 原理图工作区顶部工具栏。包含文件操作、编辑操作、缩放控制、绘图工具切换、仿真状态、DRC 状态。
 
 use crate::app::NekoSpiceApp;
 use super::workspace_widgets::{canvas_toolbar_button, toolbar_icon_button_active};
 use crate::app::theme::StudioTheme;
+use crate::app::navigation::StudioWorkspace;
 use eframe::egui;
 
 impl NekoSpiceApp {
-    /// 工具栏行：文件操作、绘制工具、缩放控制、DRC 状态。
+    /// 工具栏行：文件操作、绘制工具、缩放控制、仿真状态、DRC 状态。
     pub(crate) fn draw_schematic_workspace_toolbar(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
@@ -31,10 +32,32 @@ impl NekoSpiceApp {
                 self.viewport
                     .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
             }
-            if canvas_toolbar_button(ui, mode, "\u{25B6} Run", self.document.is_some())
+
+            // ── Run 按钮（带仿真状态指示） ──────────────────────
+            let running = self.simulation_panel.active_task.is_some();
+            let run_color = if running {
+                palette.warning
+            } else if let Some(run) = &self.simulation_panel.last_run {
+                match run.metadata.status {
+                    osl_core::RunStatus::Passed => palette.success,
+                    osl_core::RunStatus::Failed => palette.danger,
+                }
+            } else {
+                palette.text_muted
+            };
+            let run_label = if running {
+                "\u{25B6} Running..."
+            } else {
+                "\u{25B6} Run"
+            };
+            if canvas_toolbar_button(ui, mode, run_label, self.document.is_some())
                 .clicked()
             {
                 self.run_simulation_from_panel();
+            }
+            // Simulation status dot after Run button
+            if self.simulation_panel.last_run.is_some() || running {
+                ui.label(StudioTheme::status_dot(run_color));
             }
 
             // ── 分隔符 ─────────────────────────────────────────
@@ -106,6 +129,14 @@ impl NekoSpiceApp {
                     .color(dot_color)
                     .size(12.0),
             );
+
+            // ── 波形快捷链接 ──────────────────────────────────
+            if self.simulation_panel.last_run.is_some() {
+                ui.separator();
+                if ui.small_button("Waveforms").on_hover_text("Open waveform analysis workspace").clicked() {
+                    self.active_workspace = StudioWorkspace::Waveforms;
+                }
+            }
 
             // ── 状态消息 ──────────────────────────────────────
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
