@@ -4,12 +4,9 @@
 //! code preview lines, profile summary rows, and status indicators.
 
 use crate::app::theme::{StudioTheme, StudioThemeMode};
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, Color32, RichText};
 
 /// Interactive analysis mode button card with active state highlighting.
-///
-/// Returns `true` when clicked. Uses accent color for the active state
-/// and muted styling for inactive buttons.
 pub(crate) fn analysis_mode_button(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -26,11 +23,7 @@ pub(crate) fn analysis_mode_button(
         })
         .stroke(egui::Stroke::new(
             1.0,
-            if active {
-                palette.accent
-            } else {
-                palette.border
-            },
+            if active { palette.accent } else { palette.border },
         ))
         .corner_radius(5)
         .inner_margin(egui::Margin::same(10))
@@ -46,9 +39,6 @@ pub(crate) fn analysis_mode_button(
 }
 
 /// Solver metric card displaying a label, large value, and caption.
-///
-/// Used in the overview's 4-column metrics row to show solver engine,
-/// status, netlist directives, and last run duration at a glance.
 pub(crate) fn solver_metric_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -66,13 +56,11 @@ pub(crate) fn solver_metric_card(
 }
 
 /// Status indicator card with a colored dot, label, and value.
-///
-/// Used for quick-glance status in the simulation workspace.
 #[allow(dead_code)]
 pub(crate) fn status_indicator_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
-    color: egui::Color32,
+    color: Color32,
     label: &str,
     value: &str,
 ) {
@@ -89,19 +77,31 @@ pub(crate) fn status_indicator_card(
     });
 }
 
-/// Code preview line with line number gutter and monospace text.
+/// Code preview line with line number gutter and syntax-aware coloring.
 ///
-/// Used in the netlist preview to show syntax with line numbers.
+/// Colors:
+/// - Comments (`*`) — muted grey
+/// - Directives (`.tran`, `.ac`, `.options`, etc.) — purple
+/// - Components/other — default text color
 pub(crate) fn code_preview_line(ui: &mut egui::Ui, line_number: usize, text: &str) {
+    let palette = StudioTheme::palette(StudioThemeMode::Midnight);
+    let trimmed = text.trim_start();
+    let color = if trimmed.starts_with('*') {
+        // Comment line
+        Color32::from_rgb(108, 122, 137)
+    } else if trimmed.starts_with('.') {
+        // SPICE directive
+        Color32::from_rgb(180, 140, 255)
+    } else {
+        palette.text
+    };
     ui.horizontal(|ui| {
-        ui.monospace(format!("{line_number:>2}"));
-        ui.monospace(text);
+        ui.label(RichText::new(format!("{line_number:>2}")).monospace().color(Color32::from_rgb(80, 90, 100)));
+        ui.label(RichText::new(text).monospace().color(color));
     });
 }
 
 /// Profile summary row showing a label, monospace value, and status tag.
-///
-/// Used in the configuration summary panel to display individual settings.
 pub(crate) fn profile_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
