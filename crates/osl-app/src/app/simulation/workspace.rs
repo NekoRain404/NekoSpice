@@ -109,6 +109,8 @@ impl NekoSpiceApp {
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                 let running = self.simulation_panel.active_task.is_some();
+
+                // Run button
                 if ui
                     .add_enabled(
                         self.document.is_some() && !running,
@@ -118,6 +120,25 @@ impl NekoSpiceApp {
                 {
                     self.run_simulation_from_panel();
                 }
+
+                ui.separator();
+
+                // Backend engine selector
+                egui::ComboBox::from_id_salt("sim_workspace_backend")
+                    .selected_text(self.simulation_panel.backend.label())
+                    .show_ui(ui, |ui| {
+                        for &kind in &super::panel::SimulationBackendKind::ALL {
+                            let label = match self.locale() {
+                                crate::app::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
+                                _ => kind.label(),
+                            };
+                            ui.selectable_value(
+                                &mut self.simulation_panel.backend,
+                                kind,
+                                label,
+                            );
+                        }
+                    });
             });
         });
     }

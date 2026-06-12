@@ -704,3 +704,9 @@ mod tests {
         assert!(nodes.len() <= 3);
     }
 }
+
+/// 为 UI 预览生成 Xyce 格式的网表。
+/// 与 prepare_xyce_netlist 相同逻辑，但公开给 GUI 层使用。
+pub fn prepare_xyce_netlist_display(source: &str) -> String {
+    prepare_xyce_netlist(source)
+}

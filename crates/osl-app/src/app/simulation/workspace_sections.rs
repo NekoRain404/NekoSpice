@@ -51,7 +51,15 @@ impl NekoSpiceApp {
                 ));
                 return;
             };
-            match document.spice_netlist_preview() {
+            // Apply Xyce-specific processing if Xyce backend is selected
+            let netlist_result = document.spice_netlist_preview().map(|netlist| {
+                if self.simulation_panel.backend == super::panel::SimulationBackendKind::Xyce {
+                    osl_sim::prepare_xyce_netlist_display(&netlist)
+                } else {
+                    netlist
+                }
+            });
+            match netlist_result {
                 Ok(netlist) => {
                     egui::ScrollArea::both()
                         .id_salt("simulation_center_netlist_preview")
