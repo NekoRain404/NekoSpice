@@ -2,6 +2,7 @@ mod artifacts;
 mod profile;
 
 pub use profile::{
+    simulation_preset, available_presets,
     SimulationProfile, SpiceMethod, ProfileParamEntry,
     inject_profile_directives, validate_netlist_for_simulation,
     parse_ngspice_log, format_simulation_log_summary,

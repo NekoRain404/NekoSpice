@@ -75,19 +75,27 @@ impl NekoSpiceApp {
         });
     }
 
-    /// Overview sub-view: solver metrics + analysis setup + netlist + run output.
-    /// Two-column layout with analysis setup on the left and run output on the right.
+    /// Overview sub-view: solver metrics + analysis + config summary + netlist + run output.
+    /// Three-column layout: analysis+netlist | config summary | run output+diagnostics.
     fn draw_simulation_overview(&mut self, ui: &mut egui::Ui) {
         self.draw_simulation_solver_metrics(ui);
         ui.add_space(8.0);
         ui.horizontal_top(|ui| {
+            // Left column: Analysis setup + Netlist preview
             ui.vertical(|ui| {
-                ui.set_width((ui.available_width() * 0.48).max(300.0));
+                ui.set_width((ui.available_width() * 0.36).max(260.0));
                 self.draw_simulation_analysis_setup(ui);
                 ui.add_space(8.0);
                 self.draw_simulation_netlist_preview(ui);
             });
-            ui.add_space(10.0);
+            ui.add_space(8.0);
+            // Center column: Configuration summary
+            ui.vertical(|ui| {
+                ui.set_width((ui.available_width() * 0.50).max(240.0));
+                self.draw_simulation_profile_summary(ui);
+            });
+            ui.add_space(8.0);
+            // Right column: Run output + Diagnostics
             ui.vertical(|ui| {
                 self.draw_simulation_run_output(ui);
                 ui.add_space(8.0);

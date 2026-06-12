@@ -1,3 +1,13 @@
+//! Simulation workspace overview sections:
+//!
+//! - Analysis setup panel (analysis type selection + directive body)
+//! - Netlist preview with syntax highlighting
+//! - Run output and diagnostics
+//! - Profile summary showing all configured simulation settings
+//!
+//! The overview provides a high-level view of the simulation configuration
+//! and results, while the Profile Editor provides detailed editing.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use super::workspace_widgets::{analysis_mode_button, code_preview_line, profile_row};
@@ -6,9 +16,8 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 use osl_kicad::KicadDiagnosticSeverity;
 
-
 impl NekoSpiceApp {
-    /// draw simulation analysis setup。
+    /// draw simulation analysis setup with directive body editor.
     pub(crate) fn draw_simulation_analysis_setup(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -16,12 +25,18 @@ impl NekoSpiceApp {
                 mode,
                 self.text(UiText::AnalysisSetup),
             ));
+            // Analysis mode buttons in a 2x2 grid
             for row in analysis_modes().chunks(2) {
                 ui.columns(2, |columns| {
                     for (column, (kind, title, caption)) in row.iter().enumerate() {
                         let active = self.simulation_panel.directive_kind == *kind;
                         if analysis_mode_button(&mut columns[column], mode, title, caption, active)
                         {
+                            // Auto-fill default body when switching types
+                            if self.simulation_panel.directive_kind != *kind {
+                                self.simulation_panel.directive_body =
+                                    super::directive_editor::default_directive_body_for_kind(*kind);
+                            }
                             self.simulation_panel.directive_kind = *kind;
                         }
                     }
@@ -29,13 +44,12 @@ impl NekoSpiceApp {
                 ui.add_space(6.0);
             }
             ui.separator();
+            // Directive body editor
             self.draw_simulation_directive_editor(ui);
-            ui.separator();
-            self.draw_simulation_profile_grid(ui);
         });
     }
 
-    /// draw simulation netlist preview。
+    /// draw simulation netlist preview with line numbers and syntax highlighting.
     pub(crate) fn draw_simulation_netlist_preview(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -45,19 +59,7 @@ impl NekoSpiceApp {
                     self.text(UiText::NetlistPreview),
                 ));
                 if ui.small_button("Export .cir").on_hover_text("Save netlist to file").clicked() {
-                    if let Some(document) = &self.document {
-                        let profile = self.build_simulation_profile();
-                        if let Ok(raw) = document.spice_netlist_preview() {
-                            let netlist = osl_sim::inject_profile_directives(&raw, &profile);
-                            let dialog = rfd::FileDialog::new()
-                                .add_filter("SPICE Netlist", &["cir", "sp", "net"])
-                                .set_file_name("schematic.cir");
-                            if let Some(path) = dialog.save_file() {
-                                let _ = std::fs::write(&path, &netlist);
-                                self.status_message = Some(format!("Netlist exported to {}", path.display()));
-                            }
-                        }
-                    }
+                    self.export_netlist_dialog();
                 }
             });
             let Some(document) = &self.document else {
@@ -67,8 +69,7 @@ impl NekoSpiceApp {
                 ));
                 return;
             };
-            // Build profile and inject directives to show the ACTUAL netlist
-            // that will be sent to the solver (not just the raw schematic netlist)
+            // Build the actual netlist that would be sent to the solver
             let profile = self.build_simulation_profile();
             let netlist_result = document.spice_netlist_preview().map(|netlist| {
                 let netlist = osl_sim::inject_profile_directives(&netlist, &profile);
@@ -80,9 +81,14 @@ impl NekoSpiceApp {
             });
             match netlist_result {
                 Ok(netlist) => {
+                    let line_count = netlist.lines().count();
+                    ui.label(StudioTheme::muted_for(
+                        mode,
+                        format!("{} lines, {} backend", line_count, self.simulation_panel.backend.label()),
+                    ));
                     egui::ScrollArea::both()
                         .id_salt("simulation_center_netlist_preview")
-                        .max_height(300.0)
+                        .max_height(280.0)
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             for (index, line) in netlist.lines().enumerate() {
@@ -97,7 +103,7 @@ impl NekoSpiceApp {
         });
     }
 
-    /// draw simulation run output。
+    /// draw simulation run output and diagnostics.
     pub(crate) fn draw_simulation_run_output(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
@@ -115,34 +121,92 @@ impl NekoSpiceApp {
         });
     }
 
-    fn draw_simulation_profile_grid(&mut self, ui: &mut egui::Ui) {
+    /// draw a comprehensive profile summary showing all configured simulation settings.
+    pub(crate) fn draw_simulation_profile_summary(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        ui.label(StudioTheme::section_title_for(
-            mode,
-            self.text(UiText::SimulationProfile),
-        ));
-        // Show actual analysis directive and profile state
-        let analysis = format!("{} {}",
-            self.simulation_panel.directive_kind.to_string(),
-            self.simulation_panel.directive_body.trim()
-        ).trim().to_string();
-        let temp = self.simulation_profile_editor.options.temperature.clone();
-        let tol = self.simulation_profile_editor.options.reltol.clone();
-        let method = self.simulation_profile_editor.options.method.clone();
-        profile_row(ui, mode, "Analysis", &analysis, "active");
-        profile_row(ui, mode, self.text(UiText::TemperatureSweep), &format!("{} C", temp), "nominal");
-        profile_row(ui, mode, self.text(UiText::Tolerance), &tol, "rel");
-        profile_row(ui, mode, "Method", &method, "integration");
-        profile_row(
-            ui,
-            mode,
-            self.text(UiText::Backend),
-            self.simulation_panel.backend.label(),
-            "engine",
-        );
+        let palette = self.theme_palette();
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::SimulationProfile),
+            ));
+
+            // Active preset indicator
+            let preset_name = &self.simulation_profile_editor.active_preset;
+            if preset_name != "default" {
+                ui.horizontal(|ui| {
+                    ui.label(StudioTheme::muted_for(mode, "Preset:"));
+                    ui.label(egui::RichText::new(preset_name).strong().color(palette.accent));
+                });
+            }
+
+            // Analysis directive
+            let analysis = format!("{} {}",
+                self.simulation_panel.directive_kind.to_string(),
+                self.simulation_panel.directive_body.trim()
+            ).trim().to_string();
+            profile_row(ui, mode, "Analysis", &analysis, "active");
+
+            ui.add_space(4.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            // Environment settings
+            ui.label(StudioTheme::muted_for(mode, "Environment"));
+            let opts = &self.simulation_profile_editor.options;
+            profile_row(ui, mode, "Temperature", &format!("{} °C", opts.temperature), "operating");
+            if opts.tnom != "27" {
+                profile_row(ui, mode, "TNOM", &format!("{} °C", opts.tnom), "nominal");
+            }
+
+            ui.add_space(4.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            // Solver settings
+            ui.label(StudioTheme::muted_for(mode, "Solver"));
+            profile_row(ui, mode, "Method", &opts.method, "integration");
+            profile_row(ui, mode, "RELTOL", &opts.reltol, "tolerance");
+            if opts.abstol != "1e-12" {
+                profile_row(ui, mode, "ABSTOL", &opts.abstol, "tolerance");
+            }
+            if opts.vntol != "1e-6" {
+                profile_row(ui, mode, "VNTOL", &opts.vntol, "tolerance");
+            }
+            if opts.gmin != "1e-12" {
+                profile_row(ui, mode, "GMIN", &opts.gmin, "conductance");
+            }
+
+            ui.add_space(4.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            // Iteration limits
+            ui.label(StudioTheme::muted_for(mode, "Iteration Limits"));
+            profile_row(ui, mode, "ITL1 (DC)", &opts.itl1, "limit");
+            if opts.itl4 != "10" {
+                profile_row(ui, mode, "ITL4 (tran)", &opts.itl4, "limit");
+            }
+            if opts.itl5 != "5000" {
+                profile_row(ui, mode, "ITL5 (total)", &opts.itl5, "limit");
+            }
+
+            // Backend engine
+            ui.add_space(4.0);
+            ui.separator();
+            ui.add_space(4.0);
+            profile_row(
+                ui,
+                mode,
+                self.text(UiText::Backend),
+                self.simulation_panel.backend.label(),
+                "engine",
+            );
+        });
     }
 }
 
+/// Analysis modes available in the overview.
 fn analysis_modes() -> [(
     osl_kicad::KicadSimulationDirectiveKind,
     &'static str,

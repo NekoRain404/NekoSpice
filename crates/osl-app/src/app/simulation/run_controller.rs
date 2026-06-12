@@ -1,6 +1,10 @@
 //! Simulation run controller — builds profiles from UI state, launches
 //! backend tasks, and polls for completion. Separated from the drawing
 //! code to keep the control flow easy to follow.
+//!
+//! The `build_simulation_profile()` method reads ALL configured options from
+//! the SimOptions struct (which now mirrors the full SimulationProfile) and
+//! builds a complete profile ready for netlist injection.
 
 use crate::app::NekoSpiceApp;
 use crate::simulation::{GuiSimulationJob, GuiSimulationTask};
@@ -13,11 +17,11 @@ use eframe::egui;
 impl NekoSpiceApp {
     /// Build a `SimulationProfile` from the current UI state.
     ///
-    /// Reads the analysis kind/body from the directive editor, solver
-    /// options from the profile editor, and component/model parameter
-    /// overrides — everything the user configured in the simulation panels.
+    /// Reads the analysis kind/body from the directive editor, all solver
+    /// options from the profile editor (environment, transient, convergence,
+    /// output, initial conditions), and component/model parameter overrides.
     pub(crate) fn build_simulation_profile(&self) -> SimulationProfile {
-        let options = &self.simulation_profile_editor.options;
+        let opts = &self.simulation_profile_editor.options;
         let analysis_kind = match self.simulation_panel.directive_kind {
             KicadSimulationDirectiveKind::Tran => ".tran".to_string(),
             KicadSimulationDirectiveKind::Ac => ".ac".to_string(),
@@ -26,16 +30,49 @@ impl NekoSpiceApp {
             _ => ".tran".to_string(),
         };
         let analysis_body = self.simulation_panel.directive_body.clone();
+
         SimulationProfile {
+            // Analysis
             analysis_kind,
             analysis_body,
-            temperature: options.temperature.clone(),
-            max_iterations: options.max_iterations.clone(),
-            min_timestep: options.min_timestep.clone(),
-            method: SpiceMethod::from_str_loose(&options.method),
-            reltol: options.reltol.clone(),
-            abstol: options.abstol.clone(),
-            vntol: options.vntol.clone(),
+            // Environment
+            temperature: opts.temperature.clone(),
+            tnom: opts.tnom.clone(),
+            // Transient
+            method: SpiceMethod::from_str_loose(&opts.method),
+            itl1: opts.itl1.clone(),
+            itl2: opts.itl2.clone(),
+            itl4: opts.itl4.clone(),
+            itl5: opts.itl5.clone(),
+            min_timestep: opts.min_timestep.clone(),
+            srcsteps: opts.srcsteps.clone(),
+            gminsteps: opts.gminsteps.clone(),
+            // Convergence
+            reltol: opts.reltol.clone(),
+            abstol: opts.abstol.clone(),
+            vntol: opts.vntol.clone(),
+            gmin: opts.gmin.clone(),
+            chgtol: opts.chgtol.clone(),
+            pivtol: opts.pivtol.clone(),
+            pivrel: opts.pivrel.clone(),
+            // Output
+            numdgt: opts.numdgt.clone(),
+            // Initial conditions
+            initial_conditions: self
+                .simulation_profile_editor
+                .initial_conditions
+                .iter()
+                .filter(|(n, v)| !n.trim().is_empty() && !v.trim().is_empty())
+                .cloned()
+                .collect(),
+            nodesets: self
+                .simulation_profile_editor
+                .nodesets
+                .iter()
+                .filter(|(n, v)| !n.trim().is_empty() && !v.trim().is_empty())
+                .cloned()
+                .collect(),
+            // Parameter overrides
             component_params: self
                 .simulation_profile_editor
                 .component_params
@@ -91,14 +128,14 @@ impl NekoSpiceApp {
                 self.simulation_panel.last_run = None;
                 self.simulation_panel.last_error = None;
                 let ngspice = self.preferences.ngspice_path.clone();
-                    let xyce = self.preferences.xyce_path.clone();
-                    self.simulation_panel.active_task =
-                        Some(GuiSimulationTask::spawn_with_backend(
-                            job,
-                            self.simulation_panel.backend.label(),
-                            &ngspice,
-                            &xyce,
-                        ));
+                let xyce = self.preferences.xyce_path.clone();
+                self.simulation_panel.active_task =
+                    Some(GuiSimulationTask::spawn_with_backend(
+                        job,
+                        self.simulation_panel.backend.label(),
+                        &ngspice,
+                        &xyce,
+                    ));
                 self.status_message =
                     Some(format!("Simulation started ({})", self.simulation_panel.backend.label()));
             }
@@ -122,7 +159,6 @@ impl NekoSpiceApp {
         self.simulation_panel.active_task = None;
         match result {
             Ok(run) => {
-                // If simulation failed, read the parsed error log
                 if run.metadata.status == osl_core::RunStatus::Failed {
                     let log_path = run.output_dir.join("ngspice.log");
                     let fallback = run.output_dir.join("xyce.log");
@@ -176,7 +212,7 @@ impl NekoSpiceApp {
 }
 
 impl NekoSpiceApp {
-    /// 弹出文件对话框导出 SPICE 网表到 .cir 文件。
+    /// Export SPICE netlist to .cir file via file dialog.
     pub(crate) fn export_netlist_dialog(&mut self) {
         let Some(document) = &self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());

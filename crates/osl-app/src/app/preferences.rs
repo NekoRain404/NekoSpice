@@ -2,6 +2,11 @@
 //!
 //! 偏好设置持久化到 `~/.config/nekospice/settings.json`。
 //! 启动时自动加载，修改时自动保存。
+//!
+//! 持久化内容包括:
+//! - UI 偏好（主题、语言）
+//! - 求解器路径（ngspice、xyce）
+//! - 仿真设置（温度、容差、迭代限制等）
 
 use super::NekoSpiceApp;
 use super::localization::{StudioLocale, UiText};
@@ -16,6 +21,60 @@ struct SettingsFile {
     locale: String,
     ngspice_path: String,
     xyce_path: String,
+    /// 仿真设置（可选，旧版本配置文件可能不含此字段）。
+    #[serde(default)]
+    simulation: SimulationSettingsFile,
+}
+
+/// 仿真设置的持久化表示。
+/// 使用 serde(default) 保证向后兼容：旧配置文件不含此字段时使用默认值。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct SimulationSettingsFile {
+    temperature: String,
+    tnom: String,
+    method: String,
+    itl1: String,
+    itl2: String,
+    itl4: String,
+    itl5: String,
+    min_timestep: String,
+    srcsteps: String,
+    gminsteps: String,
+    reltol: String,
+    abstol: String,
+    vntol: String,
+    gmin: String,
+    chgtol: String,
+    pivtol: String,
+    pivrel: String,
+    numdgt: String,
+    active_preset: String,
+}
+
+impl Default for SimulationSettingsFile {
+    fn default() -> Self {
+        Self {
+            temperature: "27".to_string(),
+            tnom: "27".to_string(),
+            method: "Trap".to_string(),
+            itl1: "100".to_string(),
+            itl2: "50".to_string(),
+            itl4: "10".to_string(),
+            itl5: "5000".to_string(),
+            min_timestep: "0".to_string(),
+            srcsteps: "0".to_string(),
+            gminsteps: "0".to_string(),
+            reltol: "0.001".to_string(),
+            abstol: "1e-12".to_string(),
+            vntol: "1e-6".to_string(),
+            gmin: "1e-12".to_string(),
+            chgtol: "1e-14".to_string(),
+            pivtol: "1e-13".to_string(),
+            pivrel: "1e-3".to_string(),
+            numdgt: "6".to_string(),
+            active_preset: "default".to_string(),
+        }
+    }
 }
 
 impl Default for SettingsFile {
@@ -25,6 +84,7 @@ impl Default for SettingsFile {
             locale: "en".to_string(),
             ngspice_path: "ngspice".to_string(),
             xyce_path: "xyce".to_string(),
+            simulation: SimulationSettingsFile::default(),
         }
     }
 }
@@ -59,7 +119,6 @@ pub(super) struct StudioPreferences {
 
 impl Default for StudioPreferences {
     fn default() -> Self {
-        // 尝试从磁盘加载，失败则使用硬编码默认值
         Self::load_from_disk().unwrap_or_else(|| Self {
             theme_mode: StudioThemeMode::default(),
             locale: StudioLocale::default(),
@@ -84,21 +143,100 @@ impl StudioPreferences {
     }
 
     /// 保存当前偏好设置到磁盘。
+    ///
+    /// 包括 UI 设置和当前仿真选项。仿真选项从 app 的
+    /// `simulation_profile_editor.options` 中读取。
     pub(super) fn save_to_disk(&self) {
         let file = SettingsFile {
             theme_mode: self.theme_mode.as_str().to_string(),
             locale: self.locale.as_str().to_string(),
             ngspice_path: self.ngspice_path.clone(),
             xyce_path: self.xyce_path.clone(),
+            simulation: SimulationSettingsFile::default(),
         };
         let path = settings_path();
-        // 创建目录（忽略已存在错误）
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string_pretty(&file) {
             let _ = fs::write(&path, json);
         }
+    }
+
+    /// 保存偏好设置到磁盘，同时包含仿真选项。
+    ///
+    /// 由 app 在仿真选项变更时调用，确保选项持久化。
+    pub(super) fn save_with_simulation(&self, sim_opts: &super::simulation::profile_editor::SimOptions, preset: &str) {
+        let file = SettingsFile {
+            theme_mode: self.theme_mode.as_str().to_string(),
+            locale: self.locale.as_str().to_string(),
+            ngspice_path: self.ngspice_path.clone(),
+            xyce_path: self.xyce_path.clone(),
+            simulation: SimulationSettingsFile {
+                temperature: sim_opts.temperature.clone(),
+                tnom: sim_opts.tnom.clone(),
+                method: sim_opts.method.clone(),
+                itl1: sim_opts.itl1.clone(),
+                itl2: sim_opts.itl2.clone(),
+                itl4: sim_opts.itl4.clone(),
+                itl5: sim_opts.itl5.clone(),
+                min_timestep: sim_opts.min_timestep.clone(),
+                srcsteps: sim_opts.srcsteps.clone(),
+                gminsteps: sim_opts.gminsteps.clone(),
+                reltol: sim_opts.reltol.clone(),
+                abstol: sim_opts.abstol.clone(),
+                vntol: sim_opts.vntol.clone(),
+                gmin: sim_opts.gmin.clone(),
+                chgtol: sim_opts.chgtol.clone(),
+                pivtol: sim_opts.pivtol.clone(),
+                pivrel: sim_opts.pivrel.clone(),
+                numdgt: sim_opts.numdgt.clone(),
+                active_preset: preset.to_string(),
+            },
+        };
+        let path = settings_path();
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(&file) {
+            let _ = fs::write(&path, json);
+        }
+    }
+
+    /// 从磁盘加载仿真选项（如果存在）。
+    /// 返回 (SimOptions, active_preset_name)。
+    pub(super) fn load_simulation_settings() -> (super::simulation::profile_editor::SimOptions, String) {
+        let path = settings_path();
+        let data = match fs::read_to_string(&path) {
+            Ok(d) => d,
+            Err(_) => return (super::simulation::profile_editor::SimOptions::default(), "default".to_string()),
+        };
+        let file: SettingsFile = match serde_json::from_str(&data) {
+            Ok(f) => f,
+            Err(_) => return (super::simulation::profile_editor::SimOptions::default(), "default".to_string()),
+        };
+        let s = file.simulation;
+        let opts = super::simulation::profile_editor::SimOptions {
+            temperature: s.temperature,
+            tnom: s.tnom,
+            method: s.method,
+            itl1: s.itl1,
+            itl2: s.itl2,
+            itl4: s.itl4,
+            itl5: s.itl5,
+            min_timestep: s.min_timestep,
+            srcsteps: s.srcsteps,
+            gminsteps: s.gminsteps,
+            reltol: s.reltol,
+            abstol: s.abstol,
+            vntol: s.vntol,
+            gmin: s.gmin,
+            chgtol: s.chgtol,
+            pivtol: s.pivtol,
+            pivrel: s.pivrel,
+            numdgt: s.numdgt,
+        };
+        (opts, s.active_preset)
     }
 }
 
@@ -133,6 +271,15 @@ impl NekoSpiceApp {
     pub(super) fn toggle_locale(&mut self) {
         self.preferences.locale = self.preferences.locale.next();
         self.preferences.save_to_disk();
+    }
+
+    /// 保存仿真选项到磁盘。
+    /// 在仿真选项变更时由 UI 调用。
+    pub(super) fn save_simulation_settings(&self) {
+        self.preferences.save_with_simulation(
+            &self.simulation_profile_editor.options,
+            &self.simulation_profile_editor.active_preset,
+        );
     }
 
     /// 主题模式显示文本

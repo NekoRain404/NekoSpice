@@ -172,7 +172,7 @@ impl Default for NekoSpiceApp {
             schematic_inspector: SchematicInspectorPanelState::default(),
             schematic_tools: SchematicToolState::default(),
             simulation_panel: SimulationPanelState::default(),
-            simulation_profile_editor: SimulationProfileEditorState::default(),
+            simulation_profile_editor: SimulationProfileEditorState::from_disk(),
             optimization_workspace: OptimizationWorkspaceState::default(),
             review_workspace: ReviewWorkspaceState::default(),
             reports_workspace: ReportsWorkspaceState::default(),
