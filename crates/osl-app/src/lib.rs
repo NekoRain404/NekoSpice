@@ -19,5 +19,12 @@ mod waveform_summary;
 
 pub use app::{NekoSpiceApp, load_canvas_scene, run_native};
 
+/// Test fixture schematic (RC filter with NekoSpice library symbols).
+/// Used by unit tests to verify document loading and editing.
 pub(crate) const DEFAULT_SCHEMATIC: &str = "examples/kicad_schematic/rc.kicad_sch";
+/// Library table for test fixtures (NekoSpice analog symbols).
 pub(crate) const DEFAULT_SYMBOL_LIBRARY_TABLE: &str = "examples/kicad_schematic/sym-lib-table";
+
+/// GUI startup schematic -- CM5 Minima demo board (KiCad demo project).
+pub(crate) const DEFAULT_GUI_SCHEMATIC: &str = "examples/cm5_minima/CM5.kicad_sch";
+pub(crate) const DEFAULT_GUI_LIBRARY_TABLE: &str = "examples/cm5_minima/sym-lib-table";

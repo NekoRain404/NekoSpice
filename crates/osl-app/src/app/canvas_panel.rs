@@ -1,52 +1,70 @@
 use super::{EditNudgeDirection, NekoSpiceApp};
 use crate::canvas;
 use crate::canvas::colors::SchematicColors;
-use eframe::egui::{self, Color32, Sense, Vec2};
-use osl_kicad::{KicadAt, KicadCanvasScene, read_kicad_schematic_with_libraries};
+use eframe::egui::{self, Sense, Vec2};
+use osl_kicad::{KicadCanvasScene, read_kicad_schematic_with_libraries};
 use std::path::Path;
 
 impl NekoSpiceApp {
     pub(super) fn draw_canvas(&mut self, ui: &mut egui::Ui) {
         let available = ui.available_size_before_wrap();
         let desired_size = Vec2::new(available.x.max(240.0), available.y.max(240.0));
+        // Allocate with all-button drag sense so we can detect right-drag for panning.
         let (rect, response) = ui.allocate_exact_size(desired_size, Sense::click_and_drag());
 
-        if response.dragged_by(egui::PointerButton::Middle) {
+        // ---------------------------------------------------------------
+        // Mouse controls:
+        //   Right-click drag = pan
+        //   Scroll wheel     = zoom in/out (around cursor)
+        //   Left-click       = select / place / tool action
+        //   Right-click (no drag) = context menu
+        // ---------------------------------------------------------------
+
+        // --- Right-click drag panning ---
+        let is_right_dragging = response.dragged_by(egui::PointerButton::Secondary);
+        if is_right_dragging {
             self.viewport.pan += response.drag_delta();
         }
 
+        // --- Scroll wheel zoom ---
         let pointer_over_canvas = ui
             .input(|input| input.pointer.hover_pos())
             .is_some_and(|position| rect.contains(position));
         if pointer_over_canvas {
-            let zoom_delta = ui.input(|input| input.zoom_delta());
-            if (zoom_delta - 1.0).abs() > f32::EPSILON
-                && let Some(pointer) = ui.input(|input| input.pointer.hover_pos())
-            {
-                self.viewport.zoom_around(rect, pointer, zoom_delta);
-            }
-
             let scroll = ui.input(|input| input.smooth_scroll_delta);
-            if scroll != Vec2::ZERO {
-                self.viewport.pan += scroll;
+            if scroll.y.abs() > 0.5 {
+                // Convert vertical scroll to zoom factor.
+                // Positive scroll.y = zoom in, negative = zoom out.
+                let zoom_factor = (scroll.y * 0.005).exp();
+                if let Some(pointer) = ui.input(|input| input.pointer.hover_pos()) {
+                    self.viewport.zoom_around(rect, pointer, zoom_factor);
+                }
             }
         }
 
-        if response.clicked()
-            && let Some(pointer) = response.interact_pointer_pos()
-        {
-            let schematic_point = self.viewport.screen_to_world(rect, pointer);
-            if self.placement.is_some() {
-                self.place_selected_symbol_at_point(schematic_point);
-            } else if self.handle_schematic_tool_click(schematic_point) {
-            } else if let Some(scene) = &self.scene {
-                self.selected_hit = scene.hit_test(schematic_point).hits.into_iter().next();
-                self.sync_property_editor_from_selection();
+        // --- Left-click for selection / placement / tool actions ---
+        // Only process left-clicks to avoid triggering selection on right-click.
+        if response.clicked() && !is_right_dragging {
+            if let Some(pointer) = response.interact_pointer_pos() {
+                let is_left_click = ui.input(|input| input.pointer.primary_released());
+                if is_left_click {
+                    let schematic_point = self.viewport.screen_to_world(rect, pointer);
+                    if self.placement.is_some() {
+                        self.place_selected_symbol_at_point(schematic_point);
+                    } else if self.handle_schematic_tool_click(schematic_point) {
+                    } else if let Some(scene) = &self.scene {
+                        self.selected_hit =
+                            scene.hit_test(schematic_point).hits.into_iter().next();
+                        self.sync_property_editor_from_selection();
+                    }
+                }
             }
         }
 
         self.handle_canvas_shortcuts(ui);
-        self.handle_canvas_context_menu(ui, rect);
+
+        // --- Right-click context menu (only when not dragging) ---
+        self.handle_canvas_context_menu_with_pan(ui, rect, is_right_dragging);
 
         let painter = ui.painter_at(rect);
         let schematic_colors = SchematicColors::for_mode(self.theme_mode());
@@ -55,7 +73,14 @@ impl NekoSpiceApp {
 
         if let Some(scene) = &self.scene {
             let visible_bounds = self.viewport.visible_world_bounds(rect);
-            canvas::draw_scene(&painter, rect, scene, self.viewport, visible_bounds, schematic_colors);
+            canvas::draw_scene(
+                &painter,
+                rect,
+                scene,
+                self.viewport,
+                visible_bounds,
+                schematic_colors,
+            );
             if let Some(hit) = &self.selected_hit {
                 canvas::draw_bounds(
                     &painter,
@@ -84,7 +109,13 @@ impl NekoSpiceApp {
                     .as_ref()
                     .is_some_and(|sel| sel.bounds == hovered.bounds);
                 if !dominated_by_selection {
-                    canvas::draw_hover_highlight(&painter, rect, self.viewport, hovered.bounds, schematic_colors);
+                    canvas::draw_hover_highlight(
+                        &painter,
+                        rect,
+                        self.viewport,
+                        hovered.bounds,
+                        schematic_colors,
+                    );
                 }
             }
         }
@@ -116,36 +147,29 @@ impl NekoSpiceApp {
         let Some(library) = &self.library else {
             return;
         };
+        let at = osl_kicad::KicadAt { x: point.x, y: point.y, rotation: 0.0 };
         let Ok(preview) = library.symbol_placement_preview(
             &placement.symbol_id,
-            KicadAt {
-                x: point.x,
-                y: point.y,
-                rotation: 0.0,
-            },
-            placement.config.clone(),
+            at,
+            self.selected_symbol_placement.clone(),
         ) else {
             return;
         };
-
-        let visible_bounds = self.viewport.visible_world_bounds(rect);
-        canvas::draw_scene(painter, rect, &preview.scene, self.viewport, visible_bounds, schematic_colors);
-        if let Some(bounds) = preview.scene.bounds {
-            canvas::draw_bounds(
-                painter,
-                rect,
-                self.viewport,
-                bounds,
-                Color32::from_rgb(80, 120, 190),
-                1.5,
-            );
-        }
+        canvas::draw_scene(
+            painter,
+            rect,
+            &preview.scene,
+            self.viewport,
+            preview.scene.bounds.unwrap_or(osl_kicad::KicadBoundingBox {
+                min: point,
+                max: point,
+            }),
+            schematic_colors,
+        );
     }
 
-    /// Handle keyboard shortcuts for the schematic canvas.
-    ///
-    /// Tool shortcuts: V=Select, W=Wire, L=Label, B=Bus, S=Sheet,
-    /// J=Junction, Q=NoConnect, R=Rotate, F=Fit, Del=Delete, Esc=Cancel.
+    // Keyboard shortcuts: V=Select, W=Wire, L=Label, B=Bus, S=Sheet, J=Junction,
+    // Q=NoConnect, R=Rotate, F=Fit, Del=Delete, Esc=Cancel.
     fn handle_canvas_shortcuts(&mut self, ui: &egui::Ui) {
         if ui.ctx().text_edit_focused() {
             return;
@@ -196,7 +220,6 @@ impl NekoSpiceApp {
                 .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
         }
 
-
         // Arrow key nudging
         if ui.input(|input| input.key_pressed(egui::Key::ArrowLeft)) {
             self.nudge_selected(EditNudgeDirection::Left);
@@ -226,7 +249,20 @@ impl NekoSpiceApp {
     }
 
     /// Handle right-click context menu on the canvas.
-    fn handle_canvas_context_menu(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+    ///
+    /// Shows the context menu only when the user right-clicks without dragging
+    /// (i.e., a quick tap). If the user is dragging with the right mouse button,
+    /// we skip the context menu so panning works smoothly.
+    fn handle_canvas_context_menu_with_pan(
+        &mut self,
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        was_right_dragging: bool,
+    ) {
+        if was_right_dragging {
+            return;
+        }
+
         let response = ui.interact(rect, egui::Id::new("canvas_context"), egui::Sense::click());
 
         if response.secondary_clicked() {

@@ -2,7 +2,7 @@ use crate::document::KicadGuiDocument;
 use crate::library::KicadGuiLibrary;
 use crate::placement_config::SymbolPlacementConfig;
 use crate::viewport::CanvasViewport;
-use crate::{DEFAULT_SCHEMATIC, DEFAULT_SYMBOL_LIBRARY_TABLE};
+use crate::{DEFAULT_GUI_SCHEMATIC, DEFAULT_GUI_LIBRARY_TABLE};
 use osl_kicad::{KicadCanvasHit, KicadCanvasScene, KicadPoint};
 use std::path::PathBuf;
 
@@ -185,8 +185,8 @@ impl EditNudgeDirection {
 impl Default for NekoSpiceApp {
     fn default() -> Self {
         let mut app = Self {
-            schematic_path: DEFAULT_SCHEMATIC.to_string(),
-            library_table_path: DEFAULT_SYMBOL_LIBRARY_TABLE.to_string(),
+            schematic_path: DEFAULT_GUI_SCHEMATIC.to_string(),
+            library_table_path: DEFAULT_GUI_LIBRARY_TABLE.to_string(),
             document: None,
             library: None,
             scene: None,
@@ -215,8 +215,8 @@ impl Default for NekoSpiceApp {
             viewport: CanvasViewport::default(),
             history: history::EditHistory::default(),
         };
-        app.load_schematic(PathBuf::from(DEFAULT_SCHEMATIC));
-        app.load_symbol_library(PathBuf::from(DEFAULT_SYMBOL_LIBRARY_TABLE));
+        app.load_schematic(PathBuf::from(DEFAULT_GUI_SCHEMATIC));
+        app.load_symbol_library(PathBuf::from(DEFAULT_GUI_LIBRARY_TABLE));
         app.load_initial_simulation_run();
         app
     }
