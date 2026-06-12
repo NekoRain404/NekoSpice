@@ -90,11 +90,15 @@ impl NekoSpiceApp {
                 }
                 self.simulation_panel.last_run = None;
                 self.simulation_panel.last_error = None;
-                self.simulation_panel.active_task =
-                    Some(GuiSimulationTask::spawn_with_backend(
-                        job,
-                        self.simulation_panel.backend.label(),
-                    ));
+                let ngspice = self.preferences.ngspice_path.clone();
+                    let xyce = self.preferences.xyce_path.clone();
+                    self.simulation_panel.active_task =
+                        Some(GuiSimulationTask::spawn_with_backend(
+                            job,
+                            self.simulation_panel.backend.label(),
+                            &ngspice,
+                            &xyce,
+                        ));
                 self.status_message =
                     Some(format!("Simulation started ({})", self.simulation_panel.backend.label()));
             }

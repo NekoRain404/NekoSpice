@@ -71,14 +71,23 @@ impl NekoSpiceApp {
         });
     }
 
-    fn draw_settings_runtime_section(&self, ui: &mut egui::Ui) {
+    fn draw_settings_runtime_section(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(
                 mode,
                 self.text(UiText::System),
             ));
-            settings_row(ui, mode, self.text(UiText::Solver), "ngspice");
+            // Editable ngspice path
+            ui.horizontal(|ui| {
+                ui.label(StudioTheme::muted_for(mode, "ngspice"));
+                ui.text_edit_singleline(&mut self.preferences.ngspice_path);
+            });
+            // Editable Xyce path
+            ui.horizontal(|ui| {
+                ui.label(StudioTheme::muted_for(mode, "Xyce"));
+                ui.text_edit_singleline(&mut self.preferences.xyce_path);
+            });
             settings_row(ui, mode, self.text(UiText::Backend), "CLI isolated");
             settings_row(ui, mode, self.text(UiText::Threads), "auto");
             settings_row(ui, mode, self.text(UiText::Graphics), "egui + wgpu");

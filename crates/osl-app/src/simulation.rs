@@ -73,20 +73,22 @@ pub(crate) struct GuiSimulationTask {
 
 impl GuiSimulationTask {
     /// spawn ngspice。
-    pub(crate) fn spawn_ngspice(job: GuiSimulationJob) -> Self {
-        Self::spawn(job, || Box::new(NgspiceCliBackend::default()))
+    pub(crate) fn spawn_ngspice(job: GuiSimulationJob, executable: &str) -> Self {
+        let exec = executable.to_string();
+        Self::spawn(job, move || Box::new(NgspiceCliBackend::new(exec)))
     }
 
     /// spawn xyce。
-    pub(crate) fn spawn_xyce(job: GuiSimulationJob) -> Self {
-        Self::spawn(job, || Box::new(XyceCliBackend::default()))
+    pub(crate) fn spawn_xyce(job: GuiSimulationJob, executable: &str) -> Self {
+        let exec = executable.to_string();
+        Self::spawn(job, move || Box::new(XyceCliBackend::new(exec)))
     }
 
     /// spawn with backend。
-    pub(crate) fn spawn_with_backend(job: GuiSimulationJob, backend: &str) -> Self {
+    pub(crate) fn spawn_with_backend(job: GuiSimulationJob, backend: &str, ngspice: &str, xyce: &str) -> Self {
         match backend {
-            "xyce" => Self::spawn_xyce(job),
-            _ => Self::spawn_ngspice(job),
+            "xyce" => Self::spawn_xyce(job, xyce),
+            _ => Self::spawn_ngspice(job, ngspice),
         }
     }
 

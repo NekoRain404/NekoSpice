@@ -4,10 +4,25 @@ use super::NekoSpiceApp;
 use super::localization::{StudioLocale, UiText};
 use super::theme::{StudioPalette, StudioTheme, StudioThemeMode};
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct StudioPreferences {
     pub(super) theme_mode: StudioThemeMode,
     pub(super) locale: StudioLocale,
+    /// Path to ngspice executable.
+    pub(super) ngspice_path: String,
+    /// Path to Xyce executable.
+    pub(super) xyce_path: String,
+}
+
+impl Default for StudioPreferences {
+    fn default() -> Self {
+        Self {
+            theme_mode: StudioThemeMode::default(),
+            locale: StudioLocale::default(),
+            ngspice_path: "ngspice".to_string(),
+            xyce_path: "xyce".to_string(),
+        }
+    }
 }
 
 impl NekoSpiceApp {
