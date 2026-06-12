@@ -22,19 +22,14 @@ use osl_core::RunStatus;
 
 impl NekoSpiceApp {
     /// Main entry point for drawing the simulation center workspace.
-    /// Polls for running tasks and dispatches to the active sub-view.
     pub(crate) fn draw_simulation_center_workspace(&mut self, ui: &mut egui::Ui) {
         self.poll_simulation_task();
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             self.draw_simulation_workspace_header(ui);
             ui.add_space(8.0);
-
-            // Sub-view tab bar: Overview | Profile Editor
             self.draw_simulation_sub_view_tabs(ui);
             ui.add_space(8.0);
-
-            // Dispatch to the active sub-view
             let sub_view = self.simulation_profile_editor.sub_view;
             match sub_view {
                 SimulationSubView::Overview => self.draw_simulation_overview(ui),
@@ -44,7 +39,6 @@ impl NekoSpiceApp {
     }
 
     /// Tab bar for switching between simulation workspace sub-views.
-    /// Uses locale-aware labels and active state highlighting.
     fn draw_simulation_sub_view_tabs(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = StudioTheme::palette(mode);
@@ -76,12 +70,10 @@ impl NekoSpiceApp {
     }
 
     /// Overview sub-view: solver metrics + analysis + config summary + netlist + run output.
-    /// Three-column layout: analysis+netlist | config summary | run output+diagnostics.
     fn draw_simulation_overview(&mut self, ui: &mut egui::Ui) {
         self.draw_simulation_solver_metrics(ui);
         ui.add_space(8.0);
         ui.horizontal_top(|ui| {
-            // Left column: Analysis setup + Netlist preview
             ui.vertical(|ui| {
                 ui.set_width((ui.available_width() * 0.36).max(260.0));
                 self.draw_simulation_analysis_setup(ui);
@@ -89,13 +81,11 @@ impl NekoSpiceApp {
                 self.draw_simulation_netlist_preview(ui);
             });
             ui.add_space(8.0);
-            // Center column: Configuration summary
             ui.vertical(|ui| {
                 ui.set_width((ui.available_width() * 0.50).max(240.0));
                 self.draw_simulation_profile_summary(ui);
             });
             ui.add_space(8.0);
-            // Right column: Run output + Diagnostics
             ui.vertical(|ui| {
                 self.draw_simulation_run_output(ui);
                 ui.add_space(8.0);
@@ -104,21 +94,23 @@ impl NekoSpiceApp {
         });
     }
 
-    /// Workspace header with title, caption, and run button.
+    /// Workspace header with title, analysis summary, and run controls.
     fn draw_simulation_workspace_header(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
+        let palette = self.theme_palette();
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 ui.heading(self.text(UiText::SimulationSolver));
-                ui.label(StudioTheme::muted_for(
-                    mode,
-                    self.text(UiText::SimulationSolverCaption),
-                ));
+                // Show current analysis as a subtitle
+                let analysis_summary = format!(
+                    "{} {}",
+                    self.simulation_panel.directive_kind.to_string(),
+                    self.simulation_panel.analysis_params.to_body().trim()
+                );
+                ui.label(StudioTheme::muted_for(mode, analysis_summary.trim()));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                 let running = self.simulation_panel.active_task.is_some();
-
-                // Run button (or Cancel if running)
                 if running {
                     if ui
                         .button("Stop")
@@ -128,6 +120,13 @@ impl NekoSpiceApp {
                         self.simulation_panel.active_task = None;
                         self.status_message = Some("Simulation cancelled".to_string());
                     }
+                    // Show running indicator
+                    ui.label(StudioTheme::status_dot(palette.warning));
+                    ui.label(
+                        egui::RichText::new(self.text(UiText::Running))
+                            .color(palette.warning)
+                            .strong(),
+                    );
                 } else if ui
                     .add_enabled(
                         self.document.is_some(),
@@ -137,16 +136,14 @@ impl NekoSpiceApp {
                 {
                     self.run_simulation_from_panel();
                 }
-
                 ui.separator();
-
                 // Backend engine selector
                 egui::ComboBox::from_id_salt("sim_workspace_backend")
                     .selected_text(self.simulation_panel.backend.label())
                     .show_ui(ui, |ui| {
                         for &kind in &super::state::SimulationBackendKind::ALL {
                             let label = match self.locale() {
-                                crate::app::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
+                                StudioLocale::SimplifiedChinese => kind.label_zh(),
                                 _ => kind.label(),
                             };
                             ui.selectable_value(
@@ -160,10 +157,11 @@ impl NekoSpiceApp {
         });
     }
 
-    /// Four metric cards showing solver engine, status, netlist directives, and last run.
+    /// Four metric cards showing solver engine, status, analysis type, and last run.
     fn draw_simulation_solver_metrics(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let status = self.simulation_status_label();
+        let analysis_label = self.simulation_panel.directive_kind.to_string();
         ui.columns(4, |columns| {
             solver_metric_card(
                 &mut columns[0],
@@ -182,13 +180,15 @@ impl NekoSpiceApp {
             solver_metric_card(
                 &mut columns[2],
                 mode,
-                self.text(UiText::Netlist),
-                self.document
-                    .as_ref()
-                    .map(|document| document.simulation_directives().len().to_string())
-                    .unwrap_or_else(|| "0".to_string())
-                    .as_str(),
-                "directives",
+                "Analysis",
+                &analysis_label,
+                match self.simulation_panel.directive_kind {
+                    osl_kicad::KicadSimulationDirectiveKind::Tran => "time domain",
+                    osl_kicad::KicadSimulationDirectiveKind::Ac => "small signal",
+                    osl_kicad::KicadSimulationDirectiveKind::Dc => "sweep",
+                    osl_kicad::KicadSimulationDirectiveKind::Op => "operating point",
+                    _ => "",
+                },
             );
             solver_metric_card(
                 &mut columns[3],
@@ -200,7 +200,6 @@ impl NekoSpiceApp {
         });
     }
 
-    /// Returns the current simulation status label based on task and run state.
     fn simulation_status_label(&self) -> &'static str {
         if self.simulation_panel.active_task.is_some() {
             return self.text(UiText::Running);
@@ -217,7 +216,6 @@ impl NekoSpiceApp {
         }
     }
 
-    /// Returns a human-readable label for the last run duration.
     fn last_run_duration_label(&self) -> String {
         self.simulation_panel
             .last_run
