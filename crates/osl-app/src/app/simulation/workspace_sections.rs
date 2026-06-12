@@ -40,10 +40,27 @@ impl NekoSpiceApp {
     pub(crate) fn draw_simulation_netlist_preview(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(
-                mode,
-                self.text(UiText::NetlistPreview),
-            ));
+            ui.horizontal(|ui| {
+                ui.label(StudioTheme::section_title_for(
+                    mode,
+                    self.text(UiText::NetlistPreview),
+                ));
+                if ui.small_button("Export .cir").on_hover_text("Save netlist to file").clicked() {
+                    if let Some(document) = &self.document {
+                        let profile = self.build_simulation_profile();
+                        if let Ok(raw) = document.spice_netlist_preview() {
+                            let netlist = osl_sim::inject_profile_directives(&raw, &profile);
+                            let dialog = rfd::FileDialog::new()
+                                .add_filter("SPICE Netlist", &["cir", "sp", "net"])
+                                .set_file_name("schematic.cir");
+                            if let Some(path) = dialog.save_file() {
+                                let _ = std::fs::write(&path, &netlist);
+                                self.status_message = Some(format!("Netlist exported to {}", path.display()));
+                            }
+                        }
+                    }
+                }
+            });
             let Some(document) = &self.document else {
                 ui.label(StudioTheme::muted_for(
                     mode,
@@ -69,11 +86,7 @@ impl NekoSpiceApp {
                         .max_height(300.0)
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
-                            for (index, line) in netlist
-                                .lines()
-                                .take(NETLIST_CENTER_PREVIEW_LINES)
-                                .enumerate()
-                            {
+                            for (index, line) in netlist.lines().enumerate() {
                                 code_preview_line(ui, index + 1, line);
                             }
                         });

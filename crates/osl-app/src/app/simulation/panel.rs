@@ -10,6 +10,7 @@ use super::artifacts_panel::draw_simulation_artifacts_panel;
 use super::report_panel::draw_simulation_report_panel;
 use super::waveform_panel::draw_simulation_waveform_panel;
 use crate::app::status_strip::severity_color;
+use crate::app::theme::StudioTheme;
 use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
 use crate::waveform_summary::GuiWaveformSummaryState;
 use eframe::egui;
@@ -167,15 +168,8 @@ ui.horizontal(|ui| {
                         .max_height(220.0)
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
-                            for line in netlist.lines().take(NETLIST_PREVIEW_LINES) {
+                            for line in netlist.lines() {
                                 ui.monospace(line);
-                            }
-                            let hidden = netlist
-                                .lines()
-                                .count()
-                                .saturating_sub(NETLIST_PREVIEW_LINES);
-                            if hidden > 0 {
-                                ui.label(format!("{hidden} more lines"));
                             }
                         });
                 }
@@ -361,6 +355,25 @@ ui.horizontal(|ui| {
     pub(in crate::app) fn draw_simulation_run_status(&mut self, ui: &mut egui::Ui) {
         if self.simulation_panel.active_task.is_some() {
             ui.label(self.text(UiText::Running));
+        }
+        // Show ngspice/stderr log if available
+        if let Some(run) = &self.simulation_panel.last_run {
+            let log_path = run.output_dir.join("ngspice.log");
+            let fallback_log = run.output_dir.join("xyce.log");
+            let actual_log = if log_path.is_file() { log_path } else { fallback_log };
+            if actual_log.is_file() {
+                if let Ok(log_content) = std::fs::read_to_string(&actual_log) {
+                    ui.separator();
+                    ui.label(StudioTheme::muted_for(self.theme_mode(), "Simulation Log"));
+                    egui::ScrollArea::vertical()
+                        .id_salt("ngspice_log_viewer")
+                        .max_height(100.0)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.monospace(&log_content);
+                        });
+                }
+            }
         }
         if let Some(error) = &self.simulation_panel.last_error {
             ui.colored_label(

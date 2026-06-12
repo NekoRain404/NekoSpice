@@ -126,6 +126,8 @@ impl NekoSpiceApp {
             self.status_message = Some("No editable schematic loaded".to_string());
             return false;
         };
+        // Snapshot before edit for undo support
+        self.history.push(document.snapshot());
 
         match edit(document) {
             Ok(summary) => {
@@ -135,6 +137,7 @@ impl NekoSpiceApp {
                 self.scene = Some(scene);
                 self.sync_property_editor_from_selection();
                 self.load_error = None;
+                self.history.clear_redo();
                 self.status_message =
                     Some(format!("Edited {} {}", summary.operation, summary.target));
                 true
