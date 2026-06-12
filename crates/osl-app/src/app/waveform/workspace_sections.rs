@@ -3,7 +3,7 @@ use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use super::preview::{draw_stacked_waveform_preview, format_compact_f64};
 use super::freq_domain_preview::{draw_fft_magnitude_plot, draw_bode_plot, draw_noise_plot};
-use super::preview::draw_interactive_waveform_plot;
+use super::interactive::draw_interactive_waveform_plot;
 use super::workspace::WaveformAnalysisTab;
 use super::workspace_widgets::{
     MeasurementTableLabels, cursor_row, measurement_table, run_stat_row, trace_chip,
