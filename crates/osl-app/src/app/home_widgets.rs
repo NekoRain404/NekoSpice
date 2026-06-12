@@ -153,7 +153,7 @@ pub(super) fn recommendation_row(
         ui.label(StudioTheme::accent_for(mode, "REC"));
         ui.label(title);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.small_button(action);
+            let _ = ui.small_button(action);
         });
     });
     ui.separator();

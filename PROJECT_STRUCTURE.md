@@ -1,498 +1,48 @@
-# NekoSpice Project Structure
+# NekoSpice 项目结构
 
-> Complete file tree with descriptions. Last updated: 2026-06-12.
-
-NekoSpice is a Rust-native SPICE simulation platform with KiCad-compatible schematic editing,
-ngspice/Xyce simulation backends, and a hardware-accelerated GUI (egui + wgpu).
+> NekoSpice 是一个基于 Rust 的 SPICE 仿真平台，集成 KiCad 原理图编辑、
+> ngspice/Xyce 仿真后端，以及硬件加速 GUI（egui + wgpu）。
 
 ---
 
-## Root
+## 根目录
 
 ```
 NekoSpice/
-├── Cargo.toml                # Workspace root: 10 crates, Rust 2024 edition
-├── Cargo.lock                # Dependency lock file
-├── README.md                 # Project overview, CLI usage, quick start
-├── PROJECT_STRUCTURE.md      # This file
-├── .gitignore                # Git ignore rules (target/, runs/, reports/, etc.)
-│
-├── crates/                   # All Rust source code (10 workspace crates)
-├── docs/                     # Documentation and UI reference images
-├── examples/                 # Test fixtures and demo projects
-├── benchmarks/               # Benchmark configurations
-├── runs/                     # Simulation run outputs (gitignored)
-└── kicad-source-mirror-master/  # KiCad source reference (gitignored)
+├── Cargo.toml              # 工作区根：10 个 crate，Rust 2024 edition
+├── Cargo.lock              # 依赖锁定文件
+├── README.md               # 项目概览、CLI 用法、快速开始
+├── PROJECT_STRUCTURE.md    # 本文件
+├── .gitignore              # Git 忽略规则
+├── crates/                 # 所有 Rust 源代码（10 个工作区 crate）
+├── docs/                   # 文档和 UI 参考图片
+├── examples/               # 测试用例和演示项目
+├── benchmarks/             # 基准测试配置
+├── runs/                   # 仿真运行输出（已 gitignore）
+└── kicad-source-mirror-master/  # KiCad 源码参考（已 gitignore）
 ```
 
 ---
 
-## crates/ — Workspace Crates
+## crates/ — 工作区 Crate
 
-### Architecture Layers
+### 架构分层
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  osl-app (GUI)        osl-cli (CLI binary)      │  ← User-facing
+│  osl-app (GUI)        osl-cli (CLI 二进制)       │  ← 用户界面层
 ├─────────────────────────────────────────────────┤
-│  osl-render   osl-report   osl-waveform         │  ← Output & visualization
+│  osl-render   osl-report   osl-waveform          │  ← 输出与可视化层
 ├─────────────────────────────────────────────────┤
-│  osl-sim      osl-netlist   osl-model            │  ← Simulation & import
+│  osl-sim      osl-netlist   osl-model             │  ← 仿真与导入层
 ├─────────────────────────────────────────────────┤
-│  osl-kicad                                         │  ← KiCad IR & operations
+│  osl-kicad                                          │  ← KiCad IR 与操作层
 ├─────────────────────────────────────────────────┤
-│  osl-core                                         │  ← Shared foundation
+│  osl-core                                          │  ← 共享基础层
 └─────────────────────────────────────────────────┘
 ```
 
-### osl-core — Shared Foundation
-
-```
-crates/osl-core/
-├── Cargo.toml
-├── README.md
-└── src/
-    └── lib.rs              # Common types, error handling, utilities
-```
-
-Zero external domain dependencies. Every other `osl-*` crate depends on it.
-
----
-
-### osl-kicad — KiCad IR & Operations
-
-```
-crates/osl-kicad/
-├── Cargo.toml
-├── README.md
-├── docs/
-│   ├── file-split.md
-│   └── schematic-impl-split.md
-├── tests/
-│   └── kicad_demo_smoke.rs     # External KiCad demo interoperability test
-└── src/
-    ├── lib.rs                   # Crate root, public API re-exports
-    │
-    ├── sexpr.rs                 # S-expression parser (KiCad file format)
-    ├── schematic_io.rs          # Read/write .kicad_sch files
-    ├── symbols_parse_impl.rs    # Parse .kicad_sym symbol libraries
-    ├── symbol_library.rs        # Symbol library index and lookup
-    ├── library_index.rs         # sym-lib-table parsing
-    ├── project.rs               # .kicad_pro project file parsing
-    │
-    ├── canvas.rs                # KicadCanvasScene: scene builder from schematic IR
-    ├── canvas_items.rs          # Canvas item types (Symbol/Sheet/Graphic/Wire/...)
-    ├── canvas_items_graphic_impl.rs   # Graphic element specifics
-    ├── canvas_items_leaf_impl.rs      # Wire/label/junction/no-connect specifics
-    ├── canvas_items_bounds_impl.rs    # Bounding box computation
-    ├── canvas_hit.rs            # Hit testing: point-in-item detection
-    │
-    ├── edit.rs                  # KicadSchematicEdit: edit operations enum
-    ├── schematic_edit_impl.rs   # Edit operation execution
-    ├── schematic_edit_symbol_ops_impl.rs   # Symbol placement/move/delete
-    ├── schematic_edit_wiring_ops_impl.rs   # Wire/bus/label operations
-    ├── schematic_util_impl.rs   # Utility operations on schematic IR
-    ├── schematic_check_impl.rs  # DRC/ERC diagnostics
-    ├── schematic_library_impl.rs # Library operations
-    ├── schematic_summary.rs     # Summary statistics for GUI display
-    │
-    ├── geometry.rs              # Bounding boxes, hit testing, point-in-polygon
-    ├── transform.rs             # Coordinate transforms (mirror/rotate)
-    ├── coordinates.rs           # KiCad coordinate system helpers
-    │
-    ├── graphics.rs              # Graphic elements (polyline/bezier/rect/circle/arc)
-    ├── symbols.rs               # Symbol definition types
-    ├── pins.rs                  # Pin definitions and shapes
-    ├── labels.rs                # Net labels (local/global/hierarchical)
-    ├── text.rs                  # Text element types
-    ├── sheet.rs                 # Hierarchical sheet types
-    ├── wiring.rs                # Wire and bus types
-    ├── markers.rs               # Junction and no-connect markers
-    ├── group.rs                 # Group types
-    ├── table.rs                 # Table/spreadsheet types
-    ├── image.rs                 # Image embedding types
-    ├── property.rs              # Property types
-    ├── instances.rs             # Symbol instance data
-    ├── metadata.rs              # Title block and metadata
-    ├── style.rs                 # Stroke and fill styles
-    │
-    ├── connectivity.rs          # Net connectivity analysis
-    ├── spice_export.rs          # Generate SPICE netlist from schematic
-    ├── simulation.rs            # Simulation directive extraction
-    ├── diagnostics.rs           # Diagnostic message types
-    ├── json.rs                  # JSON serialization helpers
-    ├── util.rs                  # Internal utility functions
-    └── tests.rs                 # Integration tests
-```
-
----
-
-### osl-sim — Simulation Backends
-
-```
-crates/osl-sim/
-├── Cargo.toml
-├── README.md
-└── src/
-    ├── lib.rs              # NgspiceCliBackend, XyceCliBackend, SimulatorBackend trait
-    └── artifacts.rs        # Run artifact collection (.raw, .csv, summaries)
-```
-
----
-
-### osl-netlist — Netlist Parsing & Import
-
-```
-crates/osl-netlist/
-├── Cargo.toml
-├── README.md
-├── docs/
-│   └── file-split.md
-├── tests/
-│   └── kicad_demo_import_smoke.rs   # External KiCad demo import test
-└── src/
-    ├── lib.rs                   # Crate root
-    ├── kicad_import.rs          # KiCad netlist import
-    ├── ltspice_import.rs        # LTspice schematic import
-    ├── netlist_parse_impl.rs    # SPICE netlist parser
-    ├── netlist_suggest_impl.rs  # Signal suggestion engine
-    ├── ltspice_builtins_impl.rs # LTspice built-in component mapping
-    └── ltspice_types_impl.rs    # LTspice type definitions
-```
-
----
-
-### osl-model — SPICE Model Checking
-
-```
-crates/osl-model/
-├── Cargo.toml
-├── README.md
-└── src/
-    ├── lib.rs                   # Crate root
-    └── model_check_impl.rs      # .subckt/.model validation, pin mapping, dialect risks
-```
-
----
-
-### osl-waveform — Waveform Data Parser
-
-```
-crates/osl-waveform/
-├── Cargo.toml
-├── README.md
-├── docs/
-│   └── file-split.md
-└── src/
-    ├── lib.rs                   # Crate root
-    └── raw_parser_impl.rs       # .raw file parser (binary + ASCII)
-```
-
----
-
-### osl-render — SVG Renderer
-
-```
-crates/osl-render/
-├── Cargo.toml
-├── README.md
-├── docs/
-│   └── file-split.md
-└── src/
-    ├── lib.rs                   # Crate root
-    ├── svg_render_impl.rs       # Main SVG rendering pipeline
-    └── svg_helpers_impl.rs      # SVG helper utilities
-```
-
----
-
-### osl-report — Report Generation
-
-```
-crates/osl-report/
-├── Cargo.toml
-├── README.md
-└── src/
-    ├── lib.rs                   # Crate root
-    ├── format.rs                # Report format types
-    ├── json.rs                  # JSON report writer
-    ├── html.rs                  # HTML report writer
-    ├── junit.rs                 # JUnit XML report writer
-    ├── markdown.rs              # Markdown report writer
-    ├── bundle.rs                # Multi-format bundle writer
-    └── directory.rs             # Directory-based report output
-```
-
----
-
-### osl-cli — Command-Line Interface
-
-```
-crates/osl-cli/
-├── Cargo.toml
-├── README.md
-├── docs/
-│   └── file-split.md
-└── src/
-    ├── main.rs                  # Entry point, CLI argument parsing
-    ├── kicad_edit.rs            # KiCad edit command implementation
-    ├── cli_kicad.rs             # KiCad subcommand handlers
-    └── cli_verify.rs            # Verify subcommand handler
-```
-
----
-
-### osl-app — GUI Application
-
-```
-crates/osl-app/
-├── Cargo.toml
-├── README.md
-├── docs/
-│   ├── crate-structure.md
-│   ├── ui-improvements.md
-│   ├── schematic-bottom-dock.md
-│   ├── simulation-profile-editor.md
-│   └── context-menu-tool-palette.md
-└── src/
-    ├── lib.rs                       # Crate root, DEFAULT_SCHEMATIC constants
-    ├── main.rs                      # Entry point (native window launch)
-    ├── test_support.rs              # Test helpers
-    │
-    ├── app.rs                       # NekoSpiceApp struct, Default impl, core actions
-    ├── app/
-    │   ├── README.md                # App module guide
-    │   │
-    │   │── [Layout & Panels]
-    │   ├── panels.rs                # Root layout: top/bottom bars, nav, context, workspace
-    │   ├── runtime.rs               # eframe::App impl, native window launch
-    │   ├── workspace_panel.rs       # Workspace panel container
-    │   ├── center_workspace.rs      # Center workspace area
-    │   ├── status_strip.rs          # Status bar at bottom
-    │   ├── studio_toolbar.rs        # Main toolbar
-    │   ├── project_panel.rs         # Project file tree panel
-    │   ├── diagnostics_panel.rs     # Diagnostics/errors panel
-    │   │
-    │   │── [Navigation & Theme]
-    │   ├── navigation.rs            # StudioWorkspace enum
-    │   ├── navigation_panel.rs      # Left sidebar workspace switcher
-    │   ├── theme.rs                 # StudioTheme: Midnight/Graphite/Light palettes
-    │   │
-    │   │── [Localization]
-    │   ├── localization.rs          # UiText enum for i18n (en/zh_hans)
-    │   ├── localization_en_impl.rs  # English translations
-    │   ├── localization_zh_impl.rs  # Chinese translations
-    │   │
-    │   │── [Schematic Canvas]
-    │   ├── canvas_panel.rs          # Main canvas: viewport, mouse interaction, rendering
-    │   ├── canvas_shortcuts.rs      # Keyboard shortcuts (V/W/L/B/S/J/Q/R/F/Del/Esc)
-    │   ├── canvas_context_menu.rs   # Right-click context menu
-    │   ├── tool_palette.rs          # Vertical tool palette (left of canvas)
-    │   ├── shortcuts_overlay.rs     # Keyboard shortcut help overlay (? key)
-    │   │
-    │   │── [Schematic Workspace]
-    │   ├── schematic_workspace.rs          # Schematic view: toolbar, tabs, canvas, inspector
-    │   ├── schematic_workspace_widgets.rs  # Toolbar buttons, document tabs
-    │   ├── schematic_bottom_dock.rs        # Bottom dock: Waveforms/FFT/Bode/Console/Netlist/ERC
-    │   ├── schematic_inspector_panel.rs    # Right-side inspector panel
-    │   ├── schematic_inspector_sections.rs # Inspector section layout
-    │   ├── schematic_inspector_simulator.rs # Simulator config in inspector
-    │   ├── schematic_inspector_widgets.rs  # Inspector widget helpers
-    │   ├── schematic_review_panel.rs       # Schematic review/ERC panel
-    │   │
-    │   │── [Schematic Tools State Machine]
-    │   ├── schematic_tools/
-    │   │   ├── README.md            # Tools module guide
-    │   │   ├── mod.rs               # Module root
-    │   │   ├── state.rs             # SchematicTool enum and state
-    │   │   ├── controls.rs          # Tool activation and switching
-    │   │   ├── editing.rs           # Wire/bus/label/sheet creation
-    │   │   └── preview.rs           # Tool preview rendering
-    │   │
-    │   │── [Selection & Placement]
-    │   ├── selection_properties.rs  # Selected item property editor
-    │   ├── symbol_placement_controls.rs # Symbol placement UI
-    │   ├── placement.rs            # Placement state management
-    │   ├── history.rs              # Undo/redo history
-    │   ├── file_dialog.rs          # File open/save dialogs
-    │   ├── preferences.rs          # User preferences
-    │   ├── widgets.rs              # Shared UI widgets
-    │   │
-    │   │── [Home Workspace]
-    │   ├── home_dashboard.rs       # Home workspace dashboard
-    │   ├── home_command_center.rs  # Quick-action command center
-    │   ├── home_insights_panel.rs  # Project insights panel
-    │   ├── home_project_context.rs # Project context display
-    │   ├── home_sections.rs        # Home section layout
-    │   └── home_widgets.rs         # Home widget helpers
-    │   │
-    │   │── [Library Workspace]
-    │   ├── library_workspace.rs    # Symbol library browser
-    │   ├── library_model_browser.rs    # Model file browser
-    │   ├── library_model_validation.rs # Model validation UI
-    │   ├── library_preview.rs      # Symbol preview renderer
-    │   ├── library_sections.rs     # Library section layout
-    │   ├── library_widgets.rs      # Library widget helpers
-    │   ├── library_data.rs         # Library data management
-    │   └── library_inspector.rs    # Library inspector panel
-    │   │
-    │   │── [Simulation Workspace]
-    │   ├── simulation_workspace.rs   # Simulation workspace view
-    │   ├── simulation_workspace_sections.rs  # Section layout
-    │   ├── simulation_workspace_widgets.rs   # Widget helpers
-    │   ├── simulation_panel.rs       # Simulation control panel
-    │   ├── simulation_profile_editor.rs      # Profile editor
-    │   ├── simulation_profile_editor_options.rs   # Profile options
-    │   ├── simulation_profile_editor_sections.rs  # Profile sections
-    │   ├── simulation_profile_editor_widgets.rs   # Profile widgets
-    │   ├── simulation_artifacts_panel.rs  # Artifacts display
-    │   ├── simulation_waveform_panel.rs   # Waveform display
-    │   └── simulation_report_panel.rs     # Report display
-    │   │
-    │   │── [Waveform Workspace]
-    │   ├── waveform_workspace.rs   # Waveform viewer workspace
-    │   ├── waveform_workspace_sections.rs  # Section layout
-    │   ├── waveform_workspace_widgets.rs   # Widget helpers
-    │   ├── waveform_preview.rs     # Waveform preview renderer
-    │   └── waveform_preview_primitives.rs  # Preview drawing primitives
-    │   │
-    │   │── [Reports Workspace]
-    │   ├── reports_workspace.rs    # Reports viewer workspace
-    │   ├── reports_workspace_sections.rs   # Section layout
-    │   ├── reports_workspace_widgets.rs    # Widget helpers
-    │   ├── reports_workspace_state.rs      # State management
-    │   ├── reports_workspace_measurements.rs # Measurement display
-    │   └── reports_workspace_preview.rs    # Report preview
-    │   │
-    │   │── [Review Workspace]
-    │   ├── review_workspace.rs     # Design review workspace
-    │   ├── review_workspace_state.rs    # State management
-    │   ├── review_workspace_widgets.rs  # Widget helpers
-    │   └── review_checklist.rs     # Review checklist items
-    │   │
-    │   │── [Optimization Workspace]
-    │   ├── optimization_workspace.rs         # Optimization workspace
-    │   ├── optimization_workspace_state.rs   # State management
-    │   ├── optimization_workspace_sections.rs # Section layout
-    │   └── optimization_workspace_widgets.rs  # Widget helpers
-    │   │
-    │   └── [Settings Workspace]
-    │       ├── settings_workspace.rs     # Settings/preferences workspace
-    │       └── settings_theme_preview.rs # Theme preview
-    │
-    ├── canvas.rs                    # Canvas module root
-    ├── canvas/
-    │   ├── README.md                # Canvas module guide
-    │   ├── colors.rs                # Theme-aware color definitions
-    │   └── primitives/              # Canvas drawing primitives
-    │       ├── mod.rs               # Primitive module root
-    │       ├── grid.rs              # Grid rendering
-    │       ├── sheet.rs             # Sheet boundary rendering
-    │       ├── symbol.rs            # Symbol rendering
-    │       └── text.rs              # Text rendering
-    │
-    ├── simulation.rs                # Simulation spawn helpers (ngspice + Xyce)
-    ├── simulation_run_loader.rs     # Run output loader for GUI
-    ├── waveform_summary.rs          # Waveform summary for GUI
-    ├── report_summary.rs            # Report summary for GUI
-    └── placement_config.rs          # Placement configuration
-```
-
----
-
-## docs/ — Documentation
-
-```
-docs/
-├── README.md                   # Documentation index
-├── dev.md                      # Developer setup and build instructions
-├── development-plan.md         # Architecture overview and feature roadmap
-├── three-day-sprint.md         # Initial sprint planning notes
-└── ui/                         # UI design reference images (gitignored)
-    ├── ui-ref-01.png ... ui-ref-10.png
-```
-
----
-
-## examples/ — Test Fixtures & Demos
-
-```
-examples/
-├── cm5_minima/                 # CM5 Minima demo board (default GUI schematic)
-│   ├── CM5.kicad_sch
-│   ├── CM5IO.kicad_sym
-│   └── sym-lib-table
-├── kicad_schematic/            # RC filter test fixture (unit tests)
-│   ├── rc.kicad_sch
-│   ├── neko_spice.kicad_sym
-│   └── sym-lib-table
-├── kicad_hierarchical/         # Multi-sheet hierarchical design
-│   ├── kicad_hierarchical.kicad_pro
-│   ├── kicad_hierarchical.kicad_sch
-│   ├── gain_stage.kicad_sch
-│   └── sym-lib-table
-├── kicad_project_schematic/    # KiCad project with schematic
-│   ├── kicad_project_schematic.kicad_pro
-│   ├── kicad_project_schematic.kicad_sch
-│   └── sym-lib-table
-├── kicad_project/              # Full KiCad project with .cir output
-│   ├── kicad_project.kicad_pro
-│   ├── kicad_project.cir
-│   └── models/
-├── kicad_import/               # KiCad netlist import examples
-│   ├── kicad_rc.cir
-│   ├── kicad_diode_include.cir
-│   └── models/
-├── ltspice_import/             # LTspice schematic import examples
-│   ├── ltspice_rc.asc
-│   ├── ltspice_bjt.asc
-│   ├── ltspice_subckt.asc
-│   ├── ltspice_sym_search.asc
-│   ├── ltspice_vcvs.asc
-│   ├── gain_block.asy
-│   ├── gain_block.lib
-│   └── sym/
-├── rc_filter/                  # Simple RC filter .cir
-│   └── rc.cir
-├── rc_sweep/                   # RC sweep analysis .cir
-│   └── rc_sweep.cir
-├── rlc_resonance/              # RLC resonance .cir
-│   └── rlc.cir
-├── diode_rectifier/            # Diode rectifier .cir
-│   └── rectifier.cir
-├── pin_mapping/                # Op-amp pin mapping test cases
-│   ├── good_opamp.lib
-│   ├── good_opamp.asy
-│   └── bad_opamp.asy
-├── vendor_model_issues/        # SPICE model validation edge cases
-│   └── bad_vendor_model.lib
-├── basic_validation.osl.yaml   # Verification plan example
-├── failing_validation.osl.yaml # Expected-failure verification plan
-└── structured_validation.osl.yaml # Structured verification plan
-```
-
----
-
-## benchmarks/
-
-```
-benchmarks/
-└── basic/
-    └── basic.osl.yaml          # Basic benchmark configuration
-```
-
----
-
-## runs/ (gitignored)
-
-```
-runs/
-└── gui/                        # GUI simulation run outputs (auto-generated)
-```
-
----
-
-## Dependency Graph
+### 依赖关系
 
 ```
 osl-app ──────┬── osl-kicad ──── osl-core
@@ -508,4 +58,420 @@ osl-cli ──────┬── osl-kicad
               ├── osl-render
               ├── osl-waveform
               └── osl-report
+```
+
+---
+
+### osl-core — 共享基础
+
+```
+crates/osl-core/
+├── Cargo.toml
+├── README.md
+└── src/
+    └── lib.rs              # 公共类型、错误处理、工具函数
+```
+
+零外部域依赖。所有其他 `osl-*` crate 都依赖它。
+
+---
+
+### osl-kicad — KiCad IR 与操作
+
+```
+crates/osl-kicad/
+├── Cargo.toml
+├── README.md
+├── docs/
+│   ├── file-split.md
+│   └── schematic-impl-split.md
+├── tests/
+│   └── kicad_demo_smoke.rs        # 外部 KiCad 演示互操作测试
+└── src/
+    ├── lib.rs                      # Crate 根，公共 API 导出
+    │
+    ├── [文件解析]
+    ├── sexpr.rs                    # S-expression 解析器
+    ├── schematic_io.rs             # 读写 .kicad_sch 文件
+    ├── symbols_parse_impl.rs       # 解析 .kicad_sym 符号库
+    ├── symbol_library.rs           # 符号库索引和查找
+    ├── library_index.rs            # sym-lib-table 解析
+    ├── project.rs                  # .kicad_pro 项目文件解析
+    │
+    ├── [画布场景]
+    ├── canvas.rs                   # KicadCanvasScene: 从原理图 IR 构建场景
+    ├── canvas_items.rs             # 画布元素类型
+    ├── canvas_items_graphic_impl.rs  # 图形元素
+    ├── canvas_items_leaf_impl.rs     # 导线/标签/连接点/无连接
+    ├── canvas_items_bounds_impl.rs   # 包围盒计算
+    ├── canvas_hit.rs               # 碰撞检测
+    │
+    ├── [编辑操作]
+    ├── edit.rs                     # KicadSchematicEdit: 编辑操作枚举
+    ├── schematic_edit_impl.rs      # 编辑操作执行
+    ├── schematic_edit_symbol_ops_impl.rs  # 符号放置/移动/删除
+    ├── schematic_edit_wiring_ops_impl.rs  # 导线/总线/标签操作
+    ├── schematic_util_impl.rs      # 原理图 IR 工具操作
+    ├── schematic_check_impl.rs     # DRC/ERC 诊断
+    ├── schematic_library_impl.rs   # 库操作
+    ├── schematic_summary.rs        # GUI 显示用汇总统计
+    │
+    ├── [坐标与变换]
+    ├── geometry.rs                 # 包围盒、碰撞检测、点在多边形内
+    ├── transform.rs                # 坐标变换（镜像/旋转）
+    ├── coordinates.rs              # KiCad 坐标系辅助
+    │
+    ├── [数据类型]
+    ├── graphics.rs                 # 图形元素类型
+    ├── symbols.rs                  # 符号定义类型
+    ├── pins.rs                     # 引脚定义和形状
+    ├── labels.rs                   # 网络标签
+    ├── text.rs                     # 文本元素类型
+    ├── sheet.rs                    # 层次化图纸类型
+    ├── wiring.rs                   # 导线和总线类型
+    ├── markers.rs                  # 连接点和无连接标记
+    ├── group.rs, table.rs, image.rs, property.rs, instances.rs, metadata.rs, style.rs
+    │
+    ├── [高级功能]
+    ├── connectivity.rs             # 网络连通性分析
+    ├── spice_export.rs             # 从原理图生成 SPICE 网表
+    ├── simulation.rs               # 仿真指令提取
+    ├── diagnostics.rs              # 诊断消息类型
+    ├── json.rs                     # JSON 序列化辅助
+    └── util.rs                     # 内部工具函数
+```
+
+---
+
+### osl-sim — 仿真后端
+
+```
+crates/osl-sim/
+├── Cargo.toml
+├── README.md
+└── src/
+    ├── lib.rs              # NgspiceCliBackend, XyceCliBackend, SimulatorBackend trait
+    └── artifacts.rs        # 运行产物收集（.raw, .csv, 汇总）
+```
+
+---
+
+### osl-netlist — 网表解析与导入
+
+```
+crates/osl-netlist/
+├── Cargo.toml
+├── README.md
+├── docs/
+│   └── file-split.md
+├── tests/
+│   └── kicad_demo_import_smoke.rs  # 外部 KiCad 演示导入测试
+└── src/
+    ├── lib.rs                     # Crate 根
+    ├── kicad_import.rs            # KiCad 网表导入
+    ├── ltspice_import.rs          # LTspice 原理图导入
+    ├── netlist_parse_impl.rs      # SPICE 网表解析器
+    ├── netlist_suggest_impl.rs    # 信号建议引擎
+    ├── ltspice_builtins_impl.rs   # LTspice 内建组件映射
+    └── ltspice_types_impl.rs      # LTspice 类型定义
+```
+
+---
+
+### osl-model — SPICE 模型检查
+
+```
+crates/osl-model/
+├── Cargo.toml
+├── README.md
+└── src/
+    ├── lib.rs                     # Crate 根
+    └── model_check_impl.rs        # .subckt/.model 验证、引脚映射、方言风险检测
+```
+
+---
+
+### osl-waveform — 波形数据解析
+
+```
+crates/osl-waveform/
+├── Cargo.toml
+├── README.md
+├── docs/
+│   └── file-split.md
+└── src/
+    ├── lib.rs                     # Crate 根
+    └── raw_parser_impl.rs         # .raw 文件解析器（二进制 + ASCII）
+```
+
+---
+
+### osl-render — SVG 渲染器
+
+```
+crates/osl-render/
+├── Cargo.toml
+├── README.md
+├── docs/
+│   └── file-split.md
+└── src/
+    ├── lib.rs                     # Crate 根
+    ├── svg_render_impl.rs         # 主 SVG 渲染管线
+    └── svg_helpers_impl.rs        # SVG 辅助工具
+```
+
+---
+
+### osl-report — 报告生成
+
+```
+crates/osl-report/
+├── Cargo.toml
+├── README.md
+└── src/
+    ├── lib.rs                     # Crate 根
+    ├── format.rs                  # 报告格式类型
+    ├── json.rs                    # JSON 报告
+    ├── html.rs                    # HTML 报告
+    ├── junit.rs                   # JUnit XML 报告
+    ├── markdown.rs                # Markdown 报告
+    ├── bundle.rs                  # 多格式打包
+    └── directory.rs               # 目录级报告输出
+```
+
+---
+
+### osl-cli — 命令行界面
+
+```
+crates/osl-cli/
+├── Cargo.toml
+├── README.md
+├── docs/
+│   └── file-split.md
+└── src/
+    ├── main.rs                    # 入口，CLI 参数解析
+    ├── kicad_edit.rs              # KiCad 编辑命令实现
+    ├── cli_kicad.rs               # KiCad 子命令处理
+    └── cli_verify.rs              # Verify 子命令处理
+```
+
+---
+
+### osl-app — GUI 应用程序（104 个 .rs 文件）
+
+```
+crates/osl-app/
+├── Cargo.toml
+├── README.md
+├── docs/                           # Crate 内部架构文档
+│   ├── crate-structure.md
+│   ├── ui-improvements.md
+│   ├── schematic-bottom-dock.md
+│   ├── simulation-profile-editor.md
+│   └── context-menu-tool-palette.md
+│
+└── src/
+    ├── main.rs                     # 入口点（原生窗口启动）
+    ├── lib.rs                      # Crate 根
+    ├── document.rs                 # KicadGuiDocument: 文档加载/保存/编辑
+    ├── library.rs                  # KicadGuiLibrary: 符号库加载/查找
+    ├── viewport.rs                 # CanvasViewport: 缩放/平移/坐标变换
+    ├── simulation.rs               # 仿真任务分发（ngspice + Xyce）
+    ├── simulation_run_loader.rs    # 运行输出加载器
+    ├── waveform_summary.rs         # 波形汇总数据
+    ├── report_summary.rs           # 报告汇总数据
+    ├── placement_config.rs         # 符号放置配置
+    ├── test_support.rs             # 测试辅助
+    │
+    ├── canvas.rs                   # 画布渲染管线
+    ├── canvas/
+    │   ├── colors.rs               # 主题感知颜色定义
+    │   └── primitives/             # 画布绘制图元
+    │       ├── grid.rs             # 网格渲染
+    │       ├── sheet.rs            # 图纸边界渲染
+    │       ├── symbol.rs           # 符号渲染
+    │       └── text.rs             # 文本渲染
+    │
+    ├── app.rs                      # NekoSpiceApp 主结构体
+    └── app/
+        │
+        │── [布局与面板]
+        ├── panels.rs               # 根布局：顶/底栏、导航、工作区
+        ├── runtime.rs              # eframe::App 实现
+        ├── workspace_panel.rs      # 左/右面板调度
+        ├── center_workspace.rs     # 中央工作区调度
+        ├── status_strip.rs         # 底部状态栏
+        ├── studio_toolbar.rs       # 顶部工具栏
+        ├── project_panel.rs        # 项目侧边栏
+        ├── diagnostics_panel.rs    # 诊断面板
+        │
+        │── [导航与主题]
+        ├── navigation.rs           # StudioWorkspace 枚举
+        ├── navigation_panel.rs     # 左侧导航栏
+        ├── theme.rs                # 主题系统（Midnight/Graphite/Light）
+        │
+        │── [国际化]
+        ├── localization.rs         # UiText 枚举
+        ├── localization_en_impl.rs # 英文翻译
+        ├── localization_zh_impl.rs # 中文翻译
+        │
+        │── [画布交互]
+        ├── canvas_panel.rs         # 主画布：视口、鼠标交互、渲染
+        ├── canvas_shortcuts.rs     # 键盘快捷键（V/W/L/B/S/J/Q/R/F/Del/Esc/F5/Ctrl+S）
+        ├── canvas_context_menu.rs  # 右键上下文菜单
+        ├── tool_palette.rs         # 垂直工具面板
+        ├── shortcuts_overlay.rs    # 快捷键帮助叠加层
+        │
+        │── [原理图工作区]
+        ├── schematic_workspace.rs           # 原理图视图主布局
+        ├── schematic_workspace_widgets.rs   # 工具栏按钮、文档标签
+        ├── schematic_bottom_dock.rs         # 底部停靠面板（波形/FFT/Bode/控制台/网表/ERC）
+        ├── schematic_inspector_panel.rs     # 右侧检查面板
+        ├── schematic_inspector_sections.rs  # 检查面板分区
+        ├── schematic_inspector_simulator.rs # 仿真器配置
+        ├── schematic_inspector_widgets.rs   # 检查面板组件
+        ├── schematic_review_panel.rs        # 原理图审查面板
+        │
+        │── [绘图工具状态机]
+        ├── schematic_tools/
+        │   ├── state.rs             # SchematicTool 枚举和状态
+        │   ├── controls.rs          # 工具激活和切换
+        │   ├── editing.rs           # 导线/总线/标签/图纸创建
+        │   └── preview.rs           # 工具预览渲染
+        │
+        │── [选择与放置]
+        ├── selection_properties.rs  # 选中项属性编辑器
+        ├── symbol_placement_controls.rs  # 符号放置 UI
+        ├── placement.rs             # 放置状态管理
+        ├── history.rs               # 撤销/重做历史
+        ├── file_dialog.rs           # 文件打开/保存对话框
+        ├── preferences.rs           # 用户偏好
+        ├── widgets.rs               # 共享 UI 组件
+        │
+        │── [首页工作区]
+        ├── home_dashboard.rs        # 首页仪表板
+        ├── home_command_center.rs   # 快速操作中心
+        ├── home_insights_panel.rs   # AI 助手 + 洞察 + 快捷方式
+        ├── home_project_context.rs  # 项目上下文
+        ├── home_sections.rs         # 首页分区布局
+        └── home_widgets.rs          # 首页组件
+        │
+        │── [库工作区]
+        ├── library_workspace.rs     # 符号库浏览器
+        ├── library_model_browser.rs # 模型文件浏览器
+        ├── library_model_validation.rs  # 模型验证
+        ├── library_preview.rs       # 符号预览
+        ├── library_sections.rs      # 库分区布局
+        ├── library_widgets.rs       # 库组件
+        ├── library_data.rs          # 库数据管理
+        └── library_inspector.rs     # 库检查面板
+        │
+        │── [仿真工作区]
+        ├── simulation_workspace.rs         # 仿真工作区视图
+        ├── simulation_workspace_sections.rs # 分区布局
+        ├── simulation_workspace_widgets.rs  # 组件
+        ├── simulation_panel.rs             # 仿真控制面板（含后端选择器）
+        ├── simulation_profile_editor.rs    # 配置编辑器
+        ├── simulation_profile_editor_*.rs  # 配置编辑器子模块
+        ├── simulation_artifacts_panel.rs   # 产物面板
+        ├── simulation_waveform_panel.rs    # 波形面板
+        └── simulation_report_panel.rs      # 报告面板
+        │
+        │── [波形工作区]
+        ├── waveform_workspace.rs            # 波形查看器
+        ├── waveform_workspace_sections.rs   # 分区布局
+        ├── waveform_workspace_widgets.rs    # 组件
+        ├── waveform_preview.rs              # 波形预览渲染
+        └── waveform_preview_primitives.rs   # 预览绘制图元
+        │
+        │── [报告工作区]
+        ├── reports_workspace.rs             # 报告查看器
+        ├── reports_workspace_sections.rs    # 分区布局（含导出按钮）
+        ├── reports_workspace_widgets.rs     # 组件
+        ├── reports_workspace_state.rs       # 状态管理
+        ├── reports_workspace_measurements.rs # 测量显示
+        └── reports_workspace_preview.rs     # 报告预览
+        │
+        │── [审查工作区]
+        ├── review_workspace.rs              # 设计审查
+        ├── review_workspace_state.rs        # 状态管理
+        ├── review_workspace_widgets.rs      # 组件
+        └── review_checklist.rs              # 审查清单
+        │
+        │── [优化工作区]
+        ├── optimization_workspace.rs        # 优化工作区
+        ├── optimization_workspace_state.rs  # 状态管理
+        ├── optimization_workspace_sections.rs # 分区布局
+        └── optimization_workspace_widgets.rs  # 组件
+        │
+        │── [设置工作区]
+        ├── settings_workspace.rs            # 设置/偏好
+        └── settings_theme_preview.rs        # 主题预览
+```
+
+---
+
+## docs/ — 文档
+
+```
+docs/
+├── README.md                 # 文档索引
+├── dev.md                    # 开发者设置和构建说明
+├── development-plan.md       # 架构概览和路线图
+├── three-day-sprint.md       # 初始冲刺计划
+└── ui/                       # UI 设计参考图片（已 gitignore）
+    ├── ui-ref-01.png         # 原理图编辑器主页
+    ├── ui-ref-02.png         # 仿真工作区
+    ├── ui-ref-03.png         # 波形查看器
+    ├── ui-ref-04.png         # 库浏览器
+    ├── ui-ref-05.png         # 设计审查
+    ├── ui-ref-06.png         # 报告查看器
+    ├── ui-ref-07.png         # 设置页面
+    ├── ui-ref-08.png         # 深色主题
+    ├── ui-ref-09.png         # 浅色主题
+    └── ui-ref-10.png         # 工具面板
+```
+
+---
+
+## examples/ — 测试用例与演示
+
+```
+examples/
+├── cm5_minima/               # CM5 Minima 演示板（默认 GUI 原理图）
+├── kicad_schematic/          # RC 滤波器测试用例
+├── kicad_hierarchical/       # 多层次化设计
+├── kicad_project_schematic/  # KiCad 项目含原理图
+├── kicad_project/            # 完整 KiCad 项目
+├── kicad_import/             # KiCad 网表导入示例
+├── ltspice_import/           # LTspice 原理图导入示例
+├── rc_filter/                # 简单 RC 滤波器
+├── rc_sweep/                 # RC 扫描分析
+├── rlc_resonance/            # RLC 谐振
+├── diode_rectifier/          # 二极管整流器
+├── pin_mapping/              # 运放引脚映射测试
+├── vendor_model_issues/      # SPICE 模型验证边界情况
+├── basic_validation.osl.yaml # 验证计划示例
+├── failing_validation.osl.yaml  # 预期失败验证计划
+└── structured_validation.osl.yaml  # 结构化验证计划
+```
+
+---
+
+## benchmarks/
+
+```
+benchmarks/
+└── basic/
+    └── basic.osl.yaml        # 基准测试配置
+```
+
+---
+
+## runs/（已 gitignore）
+
+```
+runs/
+└── gui/                      # GUI 仿真运行输出（自动生成）
 ```
