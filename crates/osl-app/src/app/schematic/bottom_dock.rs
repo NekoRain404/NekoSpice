@@ -256,17 +256,21 @@ impl NekoSpiceApp {
         if let Some(error) = &self.simulation_panel.last_error {
             bottom_console_line(ui, mode, error, palette.danger);
         }
+        // Show full ngspice/xyce log in console tab
         if let Some(run) = &self.simulation_panel.last_run {
-            bottom_console_line(
-                ui,
-                mode,
-                &format!(
-                    "Simulation completed: {} ({} ms)",
-                    run.metadata.status.as_str(),
-                    run.metadata.duration_ms
-                ),
-                palette.text_muted,
-            );
+            let log_path = run.output_dir.join("ngspice.log");
+            let fallback = run.output_dir.join("xyce.log");
+            let actual = if log_path.is_file() { log_path } else { fallback };
+            if actual.is_file() {
+                if let Ok(content) = std::fs::read_to_string(&actual) {
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .max_height(120.0)
+                        .show(ui, |ui| {
+                            ui.monospace(&content);
+                        });
+                }
+            }
         }
         if let Some(document) = &self.document {
             let dir_count = document.simulation_directives().len();
@@ -289,7 +293,11 @@ impl NekoSpiceApp {
     pub(crate) fn draw_bottom_netlist_tab(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         if let Some(document) = &self.document {
-            match document.spice_netlist_preview() {
+            let profile = self.build_simulation_profile();
+            let result = document.spice_netlist_preview().map(|netlist| {
+                osl_sim::inject_profile_directives(&netlist, &profile)
+            });
+            match result {
                 Ok(netlist) => {
                     egui::ScrollArea::vertical()
                         .max_height(140.0)
