@@ -67,6 +67,14 @@ impl NekoSpiceApp {
     /// spawns the selected backend (ngspice or Xyce) in a background thread.
     /// Results are polled via `poll_simulation_task()`.
     pub(crate) fn run_simulation_from_panel(&mut self) {
+        if self.document.is_none() {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+        // Auto-save the current directive from UI to the schematic
+        // so the user doesn't have to click "Set Directive" before Run
+        self.apply_simulation_directive_edit();
+        // Re-borrow self.document after the mutable borrow above is released
         let Some(document) = &self.document else {
             self.status_message = Some("No editable schematic loaded".to_string());
             return;
