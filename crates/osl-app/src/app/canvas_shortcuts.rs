@@ -4,7 +4,7 @@
 /// delegates to the corresponding app method or tool state.
 use super::EditNudgeDirection;
 use super::NekoSpiceApp;
-use super::schematic_tools::SchematicTool;
+use super::schematic::tools::SchematicTool;
 use eframe::egui;
 
 impl NekoSpiceApp {

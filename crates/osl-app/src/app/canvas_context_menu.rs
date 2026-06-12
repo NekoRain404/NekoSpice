@@ -114,12 +114,12 @@ impl NekoSpiceApp {
         // Tool switching
         ui.label(StudioTheme::muted_for(mode, "Tools"));
         let tools = [
-            (super::schematic_tools::SchematicTool::Select, "Select", "V"),
-            (super::schematic_tools::SchematicTool::Wire, "Wire", "W"),
-            (super::schematic_tools::SchematicTool::Bus, "Bus", "B"),
-            (super::schematic_tools::SchematicTool::Label, "Net Label", "L"),
-            (super::schematic_tools::SchematicTool::NoConnect, "No Connect", "Q"),
-            (super::schematic_tools::SchematicTool::Junction, "Junction", "J"),
+            (super::schematic::tools::SchematicTool::Select, "Select", "V"),
+            (super::schematic::tools::SchematicTool::Wire, "Wire", "W"),
+            (super::schematic::tools::SchematicTool::Bus, "Bus", "B"),
+            (super::schematic::tools::SchematicTool::Label, "Net Label", "L"),
+            (super::schematic::tools::SchematicTool::NoConnect, "No Connect", "Q"),
+            (super::schematic::tools::SchematicTool::Junction, "Junction", "J"),
         ];
 
         for (tool, label, shortcut) in tools {
