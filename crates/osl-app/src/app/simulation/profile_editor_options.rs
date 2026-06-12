@@ -59,7 +59,7 @@ pub(crate) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
         .id_salt("collapsible_ic")
         .default_open(false)
         .show(ui, |ui| {
-            draw_initial_conditions_section(app, ui, mode);
+            any_changed |= draw_initial_conditions_section(app, ui, mode);
         });
     ui.add_space(8.0);
 

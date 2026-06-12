@@ -133,17 +133,26 @@ impl NekoSpiceApp {
             ui.separator();
 
             // ── 仿真指令指示器 ──────────────────────────────
-            let directive_text = format!(
-                "{} {}",
-                self.simulation_panel.directive_kind,
-                self.simulation_panel.analysis_params.to_body().trim()
-            ).trim().to_string();
+            let mut directive_parts = vec![
+                format!("{} {}", self.simulation_panel.directive_kind,
+                    self.simulation_panel.analysis_params.to_body().trim()
+                ).trim().to_string()
+            ];
+            if self.simulation_panel.step_sweep != crate::app::simulation::state::StepSweep::None {
+                if let Some(step) = self.simulation_panel.step_sweep.to_directive() {
+                    directive_parts.push(step);
+                }
+            }
+            if !self.simulation_measurements.is_empty() {
+                directive_parts.push(format!("{} measures", self.simulation_measurements.len()));
+            }
+            let directive_text = directive_parts.join(", ");
             ui.label(
                 egui::RichText::new(&directive_text)
                     .monospace()
                     .size(11.0)
                     .color(palette.accent),
-            ).on_hover_text("Current simulation directive");
+            ).on_hover_text("Current simulation configuration");
 
             // Netlist export quick button
             if self.document.is_some() {

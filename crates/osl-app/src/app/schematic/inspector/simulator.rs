@@ -3,6 +3,7 @@ use crate::app::localization::UiText;
 use super::widgets::{compact_action, property_row, status_pill};
 use crate::app::status_strip::severity_color;
 use crate::app::theme::StudioTheme;
+use crate::app::simulation::state::StepSweep;
 use eframe::egui;
 use osl_kicad::KicadDiagnosticSeverity;
 
@@ -26,6 +27,34 @@ impl NekoSpiceApp {
                 };
                 status_pill(ui, mode, status, palette.accent);
             });
+            ui.add_space(6.0);
+
+            // Current analysis directive
+            let directive = format!(
+                "{} {}",
+                self.simulation_panel.directive_kind,
+                self.simulation_panel.analysis_params.to_body().trim()
+            ).trim().to_string();
+            property_row(ui, mode, "Directive", &directive);
+
+            // Step sweep summary (if active)
+            if let StepSweep::Parametric { param_name, sweep_mode, start, stop, step } = &self.simulation_panel.step_sweep {
+                let sweep_desc = match sweep_mode.as_str() {
+                    "list" => format!("{} list {}", param_name, start),
+                    "lin" => format!("{} {} to {} step {}", param_name, start, stop, step),
+                    "dec" => format!("{} dec {} pts/dec {} to {}", param_name, step, start, stop),
+                    "oct" => format!("{} oct {} pts/oct {} to {}", param_name, step, start, stop),
+                    _ => format!("{} {} {} {}", param_name, sweep_mode, start, stop),
+                };
+                property_row(ui, mode, "Step", &sweep_desc);
+            }
+
+            // Measurement count
+            let measure_count = self.simulation_measurements.len();
+            if measure_count > 0 {
+                property_row(ui, mode, "Measures", &format!("{} defined", measure_count));
+            }
+
             ui.add_space(6.0);
             if compact_action(ui, mode, self.text(UiText::RunSimulation)) {
                 self.run_simulation_from_panel();
@@ -52,6 +81,10 @@ impl NekoSpiceApp {
                     self.text(UiText::LastRun),
                     &format!("{} ms", run.metadata.duration_ms),
                 );
+                let history_count = self.simulation_history.len();
+                if history_count > 0 {
+                    property_row(ui, mode, "History", &format!("{} runs", history_count));
+                }
             }
         });
 
