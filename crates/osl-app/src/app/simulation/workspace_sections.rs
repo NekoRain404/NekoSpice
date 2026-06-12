@@ -189,6 +189,48 @@ impl NekoSpiceApp {
                 profile_row(ui, mode, "ITL5 (total)", &opts.itl5, "limit");
             }
 
+            // Step sweep
+            if let super::state::StepSweep::Parametric { param_name, sweep_mode, start, stop, step } = &self.simulation_panel.step_sweep {
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.label(StudioTheme::muted_for(mode, "Step Sweep"));
+                let sweep_desc = match sweep_mode.as_str() {
+                    "list" => format!("{} list {}", param_name, start),
+                    "lin" => format!("{} {} to {} step {}", param_name, start, stop, step),
+                    "dec" => format!("{} dec {} pts/dec {} to {}", param_name, step, start, stop),
+                    "oct" => format!("{} oct {} pts/oct {} to {}", param_name, step, start, stop),
+                    _ => format!("{} {} {} {}", param_name, sweep_mode, start, stop),
+                };
+                profile_row(ui, mode, ".step", &sweep_desc, "sweep");
+            }
+
+            // Measurements
+            if !self.simulation_measurements.is_empty() {
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.label(StudioTheme::muted_for(mode, "Measurements"));
+                for entry in &self.simulation_measurements {
+                    if !entry.name.is_empty() && !entry.expression.is_empty() {
+                        profile_row(ui, mode, &entry.name, &entry.expression, "measure");
+                    }
+                }
+            }
+
+            // Initial conditions
+            if !self.simulation_profile_editor.initial_conditions.is_empty() {
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.label(StudioTheme::muted_for(mode, "Initial Conditions"));
+                for (node, value) in &self.simulation_profile_editor.initial_conditions {
+                    if !node.trim().is_empty() {
+                        profile_row(ui, mode, &format!(".ic {}", node), value, "ic");
+                    }
+                }
+            }
+
             // Backend engine
             ui.add_space(4.0);
             ui.separator();
