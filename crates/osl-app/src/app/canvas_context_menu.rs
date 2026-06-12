@@ -20,6 +20,12 @@ pub(crate) enum ContextMenuAction {
     PasteAtCursor,
     /// Rotate the selected item 90 degrees clockwise.
     RotateSelected,
+    /// Fit the canvas to show the entire schematic.
+    FitToScreen,
+    /// Zoom in by one step.
+    ZoomIn,
+    /// Zoom out by one step.
+    ZoomOut,
 }
 
 impl NekoSpiceApp {
@@ -55,6 +61,18 @@ impl NekoSpiceApp {
                 }
                 ContextMenuAction::PasteAtCursor => {
                     self.status_message = Some("Paste (clipboard not yet supported)".to_string());
+                }
+                ContextMenuAction::FitToScreen => {
+                    self.viewport
+                        .fit_scene(self.scene.as_ref().and_then(|scene| scene.bounds));
+                }
+                ContextMenuAction::ZoomIn => {
+                    self.viewport.zoom *= 1.25;
+                    self.viewport.zoom = self.viewport.zoom.clamp(0.5, 100.0);
+                }
+                ContextMenuAction::ZoomOut => {
+                    self.viewport.zoom /= 1.25;
+                    self.viewport.zoom = self.viewport.zoom.clamp(0.5, 100.0);
                 }
                 ContextMenuAction::None => {}
             }
@@ -118,9 +136,9 @@ impl NekoSpiceApp {
         ui.separator();
 
         // View options
-        context_menu_item(ui, mode, "Fit to Screen", "F", true, |_a| {}, &mut action);
-        context_menu_item(ui, mode, "Zoom In", "+", true, |_a| {}, &mut action);
-        context_menu_item(ui, mode, "Zoom Out", "-", true, |_a| {}, &mut action);
+        context_menu_item(ui, mode, "Fit to Screen", "F", true, |a| *a = ContextMenuAction::FitToScreen, &mut action);
+        context_menu_item(ui, mode, "Zoom In", "+", true, |a| *a = ContextMenuAction::ZoomIn, &mut action);
+        context_menu_item(ui, mode, "Zoom Out", "-", true, |a| *a = ContextMenuAction::ZoomOut, &mut action);
 
         action
     }

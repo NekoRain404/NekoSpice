@@ -462,6 +462,54 @@ impl SimulatorBackend for XyceCliBackend {
     }
 }
 
+/// Extract unique node names from a SPICE netlist for print directives.
+///
+/// Scans component lines (R, C, L, V, I, D, Q, M, J, B, etc.) and collects
+/// all referenced node names, excluding the ground node (0/GND/gnd).
+/// Returns up to `max_nodes` unique node names.
+fn extract_netlist_nodes(source: &str, max_nodes: usize) -> Vec<String> {
+    let ground_names: &[&str] = &["0", "gnd", "GND"];
+    let mut nodes = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // SPICE component prefixes: R, C, L, V, I, D, Q, M, J, B, K, F, E, G, H, T, U, W, X
+    let component_re = regex::Regex::new(
+        r"(?i)^[rcdvijqbkegfhtuwx]\S+\s+(\S+)\s+(\S+)"
+    ).unwrap();
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        // Skip comments, directives, and empty lines
+        if trimmed.is_empty()
+            || trimmed.starts_with('*')
+            || trimmed.starts_with('.')
+            || trimmed.starts_with('#')
+        {
+            continue;
+        }
+
+        if let Some(caps) = component_re.captures(trimmed) {
+            for i in 1..=2 {
+                if let Some(m) = caps.get(i) {
+                    let node = m.as_str().to_string();
+                    if !ground_names.contains(&node.as_str()) && seen.insert(node.clone()) {
+                        nodes.push(node);
+                        if nodes.len() >= max_nodes {
+                            return nodes;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to "out" if no nodes found
+    if nodes.is_empty() {
+        nodes.push("out".to_string());
+    }
+    nodes
+}
+
 /// Prepare a SPICE netlist for Xyce simulation.
 ///
 /// Xyce differences from ngspice:
@@ -507,15 +555,22 @@ fn prepare_xyce_netlist(source: &str) -> String {
 
     // Add Xyce-compatible print directives if analysis exists but no .print
     if !has_print && (has_tran || has_ac || has_dc) {
+        let nodes = extract_netlist_nodes(&output, 8);
+        let v_args: String = nodes
+            .iter()
+            .map(|n| format!("v({})", n))
+            .collect::<Vec<_>>()
+            .join(" ");
+
         output.push_str("\n* NekoSpice: Xyce waveform output directives\n");
         if has_tran {
-            output.push_str(".print TRAN v(out)\n");
+            output.push_str(&format!(".print TRAN {}\n", v_args));
         }
         if has_ac {
-            output.push_str(".print AC v(out)\n");
+            output.push_str(&format!(".print AC {}\n", v_args));
         }
         if has_dc {
-            output.push_str(".print DC v(out)\n");
+            output.push_str(&format!(".print DC {}\n", v_args));
         }
     }
 
@@ -524,7 +579,7 @@ fn prepare_xyce_netlist(source: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_parameter_overrides, ensure_ngspice_control_exports, relative_dependencies, prepare_xyce_netlist};
+    use super::{apply_parameter_overrides, ensure_ngspice_control_exports, extract_netlist_nodes, relative_dependencies, prepare_xyce_netlist};
     use osl_core::ParameterOverride;
 
     #[test]
@@ -600,14 +655,18 @@ mod tests {
         assert!(!output.contains(".endc"));
         assert!(!output.contains("write waveform.raw"));
         assert!(output.contains("R1 in out 1k"));
-        assert!(output.contains(".print TRAN v(out)"));
+        assert!(output.contains(".print TRAN"));
+        assert!(output.contains("v(in)"));
+        assert!(output.contains("v(out)"));
     }
 
     #[test]
     fn prepare_xyce_netlist_adds_print_for_tran() {
         let source = ".tran 1n 1u\nR1 in out 1k\n.end\n";
         let output = prepare_xyce_netlist(source);
-        assert!(output.contains(".print TRAN v(out)"));
+        assert!(output.contains(".print TRAN"));
+        assert!(output.contains("v(in)"));
+        assert!(output.contains("v(out)"));
     }
 
     #[test]
@@ -616,5 +675,28 @@ mod tests {
         let output = prepare_xyce_netlist(source);
         assert!(output.contains(".print TRAN v(out)"));
         assert_eq!(output.matches(".print TRAN v(out)").count(), 1);
+    }
+
+    #[test]
+    fn extract_netlist_nodes_from_rc_circuit() {
+        let source = "R1 in out 1k\nC1 out 0 1u\nV1 in 0 AC 1\n";
+        let nodes = extract_netlist_nodes(source, 10);
+        assert!(nodes.contains(&"in".to_string()));
+        assert!(nodes.contains(&"out".to_string()));
+        assert!(!nodes.contains(&"0".to_string()));
+    }
+
+    #[test]
+    fn extract_netlist_nodes_fallback() {
+        let source = "* just a comment\n.end\n";
+        let nodes = extract_netlist_nodes(source, 10);
+        assert_eq!(nodes, vec!["out".to_string()]);
+    }
+
+    #[test]
+    fn extract_netlist_nodes_respects_limit() {
+        let source = "R1 a b 1k\nR2 c d 1k\nR3 e f 1k\nR4 g h 1k\n";
+        let nodes = extract_netlist_nodes(source, 3);
+        assert!(nodes.len() <= 3);
     }
 }

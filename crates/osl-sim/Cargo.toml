@@ -8,5 +8,6 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+regex = "1"
 osl-core = { path = "../osl-core" }
 osl-waveform = { path = "../osl-waveform" }
