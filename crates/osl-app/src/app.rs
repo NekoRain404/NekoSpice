@@ -53,6 +53,7 @@ mod schematic_tools;
 mod schematic_workspace;
 mod schematic_bottom_dock;
 mod schematic_workspace_widgets;
+mod file_dialog;
 mod selection_properties;
 mod shortcuts_overlay;
 mod settings_theme_preview;

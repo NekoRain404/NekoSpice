@@ -237,13 +237,13 @@ impl NekoSpiceApp {
                     self.rotate_selected();
                 }
                 super::ContextMenuAction::CutSelected => {
-                    self.status_message = Some("Cut to clipboard".to_string());
+                    self.status_message = Some("Cut (clipboard not yet supported)".to_string());
                 }
                 super::ContextMenuAction::CopySelected => {
-                    self.status_message = Some("Copied to clipboard".to_string());
+                    self.status_message = Some("Copy (clipboard not yet supported)".to_string());
                 }
                 super::ContextMenuAction::PasteAtCursor => {
-                    self.status_message = Some("Paste from clipboard".to_string());
+                    self.status_message = Some("Paste (clipboard not yet supported)".to_string());
                 }
                 super::ContextMenuAction::None => {}
             }

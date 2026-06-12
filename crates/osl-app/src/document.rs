@@ -236,6 +236,14 @@ impl KicadGuiDocument {
             .map_err(|error| error.to_string())
     }
 
+    /// Save the schematic to a new path and update the document path.
+    pub(crate) fn save_as(&mut self, path: &std::path::Path) -> Result<(), String> {
+        write_kicad_schematic(path, &self.schematic).map(|_| {
+            self.path = path.to_path_buf();
+            self.dirty = false;
+        }).map_err(|error| error.to_string())
+    }
+
     /// Return a deep copy of the current schematic for undo/redo storage.
     pub(crate) fn snapshot(&self) -> KicadSchematic {
         self.schematic.clone()
