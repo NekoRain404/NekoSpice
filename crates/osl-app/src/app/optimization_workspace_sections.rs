@@ -154,7 +154,9 @@ impl NekoSpiceApp {
                 ui,
                 mode,
                 self.text(UiText::AnalysisStatus),
-                "Ready",
+                &self.simulation_panel.last_run.as_ref()
+                    .map(|r| r.metadata.status.as_str().to_string())
+                    .unwrap_or_else(|| "Queued".to_string()),
                 "ngspice",
             ),
         }

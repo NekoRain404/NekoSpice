@@ -193,7 +193,7 @@ impl NekoSpiceApp {
         });
     }
 
-    pub(super) fn draw_report_export_section(&self, ui: &mut egui::Ui) {
+    pub(super) fn draw_report_export_section(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(
@@ -201,9 +201,25 @@ impl NekoSpiceApp {
                 self.text(UiText::ExportReport),
             ));
             ui.horizontal_wrapped(|ui| {
-                let _ = ui.button("PDF");
-                let _ = ui.button("HTML");
-                let _ = ui.button("DOCX");
+                if ui.button("PDF").clicked() {
+                    self.status_message = Some("Export: PDF report generation not yet available".to_string());
+                }
+                if ui.button("HTML").clicked() {
+                    if let Some(run) = &self.simulation_panel.last_run {
+                        let html = osl_sim::run_report_html(&run.metadata);
+                        let path = run.output_dir.join("report.html");
+                        if let Err(e) = std::fs::write(&path, &html) {
+                            self.status_message = Some(format!("Export failed: {}", e));
+                        } else {
+                            self.status_message = Some(format!("HTML report: {}", path.display()));
+                        }
+                    } else {
+                        self.status_message = Some("No simulation run to export".to_string());
+                    }
+                }
+                if ui.button("DOCX").clicked() {
+                    self.status_message = Some("Export: DOCX report generation not yet available".to_string());
+                }
             });
             report_row(
                 ui,

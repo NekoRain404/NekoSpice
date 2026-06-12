@@ -21,7 +21,10 @@ impl NekoSpiceApp {
                             ));
                         });
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                            let _ = ui.button(self.text(UiText::StartSweep));
+                            if ui.button(self.text(UiText::StartSweep)).clicked() {
+                        self.active_workspace = super::navigation::StudioWorkspace::Simulation;
+                        self.status_message = Some("Parametric sweep: configure in Simulation workspace".to_string());
+                    }
                         });
                     });
                     ui.add_space(8.0);
@@ -58,19 +61,15 @@ impl NekoSpiceApp {
             self.text(UiText::OptimizationCaption),
         ));
         ui.add_space(8.0);
-        metric_card(
-            ui,
-            mode,
-            self.text(UiText::Yield),
-            "97.6%",
-            self.text(UiText::MonteCarlo),
-        );
-        metric_card(
-            ui,
-            mode,
-            self.text(UiText::Constraints),
-            "6",
-            self.text(UiText::Ready),
-        );
+        let run_count = self.simulation_panel.last_run.as_ref()
+            .map(|r| r.metadata.parameters.len().max(1).to_string())
+            .unwrap_or_else(|| "0".to_string());
+        let status = self.simulation_panel.last_run.as_ref()
+            .map(|r| r.metadata.status.as_str().to_string())
+            .unwrap_or_else(|| self.text(UiText::Queued).to_string());
+        metric_card(ui, mode, self.text(UiText::Yield),
+            &format!("{} runs", run_count), self.text(UiText::MonteCarlo));
+        metric_card(ui, mode, self.text(UiText::Constraints),
+            &status, self.text(UiText::Ready));
     }
 }

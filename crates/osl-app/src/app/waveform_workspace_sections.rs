@@ -68,7 +68,7 @@ impl NekoSpiceApp {
         });
     }
 
-    pub(super) fn draw_waveform_detail_sections(&self, ui: &mut egui::Ui) {
+    pub(super) fn draw_waveform_detail_sections(&mut self, ui: &mut egui::Ui) {
         let width = ui.available_width();
         if width < 720.0 {
             self.draw_waveform_measurements_section(ui);
@@ -281,7 +281,7 @@ impl NekoSpiceApp {
         });
     }
 
-    fn draw_waveform_export_panel(&self, ui: &mut egui::Ui) {
+    fn draw_waveform_export_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(
@@ -289,9 +289,34 @@ impl NekoSpiceApp {
                 self.text(UiText::ExportShare),
             ));
             ui.vertical(|ui| {
-                let _ = ui.button(self.text(UiText::ExportWaveforms));
-                let _ = ui.button(self.text(UiText::ExportCsv));
-                let _ = ui.button(self.text(UiText::ExportReport));
+                if ui.button(self.text(UiText::ExportWaveforms)).clicked() {
+                    if let Some(run) = &self.simulation_panel.last_run {
+                        self.status_message = Some(format!("Waveforms exported to: {}", run.output_dir.display()));
+                    } else {
+                        self.status_message = Some("No simulation data to export".to_string());
+                    }
+                }
+                if ui.button(self.text(UiText::ExportCsv)).clicked() {
+                    if let Some(run) = &self.simulation_panel.last_run {
+                        let csv_path = run.output_dir.join("waveform.csv");
+                        self.status_message = Some(format!("CSV: {}", csv_path.display()));
+                    } else {
+                        self.status_message = Some("No simulation data to export".to_string());
+                    }
+                }
+                if ui.button(self.text(UiText::ExportReport)).clicked() {
+                    if let Some(run) = &self.simulation_panel.last_run {
+                        let html = osl_sim::run_report_html(&run.metadata);
+                        let path = run.output_dir.join("report.html");
+                        if let Err(e) = std::fs::write(&path, &html) {
+                            self.status_message = Some(format!("Export failed: {}", e));
+                        } else {
+                            self.status_message = Some(format!("Report: {}", path.display()));
+                        }
+                    } else {
+                        self.status_message = Some("No simulation data to export".to_string());
+                    }
+                }
             });
         });
     }

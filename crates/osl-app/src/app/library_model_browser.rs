@@ -78,7 +78,12 @@ impl NekoSpiceApp {
                     self.text(UiText::Pins),
                     &symbol.pin_count.to_string(),
                 );
-                metadata_row(ui, mode, self.text(UiText::Validation), "Passed");
+                let validation = if symbol.pins.iter().all(|p| !p.electrical_type.is_empty()) {
+                    "Passed"
+                } else {
+                    "Incomplete"
+                };
+                metadata_row(ui, mode, self.text(UiText::Validation), validation);
             });
         });
     }

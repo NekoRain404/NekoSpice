@@ -99,7 +99,7 @@ impl NekoSpiceApp {
         });
     }
 
-    fn draw_reports_tab_body(&self, ui: &mut egui::Ui) {
+    fn draw_reports_tab_body(&mut self, ui: &mut egui::Ui) {
         match self.reports_workspace.active_tab {
             ReportsTab::Overview | ReportsTab::Measurements => {
                 self.draw_report_measurement_studio(ui)
@@ -145,7 +145,7 @@ impl NekoSpiceApp {
         self.draw_report_measurements_section(ui);
     }
 
-    fn draw_report_builder_studio(&self, ui: &mut egui::Ui) {
+    fn draw_report_builder_studio(&mut self, ui: &mut egui::Ui) {
         if ui.available_width() >= 820.0 {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
