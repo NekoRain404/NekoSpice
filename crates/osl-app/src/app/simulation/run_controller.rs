@@ -174,3 +174,32 @@ impl NekoSpiceApp {
         }
     }
 }
+
+impl NekoSpiceApp {
+    /// 弹出文件对话框导出 SPICE 网表到 .cir 文件。
+    pub(crate) fn export_netlist_dialog(&mut self) {
+        let Some(document) = &self.document else {
+            self.status_message = Some("No editable schematic loaded".to_string());
+            return;
+        };
+        let profile = self.build_simulation_profile();
+        let netlist = match document.spice_netlist_preview().map(|raw| {
+            osl_sim::inject_profile_directives(&raw, &profile)
+        }) {
+            Ok(n) => n,
+            Err(error) => {
+                self.status_message = Some(error);
+                return;
+            }
+        };
+        let dialog = rfd::FileDialog::new()
+            .add_filter("SPICE Netlist", &["cir", "sp", "net"])
+            .set_file_name("schematic.cir");
+        if let Some(path) = dialog.save_file() {
+            match std::fs::write(&path, &netlist) {
+                Ok(()) => self.status_message = Some(format!("Netlist exported to {}", path.display())),
+                Err(error) => self.status_message = Some(format!("Export failed: {error}")),
+            }
+        }
+    }
+}

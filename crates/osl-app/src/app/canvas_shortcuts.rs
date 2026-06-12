@@ -102,5 +102,9 @@ impl NekoSpiceApp {
         if ui.input(|input| input.modifiers.ctrl && input.modifiers.shift && input.key_pressed(egui::Key::S)) {
             self.save_document_with_dialog();
         }
+        // Ctrl+Shift+E = Export netlist
+        if ui.input(|input| input.modifiers.ctrl && input.modifiers.shift && input.key_pressed(egui::Key::E)) {
+            self.export_netlist_dialog();
+        }
     }
 }
