@@ -239,6 +239,16 @@ fn ensure_ngspice_control_exports(source: &str) -> String {
         return source.to_string();
     }
 
+    // Detect analysis type to choose appropriate output strategy
+    let has_op = source.lines().any(|line| {
+        let lower = line.trim().to_ascii_lowercase();
+        lower == ".op"
+    });
+    let has_tran_ac_dc = source.lines().any(|line| {
+        let lower = line.trim().to_ascii_lowercase();
+        lower.starts_with(".tran ") || lower.starts_with(".ac ") || lower.starts_with(".dc ")
+    });
+
     let lines = source.lines().collect::<Vec<_>>();
     let mut output = String::new();
     let mut inserted = false;
@@ -269,9 +279,18 @@ fn ensure_ngspice_control_exports(source: &str) -> String {
         }
 
         without_end.push_str(".control\n");
-        without_end.push_str("set filetype=binary\n");
-        without_end.push_str("run\n");
-        without_end.push_str("write waveform.raw all\n");
+
+        if has_op && !has_tran_ac_dc {
+            // .op only: run and print operating point, no waveform
+            without_end.push_str("run\n");
+            without_end.push_str("print all\n");
+        } else {
+            // .tran/.ac/.dc (or mixed): write binary waveform
+            without_end.push_str("set filetype=binary\n");
+            without_end.push_str("run\n");
+            without_end.push_str("write waveform.raw all\n");
+        }
+
         without_end.push_str(".endc\n");
         without_end.push_str(end_line.unwrap_or(".end"));
         without_end.push('\n');

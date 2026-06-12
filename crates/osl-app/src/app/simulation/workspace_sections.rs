@@ -122,10 +122,15 @@ impl NekoSpiceApp {
             mode,
             self.text(UiText::SimulationProfile),
         ));
-        // Show actual profile state instead of hardcoded values
+        // Show actual analysis directive and profile state
+        let analysis = format!("{} {}",
+            self.simulation_panel.directive_kind.to_string(),
+            self.simulation_panel.directive_body.trim()
+        ).trim().to_string();
         let temp = self.simulation_profile_editor.options.temperature.clone();
         let tol = self.simulation_profile_editor.options.reltol.clone();
         let method = self.simulation_profile_editor.options.method.clone();
+        profile_row(ui, mode, "Analysis", &analysis, "active");
         profile_row(ui, mode, self.text(UiText::TemperatureSweep), &format!("{} C", temp), "nominal");
         profile_row(ui, mode, self.text(UiText::Tolerance), &tol, "rel");
         profile_row(ui, mode, "Method", &method, "integration");

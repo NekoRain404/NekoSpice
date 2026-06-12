@@ -241,7 +241,18 @@ ui.horizontal(|ui| {
     /// be injected as SPICE directives in the netlist.
     pub(crate) fn build_simulation_profile(&self) -> SimulationProfile {
         let options = &self.simulation_profile_editor.options;
+        // Get analysis kind and body from the UI directive editor
+        let analysis_kind = match self.simulation_panel.directive_kind {
+            osl_kicad::KicadSimulationDirectiveKind::Tran => ".tran".to_string(),
+            osl_kicad::KicadSimulationDirectiveKind::Ac => ".ac".to_string(),
+            osl_kicad::KicadSimulationDirectiveKind::Dc => ".dc".to_string(),
+            osl_kicad::KicadSimulationDirectiveKind::Op => ".op".to_string(),
+            _ => ".tran".to_string(),
+        };
+        let analysis_body = self.simulation_panel.directive_body.clone();
         SimulationProfile {
+            analysis_kind,
+            analysis_body,
             temperature: options.temperature.clone(),
             max_iterations: options.max_iterations.clone(),
             min_timestep: options.min_timestep.clone(),

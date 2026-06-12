@@ -58,6 +58,10 @@ impl SpiceMethod {
 /// into the netlist before it's sent to the solver backend.
 #[derive(Debug, Clone)]
 pub struct SimulationProfile {
+    /// Analysis type selected in the UI (.tran, .ac, .dc, .op).
+    pub analysis_kind: String,
+    /// Analysis body text from the UI (e.g. "1u 1m" for .tran).
+    pub analysis_body: String,
     /// Simulation temperature in degrees Celsius.
     pub temperature: String,
     /// Maximum number of Newton-Raphson iterations per timestep.
@@ -81,6 +85,8 @@ pub struct SimulationProfile {
 impl Default for SimulationProfile {
     fn default() -> Self {
         Self {
+            analysis_kind: ".tran".to_string(),
+            analysis_body: "1u 1m".to_string(),
             temperature: "27".to_string(),
             max_iterations: "200".to_string(),
             min_timestep: "0".to_string(),
@@ -102,6 +108,14 @@ impl SimulationProfile {
     /// the netlist clean.
     pub fn generate_directives(&self) -> Vec<String> {
         let mut lines = Vec::new();
+
+        // Analysis directive from UI — this is what the user actually configured
+        let analysis_line = if self.analysis_body.trim().is_empty() {
+            format!("{}", self.analysis_kind)
+        } else {
+            format!("{} {}", self.analysis_kind, self.analysis_body.trim())
+        };
+        lines.push(analysis_line);
 
         // Temperature directive
         if self.temperature != "27" {
@@ -184,24 +198,49 @@ pub fn inject_profile_directives(netlist: &str, profile: &SimulationProfile) -> 
         return netlist.to_string();
     }
 
-    // Insert profile directives before `.end`
+    // The analysis directive from the profile should REPLACE any existing
+    // analysis directive in the netlist (the user's UI choices take priority).
+    let analysis_keywords = [".tran", ".ac", ".dc", ".op"];
     let mut output = Vec::new();
-    let mut inserted = false;
+    let mut inserted_analysis = false;
 
     for line in netlist.lines() {
-        if !inserted && line.trim().eq_ignore_ascii_case(".end") {
-            // Insert a separator comment + all profile directives
-            output.push("* --- NekoSpice simulation profile ---".to_string());
+        let trimmed = line.trim();
+        let lower = trimmed.to_ascii_lowercase();
+
+        // Skip existing analysis directives — we'll replace them with profile values
+        let is_existing_analysis = analysis_keywords.iter().any(|kw| {
+            lower.starts_with(kw) && (lower.len() == kw.len() || lower.as_bytes()[kw.len()] == b' ')
+        });
+        if is_existing_analysis && !inserted_analysis {
+            // Replace with the profile's analysis directive
             for directive in &directives {
                 output.push(directive.clone());
             }
-            inserted = true;
+            inserted_analysis = true;
+            continue;
+        } else if is_existing_analysis {
+            // Skip duplicate analysis directives
+            continue;
         }
+
+        // Insert remaining profile directives before `.end`
+        if trimmed.eq_ignore_ascii_case(".end") {
+            if !inserted_analysis {
+                // No analysis directive was found — insert all profile directives
+                output.push("* --- NekoSpice simulation profile ---".to_string());
+                for directive in &directives {
+                    output.push(directive.clone());
+                }
+                inserted_analysis = true;
+            }
+        }
+
         output.push(line.to_string());
     }
 
-    // If no `.end` found (shouldn't happen in valid netlist), append at end
-    if !inserted {
+    // If no `.end` found, append at end
+    if !inserted_analysis {
         output.push("* --- NekoSpice simulation profile ---".to_string());
         output.extend(directives);
     }
@@ -333,13 +372,6 @@ mod tests {
         assert!(temp_pos < end_pos);
     }
 
-    #[test]
-    fn no_directives_passthrough() {
-        let netlist = "* RC filter\nR1 in out 1k\n.end\n";
-        let profile = SimulationProfile::default();
-        let result = inject_profile_directives(netlist, &profile);
-        assert_eq!(result, netlist);
-    }
 
     #[test]
     fn validate_empty_netlist() {
