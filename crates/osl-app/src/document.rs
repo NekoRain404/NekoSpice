@@ -2,7 +2,7 @@
 //!
 use osl_kicad::{KicadEditSummary,
     KicadCanvasScene, KicadSchematic, KicadSchematicCheckReport, KicadSimulationDirective,
-    KicadSymbolDef, read_kicad_schematic_with_libraries, write_kicad_schematic,
+    read_kicad_schematic_with_libraries, write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
 
@@ -104,7 +104,7 @@ mod tests {
     use super::*;
     use crate::document_ops::reference_prefix;
     use crate::placement_config::SymbolPlacementConfig;
-    use osl_kicad::{parse_kicad_symbol_library, KicadAt, KicadPoint};
+    use osl_kicad::{parse_kicad_symbol_library, KicadAt, KicadPoint, KicadSymbolDef};
     use std::fs;
 
     #[test]
