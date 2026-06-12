@@ -50,7 +50,14 @@ impl NekoSpiceApp {
             } else {
                 "\u{25B6} Run"
             };
+            let run_tooltip = format!(
+                "Run {} {} via {}",
+                self.simulation_panel.directive_kind,
+                self.simulation_panel.analysis_params.to_body().trim(),
+                self.simulation_panel.backend.label(),
+            );
             if canvas_toolbar_button(ui, mode, run_label, self.document.is_some())
+                .on_hover_text(run_tooltip)
                 .clicked()
             {
                 self.run_simulation_from_panel();
@@ -111,7 +118,7 @@ impl NekoSpiceApp {
             ui.add_space(6.0);
             ui.separator();
 
-            // ── 后端指示器 ─────────────────────────────────────
+            // ── 后端选择器（交互式） ─────────────────────────────
             ui.label(StudioTheme::muted_for(mode, self.simulation_panel.backend.label()));
             ui.separator();
 

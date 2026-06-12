@@ -18,7 +18,7 @@ impl NekoSpiceApp {
                 self.text(UiText::Simulator),
             ));
             ui.horizontal_wrapped(|ui| {
-                status_pill(ui, mode, "ngspice", palette.success);
+                status_pill(ui, mode, self.simulation_panel.backend.label(), palette.success);
                 let status = if self.simulation_panel.active_task.is_some() {
                     self.text(UiText::Running)
                 } else {
