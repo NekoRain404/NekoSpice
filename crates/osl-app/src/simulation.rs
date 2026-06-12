@@ -4,7 +4,7 @@ use crate::waveform_summary::GuiWaveformSummaryState;
 #[cfg(test)]
 use osl_core::OslError;
 use osl_core::{OslResult, RunMetadata, make_run_id, write_text};
-use osl_sim::{NgspiceCliBackend, SimulatorBackend, finalize_run_artifacts};
+use osl_sim::{NgspiceCliBackend, XyceCliBackend, SimulatorBackend, finalize_run_artifacts};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
@@ -51,6 +51,17 @@ pub(crate) struct GuiSimulationTask {
 impl GuiSimulationTask {
     pub(crate) fn spawn_ngspice(job: GuiSimulationJob) -> Self {
         Self::spawn(job, || Box::new(NgspiceCliBackend::default()))
+    }
+
+    pub(crate) fn spawn_xyce(job: GuiSimulationJob) -> Self {
+        Self::spawn(job, || Box::new(XyceCliBackend::default()))
+    }
+
+    pub(crate) fn spawn_with_backend(job: GuiSimulationJob, backend: &str) -> Self {
+        match backend {
+            "xyce" => Self::spawn_xyce(job),
+            _ => Self::spawn_ngspice(job),
+        }
     }
 
     pub(crate) fn try_finish(&self) -> Option<Result<GuiSimulationRun, String>> {

@@ -18,6 +18,31 @@ use osl_kicad::{KicadDiagnosticSeverity, KicadSimulationDirective, KicadSimulati
 use std::path::Path;
 use std::time::Duration;
 
+/// Available simulation backend engines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SimulationBackendKind {
+    Ngspice,
+    Xyce,
+}
+
+impl SimulationBackendKind {
+    pub(crate) const ALL: [Self; 2] = [Self::Ngspice, Self::Xyce];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Ngspice => "ngspice",
+            Self::Xyce => "Xyce",
+        }
+    }
+
+    pub(crate) fn label_zh(self) -> &'static str {
+        match self {
+            Self::Ngspice => "ngspice",
+            Self::Xyce => "Xyce",
+        }
+    }
+}
+
 /// Number of netlist lines to display in the preview panel.
 const NETLIST_PREVIEW_LINES: usize = 18;
 
@@ -42,6 +67,8 @@ pub(crate) struct SimulationPanelState {
     pub(super) active_task: Option<GuiSimulationTask>,
     /// Currently selected waveform signal for display in previews.
     pub(super) selected_waveform_signal: Option<String>,
+    /// Currently selected simulation backend engine.
+    pub(super) backend: SimulationBackendKind,
 }
 
 impl Default for SimulationPanelState {
@@ -54,6 +81,7 @@ impl Default for SimulationPanelState {
             last_error: None,
             active_task: None,
             selected_waveform_signal: None,
+            backend: SimulationBackendKind::Ngspice,
         }
     }
 }
@@ -71,7 +99,26 @@ impl NekoSpiceApp {
             // Keep the UI repainting while simulation is in progress
             ui.ctx().request_repaint_after(Duration::from_millis(100));
         }
-        ui.horizontal(|ui| {
+ui.horizontal(|ui| {
+            // Backend engine selector
+            egui::ComboBox::from_id_salt("simulation_backend")
+                .selected_text(self.simulation_panel.backend.label())
+                .show_ui(ui, |ui| {
+                    for &kind in &SimulationBackendKind::ALL {
+                        let label = match self.locale() {
+                            super::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
+                            _ => kind.label(),
+                        };
+                        if ui.selectable_value(
+                            &mut self.simulation_panel.backend,
+                            kind,
+                            label,
+                        ).clicked() {
+                            // Backend changed
+                        }
+                    }
+                });
+            ui.separator();
             if ui
                 .add_enabled(
                     self.document.is_some() && !is_running,
@@ -190,7 +237,7 @@ impl NekoSpiceApp {
             Ok(job) => {
                 self.simulation_panel.last_run = None;
                 self.simulation_panel.last_error = None;
-                self.simulation_panel.active_task = Some(GuiSimulationTask::spawn_ngspice(job));
+                self.simulation_panel.active_task = Some(GuiSimulationTask::spawn_with_backend(job, self.simulation_panel.backend.label()));
                 self.status_message = Some("Simulation started".to_string());
             }
             Err(error) => {

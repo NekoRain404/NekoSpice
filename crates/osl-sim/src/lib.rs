@@ -329,9 +329,202 @@ fn defines_overridden_parameter(line: &str, parameter_names: &[String]) -> bool 
     false
 }
 
+// ---------------------------------------------------------------------------
+// Xyce backend
+// ---------------------------------------------------------------------------
+
+/// Xyce SPICE simulator CLI backend.
+///
+/// Xyce uses `.sp` extension and different control block syntax than ngspice.
+/// Output waveform format is rawfile ASCII (not binary like ngspice).
+#[derive(Debug, Clone)]
+pub struct XyceCliBackend {
+    executable: PathBuf,
+}
+
+impl XyceCliBackend {
+    pub fn new(executable: impl Into<PathBuf>) -> Self {
+        Self {
+            executable: executable.into(),
+        }
+    }
+
+    pub fn executable(&self) -> &Path {
+        &self.executable
+    }
+}
+
+impl Default for XyceCliBackend {
+    fn default() -> Self {
+        Self::new("xyce")
+    }
+}
+
+impl SimulatorBackend for XyceCliBackend {
+    fn name(&self) -> &'static str {
+        "xyce-cli"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            batch: true,
+            process_isolated: true,
+            writes_binary_waveform: false, // Xyce uses rawfile ASCII
+        }
+    }
+
+    fn run(&self, source_netlist: &Path, output_dir: &Path) -> OslResult<RunMetadata> {
+        self.run_with_parameters(source_netlist, output_dir, &[])
+    }
+
+    fn run_with_parameters(
+        &self,
+        source_netlist: &Path,
+        output_dir: &Path,
+        parameters: &[ParameterOverride],
+    ) -> OslResult<RunMetadata> {
+        if !source_netlist.is_file() {
+            return Err(OslError::InvalidInput(format!(
+                "netlist does not exist: {}",
+                source_netlist.display()
+            )));
+        }
+
+        fs::create_dir_all(output_dir)
+            .map_err(|err| OslError::io(format!("create {}", output_dir.display()), err))?;
+
+        let source_abs = fs::canonicalize(source_netlist).map_err(|err| {
+            OslError::io(format!("canonicalize {}", source_netlist.display()), err)
+        })?;
+        let output_abs = fs::canonicalize(output_dir)
+            .map_err(|err| OslError::io(format!("canonicalize {}", output_dir.display()), err))?;
+        let working_netlist = output_abs.join("input.sp");
+
+        let source = read_text(&source_abs)?;
+        let working_source =
+            apply_parameter_overrides(&prepare_xyce_netlist(&source), parameters);
+        write_text(&working_netlist, &working_source)?;
+        copy_relative_dependencies(&source_abs, &source, &output_abs)?;
+
+        let started_unix_ms = now_unix_ms();
+        let timer = Instant::now();
+        let output = Command::new(&self.executable)
+            .arg("-o")
+            .arg("xyce.log")
+            .arg("input.sp")
+            .current_dir(&output_abs)
+            .output()
+            .map_err(|err| {
+                OslError::io(
+                    format!("run {} -o xyce.log input.sp", self.executable.display()),
+                    err,
+                )
+            })?;
+        let duration_ms = timer.elapsed().as_millis();
+
+        write_text(
+            &output_abs.join("stdout.txt"),
+            &String::from_utf8_lossy(&output.stdout),
+        )?;
+        write_text(
+            &output_abs.join("stderr.txt"),
+            &String::from_utf8_lossy(&output.stderr),
+        )?;
+
+        let status = if output.status.success() {
+            RunStatus::Passed
+        } else {
+            RunStatus::Failed
+        };
+
+        let mut metadata = RunMetadata {
+            schema_version: 1,
+            run_id: make_run_id("run"),
+            backend: self.name().to_string(),
+            backend_executable: self.executable.display().to_string(),
+            source_netlist: source_abs.display().to_string(),
+            working_netlist: working_netlist.display().to_string(),
+            output_dir: output_abs.display().to_string(),
+            status,
+            exit_code: output.status.code(),
+            duration_ms,
+            started_unix_ms,
+            parameters: parameters.to_vec(),
+            artifacts: collect_run_artifacts(&output_abs)?,
+        };
+
+        metadata
+            .artifacts
+            .sort_by(|left, right| left.path.cmp(&right.path));
+        write_text(&output_abs.join("run.json"), &metadata.to_json())?;
+
+        Ok(metadata)
+    }
+}
+
+/// Prepare a SPICE netlist for Xyce simulation.
+///
+/// Xyce differences from ngspice:
+/// - Uses `.print` instead of `.control`/`write` for waveform output
+/// - Output files use `.raw` extension (rawfile ASCII format)
+/// - `.endc` is not used; control blocks are ngspice-specific
+fn prepare_xyce_netlist(source: &str) -> String {
+    let mut output = String::new();
+    let mut has_print = false;
+    let mut has_tran = false;
+    let mut has_ac = false;
+    let mut has_dc = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        // Skip ngspice-specific control blocks
+        if trimmed.eq_ignore_ascii_case(".control") || trimmed.eq_ignore_ascii_case(".endc") {
+            continue;
+        }
+
+        // Detect analysis type and print directives
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with(".tran ") {
+            has_tran = true;
+        } else if lower.starts_with(".ac ") {
+            has_ac = true;
+        } else if lower.starts_with(".dc ") {
+            has_dc = true;
+        }
+        if lower.starts_with(".print ") {
+            has_print = true;
+        }
+
+        // Skip ngspice-specific write commands
+        if lower.starts_with("write ") || lower == "run" || lower.starts_with("set ") {
+            continue;
+        }
+
+        output.push_str(line);
+        output.push('\n');
+    }
+
+    // Add Xyce-compatible print directives if analysis exists but no .print
+    if !has_print && (has_tran || has_ac || has_dc) {
+        output.push_str("\n* NekoSpice: Xyce waveform output directives\n");
+        if has_tran {
+            output.push_str(".print TRAN v(out)\n");
+        }
+        if has_ac {
+            output.push_str(".print AC v(out)\n");
+        }
+        if has_dc {
+            output.push_str(".print DC v(out)\n");
+        }
+    }
+
+    output
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{apply_parameter_overrides, ensure_ngspice_control_exports, relative_dependencies};
+    use super::{apply_parameter_overrides, ensure_ngspice_control_exports, relative_dependencies, prepare_xyce_netlist};
     use osl_core::ParameterOverride;
 
     #[test]
@@ -397,5 +590,31 @@ mod tests {
                 "vendor/opamp.lib".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn prepare_xyce_netlist_strips_control_blocks() {
+        let source = ".tran 1n 1u\n.control\nrun\nwrite waveform.raw all\n.endc\nR1 in out 1k\n.end\n";
+        let output = prepare_xyce_netlist(source);
+        assert!(!output.contains(".control"));
+        assert!(!output.contains(".endc"));
+        assert!(!output.contains("write waveform.raw"));
+        assert!(output.contains("R1 in out 1k"));
+        assert!(output.contains(".print TRAN v(out)"));
+    }
+
+    #[test]
+    fn prepare_xyce_netlist_adds_print_for_tran() {
+        let source = ".tran 1n 1u\nR1 in out 1k\n.end\n";
+        let output = prepare_xyce_netlist(source);
+        assert!(output.contains(".print TRAN v(out)"));
+    }
+
+    #[test]
+    fn prepare_xyce_netlist_no_control_needed() {
+        let source = ".tran 1n 1u\n.print TRAN v(out)\nR1 in out 1k\n.end\n";
+        let output = prepare_xyce_netlist(source);
+        assert!(output.contains(".print TRAN v(out)"));
+        assert_eq!(output.matches(".print TRAN v(out)").count(), 1);
     }
 }

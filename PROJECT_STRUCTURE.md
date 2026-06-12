@@ -29,7 +29,7 @@ NekoSpice/
 
 | Crate | Description |
 |-------|-------------|
-| `osl-sim` | ngspice backend runner, simulation directives, and run artifact collection |
+| `osl-sim` | ngspice and Xyce backend runners, simulation directives, and run artifact collection |
 | `osl-netlist` | Netlist parsing (KiCad/SPICE/LTspice), import compatibility diagnostics, and signal suggestion engine |
 | `osl-model` | SPICE model checking: `.subckt`/`.model` validation, LTspice symbol pin mapping, dialect risk detection |
 | `osl-waveform` | Raw waveform data parser (`.raw` files) for post-simulation analysis |

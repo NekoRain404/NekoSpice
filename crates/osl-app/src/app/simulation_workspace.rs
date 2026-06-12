@@ -131,7 +131,7 @@ impl NekoSpiceApp {
                 &mut columns[0],
                 mode,
                 self.text(UiText::SolverEngine),
-                "ngspice",
+                self.simulation_panel.backend.label(),
                 "CLI",
             );
             solver_metric_card(
