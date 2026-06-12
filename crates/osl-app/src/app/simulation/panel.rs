@@ -6,9 +6,16 @@
 //! - `directive_editor` — directive kind/body editing UI
 //! - `run_controller` — profile building, run launch, task polling
 //! - `status_display` — run results, log viewer, waveform summary
+//!
+//! The panel is organized as:
+//! 1. Backend selector + Run/Stop controls
+//! 2. Quick analysis directive editor
+//! 3. Quick configuration summary (key settings at a glance)
+//! 4. Diagnostics
 
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
+use crate::app::theme::StudioTheme;
 use eframe::egui;
 use super::state::SimulationBackendKind;
 
@@ -18,39 +25,114 @@ impl NekoSpiceApp {
         self.poll_simulation_task();
         self.request_simulation_repaint(ui.ctx());
 
-        ui.heading(self.text(UiText::SimulationWorkspace));
-        self.draw_simulation_directive_editor(ui);
+        let mode = self.theme_mode();
+        let palette = self.theme_palette();
 
-        // Backend selector + Run/Stop button
-        ui.horizontal(|ui| {
-            egui::ComboBox::from_id_salt("simulation_backend")
-                .selected_text(self.simulation_panel.backend.label())
-                .show_ui(ui, |ui| {
-                    for &kind in &SimulationBackendKind::ALL {
-                        let label = match self.locale() {
-                            crate::app::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
-                            _ => kind.label(),
-                        };
-                        ui.selectable_value(&mut self.simulation_panel.backend, kind, label);
-                    }
-                });
-            ui.separator();
+        // Panel title
+        ui.heading(self.text(UiText::SimulationWorkspace));
+        ui.add_space(6.0);
+
+        // Backend selector + Run/Stop button (prominent)
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(StudioTheme::muted_for(mode, self.text(UiText::Backend)));
+                egui::ComboBox::from_id_salt("simulation_backend")
+                    .selected_text(self.simulation_panel.backend.label())
+                    .show_ui(ui, |ui| {
+                        for &kind in &SimulationBackendKind::ALL {
+                            let label = match self.locale() {
+                                crate::app::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
+                                _ => kind.label(),
+                            };
+                            ui.selectable_value(&mut self.simulation_panel.backend, kind, label);
+                        }
+                    });
+            });
+            ui.add_space(4.0);
+
             let running = self.simulation_panel.active_task.is_some();
             if running {
-                if ui.button("Stop").on_hover_text("Cancel running simulation").clicked() {
-                    self.simulation_panel.active_task = None;
-                    self.status_message = Some("Simulation cancelled".to_string());
+                // Show running indicator with stop button
+                ui.horizontal(|ui| {
+                    ui.label(StudioTheme::status_dot(palette.warning));
+                    ui.label(
+                        egui::RichText::new(self.text(UiText::Running))
+                            .color(palette.warning)
+                            .strong(),
+                    );
+                    if ui.button("Stop").on_hover_text("Cancel running simulation").clicked() {
+                        self.simulation_panel.active_task = None;
+                        self.status_message = Some("Simulation cancelled".to_string());
+                    }
+                });
+            } else {
+                // Prominent run button
+                let run_btn = ui.add_enabled(
+                    self.document.is_some(),
+                    egui::Button::new(
+                        egui::RichText::new(self.text(UiText::RunSimulation))
+                            .strong()
+                            .color(palette.text),
+                    )
+                    .fill(palette.accent_soft)
+                    .min_size(egui::Vec2::new(ui.available_width(), 32.0)),
+                );
+                if run_btn.clicked() {
+                    self.run_simulation_from_panel();
                 }
-            } else if ui
-                .add_enabled(self.document.is_some(), egui::Button::new(self.text(UiText::RunSimulation)))
-                .clicked()
-            {
-                self.run_simulation_from_panel();
             }
         });
-        ui.separator();
+
+        ui.add_space(8.0);
+
+        // Quick analysis directive editor
+        self.draw_simulation_directive_editor(ui);
+
+        ui.add_space(8.0);
+
+        // Quick configuration summary
+        self.draw_panel_config_summary(ui);
+
+        ui.add_space(8.0);
 
         // Diagnostics
         self.draw_document_diagnostics_panel(ui, 150.0);
+    }
+
+    /// Compact configuration summary for the sidebar panel.
+    /// Shows the key simulation settings at a glance without full profile editor.
+    fn draw_panel_config_summary(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        let opts = &self.simulation_profile_editor.options;
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(mode, "Quick Settings"));
+            ui.add_space(4.0);
+            egui::Grid::new("panel_config_summary")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label(StudioTheme::muted_for(mode, "Temp"));
+                    ui.label(egui::RichText::new(format!("{} °C", opts.temperature)).monospace());
+                    ui.end_row();
+
+                    ui.label(StudioTheme::muted_for(mode, "Method"));
+                    ui.label(egui::RichText::new(&opts.method).monospace());
+                    ui.end_row();
+
+                    ui.label(StudioTheme::muted_for(mode, "RELTOL"));
+                    ui.label(egui::RichText::new(&opts.reltol).monospace());
+                    ui.end_row();
+
+                    if self.simulation_profile_editor.active_preset != "default" {
+                        ui.label(StudioTheme::muted_for(mode, "Preset"));
+                        ui.label(
+                            egui::RichText::new(&self.simulation_profile_editor.active_preset)
+                                .monospace()
+                                .color(self.theme_palette().accent),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
     }
 }
