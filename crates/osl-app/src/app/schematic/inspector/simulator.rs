@@ -108,12 +108,12 @@ fn draw_measurement_rows(app: &NekoSpiceApp, ui: &mut egui::Ui) {
     if let Some(run) = &app.simulation_panel.last_run {
         if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) = &run.waveform {
             for var in summary.variables.iter().take(6) {
-                property_row(
-                    ui,
-                    mode,
-                    &var.name,
-                    &format!("{}: {} ({:.3})", var.unit, var.name, var.max),
-                );
+                let value_str = if !var.unit.is_empty() {
+                    format!("{} {}", super::super::super::waveform::preview_primitives::format_compact_f64(var.last), var.unit)
+                } else {
+                    super::super::super::waveform::preview_primitives::format_compact_f64(var.last)
+                };
+                property_row(ui, mode, &var.name, &value_str);
             }
             if summary.variables.is_empty() {
                 property_row(ui, mode, app.text(UiText::LiveMeasurements), "No signals");
@@ -122,9 +122,9 @@ fn draw_measurement_rows(app: &NekoSpiceApp, ui: &mut egui::Ui) {
             property_row(ui, mode, app.text(UiText::LiveMeasurements), "Processing...");
         }
     } else {
-        property_row(ui, mode, "V(IN)", "--");
-        property_row(ui, mode, "V(OUT)", "--");
-        property_row(ui, mode, "I(R1)", "--");
-        property_row(ui, mode, app.text(UiText::TemperatureSweep), "27 C");
+        ui.label(StudioTheme::muted_for(
+            mode,
+            "Run a simulation to see measurements here.",
+        ));
     }
 }
