@@ -138,15 +138,15 @@ NekoSpice/
 │           │   │       └── widgets.rs     # 检查器组件
 │           │   │
 │           │   ├── simulation/   # ── 仿真工作区 ──
-│           │   │   ├── panel.rs           # 仿真右侧面板编排
+│           │   │   ├── panel.rs           # 仿真右侧面板编排 (backend, run button, quick config)
 │           │   │   ├── state.rs           # 后端选择枚举
 │           │   │   ├── directive_editor.rs # 仿真指令编辑器
 │           │   │   ├── run_controller.rs  # 仿真启动与轮询
 │           │   │   ├── status_display.rs  # 运行结果/日志查看
 │           │   │   ├── workspace.rs       # 仿真中心工作区
 │           │   │   ├── workspace_sections.rs # 工作区分节
-│           │   │   ├── profile_editor.rs  # 仿真配置编辑器布局
-│           │   │   ├── profile_editor_options.rs # 求解器选项
+│           │   │   ├── profile_editor.rs  # 仿真配置编辑器 (3-column, presets, .ic/.nodeset)
+│           │   │   ├── profile_editor_options.rs # 求解器选项 (5 sections: env, transient, convergence, output, .ic)
 │           │   │   ├── profile_editor_sections.rs # 配置分节
 │           │   │   └── artifacts_panel.rs # 仿真产物面板
 │           │   │
