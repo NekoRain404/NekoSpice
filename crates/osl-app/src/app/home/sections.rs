@@ -22,28 +22,34 @@ impl NekoSpiceApp {
             ) {
                 self.active_workspace = StudioWorkspace::Schematic;
             }
+            // 当前加载的原理图
             let snapshot = self.studio_status_snapshot();
             project_row(
                 ui,
                 mode,
                 &snapshot.project_name,
                 &snapshot.source_path,
-                self.text(UiText::Ready),
+                &snapshot.document_state,
             );
-            project_row(
-                ui,
-                mode,
-                "KiCad schematic import",
-                "examples/kicad_schematic/rc.kicad_sch",
-                self.text(UiText::Saved),
-            );
-            project_row(
-                ui,
-                mode,
-                "Symbol library bridge",
-                "examples/kicad_schematic/sym-lib-table",
-                self.text(UiText::Ready),
-            );
+            // 符号库
+            if !self.library_table_path.is_empty() {
+                let lib_name = std::path::Path::new(&self.library_table_path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| self.library_table_path.clone());
+                let status = if self.library.is_some() {
+                    self.text(UiText::Ready)
+                } else {
+                    self.text(UiText::Missing)
+                };
+                project_row(
+                    ui,
+                    mode,
+                    &lib_name,
+                    &self.library_table_path,
+                    status,
+                );
+            }
         });
     }
 
