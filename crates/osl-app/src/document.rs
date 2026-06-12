@@ -17,6 +17,10 @@ pub(crate) struct KicadSymbolPlacementResult {
 }
 
 #[derive(Debug)]
+/// KiCad 原理图文档封装。
+///
+/// 提供原理图的加载、保存、编辑（移动/旋转/删除元件）
+/// 和快照/恢复接口，是原理图编辑的核心数据层。
 pub(crate) struct KicadGuiDocument {
     path: PathBuf,
     schematic: KicadSchematic,

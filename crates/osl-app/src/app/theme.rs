@@ -6,6 +6,7 @@ use eframe::egui::{
 };
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// 主题模式：`Midnight`（深色）、`Graphite`（中灰）、`Light`（浅色）。
 pub(crate) enum StudioThemeMode {
     #[default]
     Midnight,
@@ -49,6 +50,7 @@ impl StudioThemeMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// 主题调色板。包含背景、面板、边框、强调色、文本等完整颜色方案。
 pub(crate) struct StudioPalette {
     pub(super) background: Color32,
     pub(super) panel: Color32,
@@ -69,6 +71,7 @@ pub(crate) struct StudioPalette {
 }
 
 /// `StudioTheme` 类型定义。
+/// 主题工具集。提供静态方法获取当前主题的面板帧、按钮样式和颜色。
 pub(crate) struct StudioTheme;
 
 #[allow(dead_code)]

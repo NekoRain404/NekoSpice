@@ -20,6 +20,7 @@ use std::time::Duration;
 
 /// Available simulation backend engines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// 仿真后端类型：`Ngspice` 或 `Xyce`。
 pub(crate) enum SimulationBackendKind {
     Ngspice,
     Xyce,
@@ -54,6 +55,10 @@ const NETLIST_PREVIEW_LINES: usize = 18;
 /// the last completed run, any error, the currently running task, and the
 /// selected waveform signal for display.
 #[derive(Debug)]
+/// 仿真面板状态。
+///
+/// 持有当前仿真指令、运行结果、错误信息和后端选择。
+/// 管理 ngspice/Xyce 仿真的完整生命周期。
 pub(crate) struct SimulationPanelState {
     /// Currently selected analysis directive kind (.tran, .ac, .dc, .op).
     pub(crate) directive_kind: KicadSimulationDirectiveKind,

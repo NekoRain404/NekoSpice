@@ -1,6 +1,10 @@
 use osl_kicad::{KicadPoint, KicadSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// 原理图绘图工具枚举。
+///
+/// 表示当前激活的绘图工具：选择、导线、总线、标签、
+/// 网络标签、电源端口、电阻、电容等。
 pub(crate) enum SchematicTool {
     Select,
     Wire,
@@ -49,6 +53,7 @@ impl SchematicTool {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// 绘图工具状态。跟踪当前活跃工具和工具切换的临时状态。
 pub(crate) struct SchematicToolState {
     pub(crate) active: SchematicTool,
     pub(crate) label_text: String,

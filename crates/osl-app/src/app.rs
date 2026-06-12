@@ -63,6 +63,9 @@ const EDIT_NUDGE_MM: f64 = 2.54;
 
 /// Active tab in the schematic workspace bottom dock.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// 原理图工作区底部停靠面板的活跃标签页。
+///
+/// 切换波形预览、FFT 分析、波特图、控制台输出、网表、ERC 检查和属性检查器。
 pub(super) enum SchematicBottomTab {
     #[default]
     Waveforms,
@@ -75,6 +78,10 @@ pub(super) enum SchematicBottomTab {
 }
 
 #[derive(Debug)]
+/// NekoSpice 应用程序核心状态。
+///
+/// 持有当前文档、库、画布场景、选中项、视口状态和所有工作区的 UI 状态。
+/// 所有工作区模块通过 `impl NekoSpiceApp` 块扩展此结构体的功能。
 pub struct NekoSpiceApp {
     pub(super) schematic_path: String,
     pub(super) library_table_path: String,
@@ -115,6 +122,7 @@ pub struct NekoSpiceApp {
 }
 
 #[derive(Debug, Clone, Copy)]
+/// 键盘微调方向。对应方向键，每次移动 2.54mm（100mil）。
 pub(super) enum EditNudgeDirection {
     Left,
     Right,

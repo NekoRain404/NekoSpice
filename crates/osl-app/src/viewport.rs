@@ -7,6 +7,7 @@ const MIN_ZOOM: f32 = 1.0;
 const MAX_ZOOM: f32 = 180.0;
 
 #[derive(Debug, Clone, Copy)]
+/// 画布视口。管理缩放级别、平移偏移和屏幕/原理图坐标变换。
 pub(crate) struct CanvasViewport {
     pub(crate) zoom: f32,
     pub(crate) pan: Vec2,
