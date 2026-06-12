@@ -2,11 +2,11 @@ use super::NekoSpiceApp;
 use super::theme::StudioTheme;
 use eframe::egui::{self, Rect, UiBuilder, pos2};
 
-const TOP_STATUS_HEIGHT: f32 = 68.0;
-const BOTTOM_STATUS_HEIGHT: f32 = 32.0;
-const NAVIGATION_WIDTH: f32 = 190.0;
-const PROJECT_CONTEXT_WIDTH: f32 = 280.0;
-const WORKSPACE_CONTEXT_WIDTH: f32 = 360.0;
+const TOP_STATUS_HEIGHT: f32 = 44.0;
+const BOTTOM_STATUS_HEIGHT: f32 = 28.0;
+const NAVIGATION_WIDTH: f32 = 160.0;
+const PROJECT_CONTEXT_WIDTH: f32 = 260.0;
+const WORKSPACE_CONTEXT_WIDTH: f32 = 320.0;
 const REGION_PADDING: f32 = 8.0;
 const MIN_CENTER_WIDTH: f32 = 340.0;
 
