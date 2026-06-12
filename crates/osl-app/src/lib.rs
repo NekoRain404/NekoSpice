@@ -21,8 +21,10 @@ pub use app::{NekoSpiceApp, load_canvas_scene, run_native};
 
 /// Test fixture schematic (RC filter with NekoSpice library symbols).
 /// Used by unit tests to verify document loading and editing.
+#[allow(dead_code)]
 pub(crate) const DEFAULT_SCHEMATIC: &str = "examples/kicad_schematic/rc.kicad_sch";
 /// Library table for test fixtures (NekoSpice analog symbols).
+#[allow(dead_code)]
 pub(crate) const DEFAULT_SYMBOL_LIBRARY_TABLE: &str = "examples/kicad_schematic/sym-lib-table";
 
 /// GUI startup schematic -- CM5 Minima demo board (KiCad demo project).

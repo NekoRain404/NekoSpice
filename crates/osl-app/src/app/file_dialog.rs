@@ -23,6 +23,7 @@ impl NekoSpiceApp {
     }
 
     /// Open a native file dialog to pick a symbol library table (.kicad_sym or sym-lib-table).
+    #[allow(dead_code)]
     pub(super) fn open_library_dialog(&mut self) {
         let dialog = rfd::FileDialog::new()
             .add_filter("KiCad Symbol Library", &["kicad_sym", "sym-lib-table"])

@@ -7,6 +7,8 @@ use osl_kicad::{KicadCanvasHit, KicadCanvasScene, KicadPoint};
 use std::path::PathBuf;
 
 mod canvas_panel;
+mod canvas_shortcuts;
+mod canvas_context_menu;
 mod center_workspace;
 mod diagnostics_panel;
 mod home_command_center;
@@ -80,11 +82,9 @@ mod waveform_workspace_sections;
 mod waveform_workspace_widgets;
 mod widgets;
 mod workspace_panel;
-mod context_menu;
 mod history;
 mod tool_palette;
 
-pub(crate) use context_menu::ContextMenuAction;
 pub use canvas_panel::load_canvas_scene;
 use navigation::StudioWorkspace;
 use optimization_workspace_state::OptimizationWorkspaceState;
