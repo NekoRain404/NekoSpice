@@ -65,19 +65,23 @@ impl NekoSpiceApp {
             // Structured parameter fields for the selected analysis type
             self.draw_analysis_params_fields(ui);
 
-            ui.add_space(6.0);
-
-            // Set Directive button — applies the analysis params to the schematic
-            if ui
-                .add_enabled(
-                    self.document.is_some(),
-                    egui::Button::new("Set Directive")
-                        .fill(palette.accent_soft),
-                )
-                .clicked()
-            {
-                self.apply_simulation_directive_edit();
-            }
+            // Action buttons: Set Directive + Reset to Defaults
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(
+                        self.document.is_some(),
+                        egui::Button::new("Set Directive")
+                            .fill(palette.accent_soft),
+                    )
+                    .clicked()
+                {
+                    self.apply_simulation_directive_edit();
+                }
+                if ui.button("Reset Defaults").clicked() {
+                    self.simulation_panel.analysis_params =
+                        AnalysisParams::for_kind(self.simulation_panel.directive_kind);
+                }
+            });
         });
     }
 
