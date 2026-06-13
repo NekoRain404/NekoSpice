@@ -3,7 +3,7 @@
 use crate::connectivity::normalize_net_name;
 use crate::diagnostics::schema_diagnostic;
 use crate::simulation::is_spice_analysis_directive_text;
-use crate::symbols::symbol_ordered_pins;
+use crate::symbols::{NspSymbolPropertySource, symbol_ordered_pins};
 use crate::transform::transform_symbol_point;
 use crate::{
     NspDiagnosticSeverity, NspHierarchyNetlist, NspNetGraph, NspSchematic, NspSchematicCheckReport,
@@ -101,6 +101,24 @@ impl NspSchematic {
             ("PNP", ".model PNP PNP LEVEL=1"),
             ("D", ".model D D LEVEL=1"),
         ];
+        // Built-in subcircuit models for common KiCad symbols
+        let builtin_subcircuits = [(
+            "kicad_builtin_opamp",
+            ".subckt kicad_builtin_opamp in+ in- v+ v- out PARAMS: POLE=100k GAIN=100k VOFF=0 ROUT=75\n                 E_op out 0 in+ in- 1\n                 ROUT out 0 ROUT\n                 .ends kicad_builtin_opamp",
+        )];
+        let mut injected_subs = Vec::new();
+        for (name, def) in &builtin_subcircuits {
+            let used = netlist_text
+                .lines()
+                .any(|line| line.trim().contains(name) && !line.trim().starts_with('*'));
+            let has_subckt = netlist_text.lines().any(|line| {
+                let t = line.trim().to_ascii_lowercase();
+                t.starts_with(".subckt") && t.contains(name)
+            });
+            if used && !has_subckt {
+                injected_subs.push(def.to_string());
+            }
+        }
         let mut injected = Vec::new();
         for (name, def) in &default_models {
             // Check if model name appears as a component value (after node names)
@@ -123,6 +141,17 @@ impl NspSchematic {
         if !has_end {
             lines.push(".end".to_string());
         }
+        // Inject built-in subcircuit definitions before .end
+        if !injected_subs.is_empty()
+            && let Some(end_idx) = lines
+                .iter()
+                .rposition(|l| l.trim().eq_ignore_ascii_case(".end"))
+        {
+            for (i, sub) in injected_subs.iter().enumerate() {
+                lines.insert(end_idx + i, sub.clone());
+            }
+        }
+        // Inject default model definitions before .end
         if !injected.is_empty()
             && let Some(end_idx) = lines
                 .iter()
@@ -195,6 +224,24 @@ impl NspSchematic {
             {
                 includes.insert(path.trim().to_string());
             }
+            // Also extract lib= from Sim.Params for symbols that use
+            // the KiCad Sim.Params format: type="X" model="..." lib="..."
+            if let Some(raw) = symbol.property("Sim.Params").or_else(|| {
+                definition
+                    .as_ref()
+                    .and_then(|d| d.property_value("Sim.Params"))
+            }) {
+                for token in raw.split(|c: char| c.is_ascii_whitespace()) {
+                    if let Some((key, val)) = token.split_once('=') {
+                        if key.trim().eq_ignore_ascii_case("lib") {
+                            let lib_path = val.trim_matches('"').trim();
+                            if !lib_path.is_empty() {
+                                includes.insert(lib_path.to_string());
+                            }
+                        }
+                    }
+                }
+            }
         }
         includes
             .into_iter()
@@ -233,6 +280,26 @@ impl NspSchematic {
         let model = symbol
             .sim_model_value(definition.as_ref())
             .map(|m| normalize_source_value(&m));
+        // Read raw Sim.Params before stripping — needed for type= extraction.
+        // First check the symbol's own properties, then the definition.
+        let raw_params = symbol
+            .property("Sim.Params")
+            .or_else(|| {
+                definition
+                    .as_ref()
+                    .and_then(|d| d.property_value("Sim.Params"))
+            })
+            .map(str::to_string);
+        if symbol.value().unwrap_or_default().contains("2ED2109") {
+            eprintln!(
+                "[DEBUG] ref={} lib_id={} has_raw={:?} raw={:?} has_explicit={}",
+                reference,
+                symbol.lib_id,
+                raw_params.is_some(),
+                raw_params,
+                has_explicit_sim_model
+            );
+        }
         let params = symbol.sim_params_value(definition.as_ref());
         // Get Sim.Type for SPICE parameter conversion
         let sim_type = symbol.sim_type(definition.as_ref());
@@ -264,11 +331,32 @@ impl NspSchematic {
                 })
             })?
             .to_ascii_uppercase();
+        // Track whether device was derived from Sim.Params type= so we can
+        // distinguish it from the reference-prefix fallback below.
+        let mut device_from_params = false;
+        // Fallback: extract type= from raw Sim.Params when device is still just
+        // the reference prefix (e.g. "U" or "Q") and not a known SPICE type.
+        // KiCad Sim.Params format: type="X" model="2ED2109S06F" lib="..."
+        if device.len() <= 1 || spice_primitive_for_device(&device).is_none() {
+            if let Some(ref raw) = raw_params {
+                for token in raw.split(|c: char| c.is_ascii_whitespace()) {
+                    if let Some((key, val)) = token.split_once('=') {
+                        if key.trim().eq_ignore_ascii_case("type") {
+                            let val_upper = val.trim_matches('"').trim().to_ascii_uppercase();
+                            if spice_primitive_for_device(&val_upper).is_some() {
+                                device = val_upper;
+                                device_from_params = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         // When Sim.Device = "SPICE", it means a custom template. But if the
         // resolved value doesn't contain SPICE template placeholders, fall back
         // to Spice_Primitive from the definition (which gives the actual type).
         if device == "SPICE" && !value.contains("${REFERENCE}") && !value.contains("${N") {
-            // Check definition for Spice_Primitive to get actual device type
             if let Some(def) = &definition
                 && let Some(prim) = def
                     .property("Spice_Primitive")
@@ -278,14 +366,29 @@ impl NspSchematic {
                 device = prim.to_ascii_uppercase();
             }
         }
-        let primitive = if explicit_device.is_some() || device == "SPICE" {
+        // Use spice_primitive_for_device when the device was explicitly set,
+        // or when it was derived from Sim.Device / Sim.Params type= / Spice_Primitive.
+        // The reference prefix fallback only applies when device == reference_prefix.
+        let use_explicit_primitive =
+            explicit_device.is_some() || device == "SPICE" || device_from_params;
+        let primitive = if use_explicit_primitive {
             spice_primitive_for_device(&device)?
         } else {
-            reference
-                .chars()
-                .next()
-                .map(|character| character.to_ascii_uppercase().to_string())
-                .unwrap_or_default()
+            // No explicit Sim.Device — infer from lib_id when possible.
+            // KiCad uses Q prefix for all transistors including MOSFETs,
+            // but SPICE needs M for MOSFETs and J for JFETs.
+            let lib_id_upper = symbol.lib_id.to_ascii_uppercase();
+            if let Some(inferred) = spice_primitive_for_device(&lib_id_upper) {
+                inferred
+            } else if let Some(prim) = infer_spice_primitive_from_lib_id(&symbol.lib_id) {
+                prim.to_string()
+            } else {
+                reference
+                    .chars()
+                    .next()
+                    .map(|character| character.to_ascii_uppercase().to_string())
+                    .unwrap_or_default()
+            }
         };
 
         if primitive.is_empty() {
@@ -301,6 +404,40 @@ impl NspSchematic {
         if primitive == "SPICE" {
             if value.is_empty() {
                 return None;
+            }
+            // If the template has no SPICE placeholders, try to resolve the
+            // actual device type from raw Sim.Params type= field.
+            if !value.contains("${REFERENCE}") && !value.contains("${N") {
+                if let Some(ref raw) = raw_params {
+                    for token in raw.split(|c: char| c.is_ascii_whitespace()) {
+                        if let Some((key, val)) = token.split_once('=') {
+                            if key.trim().eq_ignore_ascii_case("type") {
+                                let val_upper = val.trim_matches('"').trim().to_ascii_uppercase();
+                                if let Some(resolved_prim) = spice_primitive_for_device(&val_upper)
+                                {
+                                    // Build proper SPICE subcircuit call for X prefix
+                                    if resolved_prim == "X" {
+                                        let model_name = model.as_deref().unwrap_or(&value);
+                                        let x_ref = spice_item_name(reference, "X");
+                                        if !nodes.is_empty() && !model_name.is_empty() {
+                                            return Some(format!(
+                                                "{} {} {}",
+                                                x_ref,
+                                                nodes.join(" "),
+                                                model_name
+                                            ));
+                                        }
+                                    }
+                                    return Some(expand_spice_template(
+                                        &value,
+                                        &spice_reference,
+                                        nodes,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
             }
             return Some(expand_spice_template(&value, &spice_reference, nodes));
         }
@@ -751,6 +888,27 @@ fn sanitize_spice_identifier(value: &str) -> String {
     }
 }
 
+/// Infer SPICE primitive prefix from the symbol's lib_id string.
+///
+/// When `Sim.Device` / `Spice_Primitive` are not explicitly set, the reference
+/// designator prefix is used.  However KiCad uses `Q` for all transistors
+/// including MOSFETs, while SPICE requires `M`.  This helper inspects the
+/// `lib_id` (e.g. `Device:Q_NMOS_DGS`) to determine the correct SPICE prefix.
+fn infer_spice_primitive_from_lib_id(lib_id: &str) -> Option<&'static str> {
+    let lower = lib_id.to_ascii_lowercase();
+    if lower.contains("nmos") || lower.contains("pmos") || lower.contains("mosfet") {
+        Some("M")
+    } else if lower.contains("njfet") || lower.contains("pjfet") || lower.contains("jfet") {
+        Some("J")
+    } else if lower.contains("npn") || lower.contains("pnp") {
+        Some("Q")
+    } else if lower.contains("diode") || lower.contains("_d_") || lower.ends_with(":d") {
+        Some("D")
+    } else {
+        None
+    }
+}
+
 /// spice primitive for device。
 pub(crate) fn spice_primitive_for_device(device: &str) -> Option<String> {
     let device = device.to_ascii_uppercase();
@@ -943,6 +1101,12 @@ fn compose_spice_model_value(
     }
 }
 
+/// Build the SPICE instance name from the schematic reference and target prefix.
+///
+/// When the reference already carries a different SPICE prefix (e.g. `Q3` for
+/// a MOSFET that should be `M`), the prefix is **replaced** — yielding `M3`
+/// rather than `MQ3`.  This handles KiCad's convention of using `Q` for all
+/// transistors regardless of type.
 fn spice_item_name(reference: &str, primitive: &str) -> String {
     let Some(first) = primitive.chars().next() else {
         return reference.to_string();
@@ -954,7 +1118,21 @@ fn spice_item_name(reference: &str, primitive: &str) -> String {
     {
         reference.to_string()
     } else {
-        format!("{first}{reference}")
+        // Check if the reference starts with a known SPICE prefix that differs
+        // from the target primitive — if so, replace it rather than prepend.
+        let known_prefixes = [
+            'R', 'C', 'L', 'V', 'I', 'D', 'Q', 'J', 'M', 'S', 'W', 'E', 'F', 'G', 'H', 'T', 'K',
+        ];
+        if let Some(ref_first) = reference.chars().next()
+            && known_prefixes
+                .iter()
+                .any(|p| p.eq_ignore_ascii_case(&ref_first))
+        {
+            // Replace prefix: Q3 + M → M3
+            format!("{}{}", first, &reference[ref_first.len_utf8()..])
+        } else {
+            format!("{first}{reference}")
+        }
     }
 }
 
