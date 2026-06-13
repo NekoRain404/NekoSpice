@@ -1,3 +1,7 @@
+//! Waveform workspace center sections — dispatches rendering to the correct
+//! visualization (time domain, FFT, Bode, noise, eye) based on the active tab,
+//! and draws measurement tables and run statistics below the plot.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
