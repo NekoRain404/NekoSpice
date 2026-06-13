@@ -77,10 +77,10 @@ impl NekoSpiceApp {
                     self.open_file_dialog();
                 }
                 UiText::NewSchematic => {
-                    self.status_message = Some("New schematic (use File > Open to load)".to_string());
+                    self.create_new_schematic("Untitled Schematic");
                 }
                 UiText::NewProject => {
-                    self.status_message = Some("New project (use File > Open to load)".to_string());
+                    self.create_new_schematic("New Project");
                 }
                 UiText::WaveformViewer => {
                     if self.simulation_panel.last_run.is_some() {

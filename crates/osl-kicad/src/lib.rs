@@ -19,6 +19,7 @@ mod project;
 mod property;
 mod schematic_io;
 mod schematic_summary;
+mod new_schematic;
 mod sexpr;
 mod sheet;
 mod simulation;
@@ -224,3 +225,4 @@ fn normalize_default_property_effects(symbol: &mut KicadSymbolDef) {
 
 #[cfg(test)]
 mod tests;
+pub use new_schematic::new_empty_schematic;

@@ -230,6 +230,23 @@ impl NekoSpiceApp {
         self.status_message = Some("Redo".to_string());
     }
 
+    /// Create a new empty schematic document.
+    pub(super) fn create_new_schematic(&mut self, name: &str) {
+        let document = KicadGuiDocument::new_empty(name);
+        let scene = document.scene();
+        self.schematic_path = document.path().display().to_string();
+        self.viewport.fit_scene(scene.bounds);
+        self.document = Some(document);
+        self.scene = Some(scene);
+        self.selected_hit = None;
+        self.clear_property_editor();
+        self.schematic_tools.clear_pending();
+        self.load_error = None;
+        self.history.clear();
+        self.active_workspace = super::navigation::StudioWorkspace::Schematic;
+        self.status_message = Some(format!("Created new schematic: {name}"));
+    }
+
     // ── 持久化 ──────────────────────────────────────────────────────────
 
     /// 保存当前文档到磁盘。
