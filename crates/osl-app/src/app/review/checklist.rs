@@ -1,3 +1,5 @@
+//! Design review checklist — categorized pass/fail items with progress tracking.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::{StudioLocale, UiText};
 use crate::app::navigation::StudioWorkspace;

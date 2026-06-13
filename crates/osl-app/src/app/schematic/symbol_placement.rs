@@ -1,3 +1,5 @@
+//! Symbol placement — drag-and-drop symbol placement from library to canvas.
+
 use crate::app::NekoSpiceApp;
 use eframe::egui;
 use osl_kicad::{KicadIndexedSymbolBodyStyle, KicadIndexedSymbolPin, KicadIndexedSymbolUnit};

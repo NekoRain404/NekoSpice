@@ -1,3 +1,5 @@
+//! Home insights panel — recent simulation results, waveform summaries, and alerts.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::{StudioTheme, StudioThemeMode};

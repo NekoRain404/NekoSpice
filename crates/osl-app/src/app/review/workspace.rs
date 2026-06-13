@@ -1,3 +1,5 @@
+//! Design review workspace — center panel for schematic risk triage and action items.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::navigation::StudioWorkspace;

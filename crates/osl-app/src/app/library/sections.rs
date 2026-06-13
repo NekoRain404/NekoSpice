@@ -1,3 +1,5 @@
+//! Library workspace center sections — dispatches rendering for the symbol browser.
+
 use crate::app::NekoSpiceApp;
 use super::widgets::{metadata_row, symbol_list_row};
 use crate::app::localization::UiText;

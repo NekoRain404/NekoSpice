@@ -1,3 +1,5 @@
+//! Shared widget helpers for the reports workspace (report rows, export toggles, artifact rows).
+
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 

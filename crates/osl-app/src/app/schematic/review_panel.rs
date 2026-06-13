@@ -1,3 +1,5 @@
+//! Schematic review panel — design rule check results and recommendations.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use super::inspector::widgets::{property_row, status_pill};

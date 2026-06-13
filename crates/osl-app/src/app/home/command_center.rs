@@ -1,3 +1,5 @@
+//! Home command center — metric cards showing project stats and recommended next steps.
+
 use crate::app::NekoSpiceApp;
 use super::dashboard::SECTION_GAP;
 use crate::app::localization::UiText;

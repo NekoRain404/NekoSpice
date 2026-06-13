@@ -1,3 +1,5 @@
+//! Model validation — check SPICE model compatibility and pin mapping.
+
 use crate::app::NekoSpiceApp;
 use super::widgets::{metadata_row, validation_row};
 use crate::app::localization::UiText;

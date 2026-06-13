@@ -1,3 +1,5 @@
+//! Report preview — SVG/canvas preview rendering for generated reports.
+
 use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
 use eframe::egui;

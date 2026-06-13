@@ -1,3 +1,5 @@
+//! Home workspace dashboard — project overview, quick actions, and command center.
+
 use crate::app::NekoSpiceApp;
 use super::widgets::two_column;
 use crate::app::localization::UiText;

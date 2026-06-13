@@ -1,3 +1,5 @@
+//! Shared widget helpers for the library workspace (symbol chips, filter rows).
+
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, RichText};
 

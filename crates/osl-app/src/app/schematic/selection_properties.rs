@@ -1,3 +1,5 @@
+//! Selection properties editor — modify attributes of the selected schematic item.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use eframe::egui;

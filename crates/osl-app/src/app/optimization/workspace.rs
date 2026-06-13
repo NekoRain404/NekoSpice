@@ -1,3 +1,5 @@
+//! Optimization workspace — center panel for parametric optimization and yield analysis.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use super::widgets::metric_card;

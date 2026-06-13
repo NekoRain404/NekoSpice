@@ -1,3 +1,5 @@
+//! Shared widget helpers for the review workspace (severity colors, issue rows, recommendations).
+
 use super::state::{ReviewSeverity, ReviewSeverityFilter};
 use crate::app::theme::{StudioPalette, StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText};

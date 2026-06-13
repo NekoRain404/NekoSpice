@@ -1,3 +1,5 @@
+//! Model browser — tree view of available SPICE models and subcircuits.
+
 use crate::app::NekoSpiceApp;
 use super::preview::{draw_spice_preview, draw_symbol_preview};
 use super::widgets::{library_metric_card, metadata_row, pin_mapping_row};

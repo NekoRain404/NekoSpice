@@ -1,3 +1,5 @@
+//! Shared widget helpers for the schematic workspace (console line, signal row, trace chip).
+
 /// Toolbar widget helpers: icon-style buttons, document tabs, and signal rows.
 ///
 /// Provides compact reusable widgets for the schematic toolbar, document tab bar,

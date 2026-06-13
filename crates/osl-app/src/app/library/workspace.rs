@@ -1,3 +1,5 @@
+//! Library workspace — center panel for symbol browsing, preview, and placement.
+
 use crate::app::NekoSpiceApp;
 use super::widgets::library_filter_tab;
 use crate::app::localization::UiText;

@@ -1,3 +1,5 @@
+//! Shared widget helpers for the home workspace (two-column layout, metric cards).
+
 use crate::app::NekoSpiceApp;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Pos2, Rect, RichText, Sense, Stroke, Vec2};

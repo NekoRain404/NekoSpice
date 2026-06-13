@@ -1,3 +1,5 @@
+//! Shared widget helpers for the optimization workspace (metric cards, progress bars, chips).
+
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText, Stroke};
 

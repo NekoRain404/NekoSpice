@@ -1,3 +1,5 @@
+//! Library data management — symbol filtering, SPICE preview generation, vendor model import.
+
 use crate::app::NekoSpiceApp;
 use osl_kicad::KicadIndexedSymbol;
 

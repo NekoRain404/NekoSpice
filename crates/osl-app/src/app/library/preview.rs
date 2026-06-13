@@ -1,3 +1,5 @@
+//! Library preview — symbol canvas preview rendering for the browser.
+
 use super::data::spice_preview_lines;
 use super::widgets::code_line;
 use crate::canvas::colors::SchematicColors;

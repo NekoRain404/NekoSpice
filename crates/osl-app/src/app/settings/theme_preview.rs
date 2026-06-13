@@ -1,3 +1,5 @@
+//! Theme preview — live preview of color palette changes in the settings panel.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::{StudioPalette, StudioTheme, StudioThemeMode};

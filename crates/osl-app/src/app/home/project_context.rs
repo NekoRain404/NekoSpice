@@ -1,3 +1,5 @@
+//! Home project context — loaded schematic info, library status, and file paths.
+
 use crate::app::NekoSpiceApp;
 use super::dashboard::SECTION_GAP;
 use crate::app::localization::UiText;
