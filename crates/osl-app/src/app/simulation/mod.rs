@@ -33,6 +33,7 @@ pub(crate) mod options_solver;
 pub(crate) mod options_ic;
 pub(crate) mod options_preset;
 pub(crate) mod field_validation;
+pub(crate) mod quick_start;
 pub(crate) mod options_status;
 pub(crate) mod profile_editor_sections;
 pub(crate) mod profile_editor_widgets;

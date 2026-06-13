@@ -99,6 +99,11 @@ impl NekoSpiceApp {
             });
         });
 
+        // Quick Start templates
+        super::quick_start::draw_quick_start_panel(self, ui, mode);
+
+        ui.add_space(8.0);
+
         // Quick analysis directive editor
         self.draw_simulation_directive_editor(ui);
 
