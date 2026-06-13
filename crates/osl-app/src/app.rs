@@ -176,7 +176,7 @@ impl Default for NekoSpiceApp {
             selection_properties: SelectionPropertyEditorState::default(),
             schematic_inspector: SchematicInspectorPanelState::default(),
             schematic_tools: SchematicToolState::default(),
-            simulation_panel: SimulationPanelState::default(),  // will be overridden below
+            simulation_panel: SimulationPanelState::from_disk(),
             simulation_profile_editor: SimulationProfileEditorState::from_disk(),
             simulation_history: SimulationHistory::default(),
             simulation_measurements: Vec::new(),
