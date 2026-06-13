@@ -1,3 +1,5 @@
+//! KiCad property parsing and serialization for symbols.
+
 use crate::coordinates::{KicadAt, parse_at};
 use crate::sexpr::{Sexp, child, child_value, format_number, list_items, list_value, sexpr_string};
 use crate::style::{KicadTextEffects, parse_text_effects, write_optional_bool_sexpr};

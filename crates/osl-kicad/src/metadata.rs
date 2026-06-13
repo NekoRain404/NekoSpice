@@ -1,3 +1,5 @@
+//! Schematic metadata — title block parsing and serialization.
+
 use crate::sexpr::{Sexp, child_value, direct_children, list_items, list_value, sexpr_string};
 
 #[derive(Debug, Clone, PartialEq)]

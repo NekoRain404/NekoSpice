@@ -1,3 +1,5 @@
+//! Waveform preview drawing primitives — grid, buckets, trace colors.
+
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use crate::waveform_summary::GuiWaveformPreview;
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke};

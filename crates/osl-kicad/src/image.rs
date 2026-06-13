@@ -1,3 +1,5 @@
+//! KiCad image element parsing and serialization.
+
 use crate::coordinates::parse_image_at;
 use crate::sexpr::{Sexp, atom_text, child, child_value, format_number, list_items, sexpr_string};
 use crate::util::parse_kicad_bool_value;

@@ -1,3 +1,5 @@
+//! Schematic tool controls panel — UI for configuring the active drawing tool parameters.
+
 use super::state::SchematicTool;
 use crate::app::NekoSpiceApp;
 use eframe::egui;

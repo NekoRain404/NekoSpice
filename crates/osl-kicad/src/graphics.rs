@@ -1,3 +1,5 @@
+//! KiCad graphic elements — polylines, rectangles, arcs, circles, and filled polygons.
+
 use crate::canvas::KicadCanvasGraphic;
 use crate::coordinates::{
     KicadAt, KicadPoint, parse_at, parse_points, parse_xy, write_points_sexpr,

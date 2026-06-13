@@ -1,3 +1,6 @@
+//! KiCad to SPICE netlist export.
+
+
 use crate::connectivity::normalize_net_name;
 use crate::diagnostics::kicad_schematic_diagnostic;
 use crate::simulation::is_spice_analysis_directive_text;

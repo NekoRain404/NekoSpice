@@ -1,3 +1,5 @@
+//! Schematic edit operations — delete, move, rotate, place, wire, label, and more.
+
 use crate::{
     KicadAt, KicadGraphic, KicadLabelKind, KicadPoint, KicadProperty, KicadSheet, KicadSheetPin,
     KicadSimulationDirectiveKind, KicadSize, KicadSymbolDef, KicadTable, coordinate_key,

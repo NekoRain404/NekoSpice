@@ -1,3 +1,5 @@
+//! Reports workspace sections — report list and detail views.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use super::preview::{draw_curve, draw_grid};

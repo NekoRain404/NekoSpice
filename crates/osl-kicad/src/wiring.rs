@@ -1,3 +1,5 @@
+//! Wiring elements — wires, buses, bus entries, bus aliases, and net chains.
+
 use crate::coordinates::{
     KicadPoint, KicadSize, parse_at, parse_points, parse_size, write_points_sexpr,
 };

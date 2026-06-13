@@ -1,3 +1,4 @@
+
 fn ltspice_builtin_symbol(name: &str) -> Option<LtspiceSymbolSpec> {
     const RES_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 16 }, AscPoint { x: 16, y: 96 }];
     const CAP_PINS: &[AscPoint] = &[AscPoint { x: 16, y: 0 }, AscPoint { x: 16, y: 64 }];

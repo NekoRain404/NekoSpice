@@ -1,3 +1,5 @@
+//! Reports workspace state — active report selection and filter state.
+
 use crate::app::localization::UiText;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

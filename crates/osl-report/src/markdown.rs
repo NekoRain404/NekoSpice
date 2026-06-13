@@ -1,3 +1,5 @@
+//! Markdown report formatter.
+
 use crate::format::{
     markdown_cell, markdown_inline, markdown_link, markdown_link_cell, parameters_text,
     summary_text,

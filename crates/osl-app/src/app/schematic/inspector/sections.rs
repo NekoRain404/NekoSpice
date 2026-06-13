@@ -1,3 +1,5 @@
+//! Schematic inspector sections — detailed property groups.
+
 use crate::app::localization::UiText;
 use super::widgets::{
     compact_action, property_row, section_caption, status_pill,

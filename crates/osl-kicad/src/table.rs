@@ -1,3 +1,5 @@
+//! KiCad table element parsing and serialization.
+
 use crate::coordinates::{KicadAt, KicadSize, parse_at, parse_size};
 use crate::geometry::{KicadBoundingBox, KicadBoundingBoxBuilder, kicad_rotated_rect_bounds};
 use crate::sexpr::{

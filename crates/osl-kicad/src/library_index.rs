@@ -1,3 +1,5 @@
+//! Symbol library index — reads .kicad_sym files and provides lookup by name.
+
 use crate::json::kicad_bounding_box_value;
 use crate::util::{case_insensitive_contains, kicad_wildcard_match, resolve_kicad_uri};
 use crate::{

@@ -1,3 +1,5 @@
+//! Schematic inspector widgets — reusable UI components.
+
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText};
 

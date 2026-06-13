@@ -1,3 +1,5 @@
+//! S-expression parser — low-level tokenizer and tree builder for KiCad files.
+
 use osl_core::{OslError, OslResult};
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,3 +1,5 @@
+//! KiCad hierarchical sheet parsing and pin management.
+
 use crate::coordinates::{KicadAt, KicadPoint, KicadSize, parse_at, parse_size};
 use crate::geometry::KicadBoundingBox;
 use crate::instances::{

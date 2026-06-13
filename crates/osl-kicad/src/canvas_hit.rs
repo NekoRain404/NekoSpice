@@ -1,3 +1,5 @@
+//! Canvas hit testing — ray-cast selection for symbols, wires, labels, and other items.
+
 use crate::geometry::{
     KICAD_SHEET_PIN_STUB_LENGTH, kicad_junction_radius, kicad_no_connect_arms,
     kicad_point_distance, kicad_polyline_hits_point, kicad_rotated_rect_contains_point,

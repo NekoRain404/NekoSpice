@@ -1,3 +1,5 @@
+//! NekoSpice CLI — command-line interface for simulation, verification, and analysis.
+
 use osl_core::{
     OslError, OslResult, ParameterOverride, RunMetadata, RunStatus, make_run_id, read_text,
     write_text,

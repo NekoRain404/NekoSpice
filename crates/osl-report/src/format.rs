@@ -1,3 +1,5 @@
+//! Report format trait and common utilities.
+
 use osl_core::ParameterOverride;
 use osl_waveform::WaveformSummary;
 

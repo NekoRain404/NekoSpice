@@ -1,3 +1,5 @@
+//! KiCad netlist import — converts KiCad schematic to SPICE netlist.
+
 use crate::{ImportDiagnostic, ImportSeverity};
 use osl_core::{OslError, OslResult, read_text};
 use osl_kicad::{

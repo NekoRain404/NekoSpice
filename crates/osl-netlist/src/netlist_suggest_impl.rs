@@ -1,3 +1,4 @@
+
 fn suggested_signal_priority(signal: &str) -> (u8, String) {
     let lowered = signal.to_ascii_lowercase();
     let rank = if lowered == "v(out)" {

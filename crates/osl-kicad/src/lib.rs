@@ -1,3 +1,8 @@
+//! KiCad file format parser and editor, implemented in Rust.
+//!
+//! Provides S-expression parsing, schematic read/write, symbol library indexing,
+//! canvas scene generation, and SPICE netlist export.
+
 mod canvas;
 mod canvas_hit;
 mod connectivity;

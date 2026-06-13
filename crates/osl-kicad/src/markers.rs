@@ -1,3 +1,5 @@
+//! Schematic markers — junctions and no-connect markers.
+
 use crate::coordinates::{KicadPoint, parse_at};
 use crate::sexpr::{Sexp, child, child_value, format_number, list_items, sexpr_string};
 use crate::style::{KicadColor, parse_color};

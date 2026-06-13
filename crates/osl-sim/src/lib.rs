@@ -1,3 +1,6 @@
+//! Simulation backend library - ngspice/Xyce profile building, netlist injection, and log parsing.
+
+
 mod artifacts;
 mod profile;
 

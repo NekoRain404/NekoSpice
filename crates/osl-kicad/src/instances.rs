@@ -1,3 +1,5 @@
+//! Schematic/symbol instance metadata — sheet instances and symbol path instances.
+
 use crate::sexpr::{Sexp, child_value, direct_children, list_items, list_value, sexpr_string};
 use crate::util::parse_kicad_bool_value;
 

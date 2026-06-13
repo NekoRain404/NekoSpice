@@ -1,3 +1,5 @@
+//! KiCad coordinate types — KicadPoint, KicadAt, KicadSize with S-expression parsing.
+
 use crate::sexpr::{Sexp, atom_text, direct_children, format_number, list_items};
 
 #[derive(Debug, Clone, Copy, PartialEq)]

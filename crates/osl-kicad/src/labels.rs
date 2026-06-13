@@ -1,3 +1,5 @@
+//! KiCad labels — local, global, hierarchical, and directive (netclass) labels.
+
 use crate::coordinates::{KicadAt, parse_at};
 use crate::property::{KicadProperty, parse_property};
 use crate::sexpr::{

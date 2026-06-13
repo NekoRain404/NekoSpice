@@ -1,3 +1,5 @@
+//! KiCad parsing utilities — boolean parsing and string helpers.
+
 use crate::sexpr::{Sexp, child, list_value};
 use std::env;
 use std::path::{Path, PathBuf};

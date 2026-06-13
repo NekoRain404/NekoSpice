@@ -1,3 +1,5 @@
+//! Vendor model catalog — TI/ADI SPICE model directory management.
+
 // OpenSpiceLab-RS model checking subsystem.
 // Model scan and check implementation is in model_check_impl.rs.
 

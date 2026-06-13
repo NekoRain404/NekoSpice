@@ -1,3 +1,5 @@
+//! Design review workspace state — severity filters and review configuration.
+
 use crate::app::localization::StudioLocale;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

@@ -1,3 +1,5 @@
+//! KiCad symbol library table (.kicad_sym) parsing.
+
 use crate::json::json_option;
 use crate::sexpr::{
     Sexp, child, child_value, direct_children, expect_root_list, list_items, sexpr_atom_or_string,

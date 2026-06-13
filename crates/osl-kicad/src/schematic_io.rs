@@ -1,3 +1,6 @@
+//! KiCad schematic I/O - reading, writing, parsing, and serialization.
+
+
 use crate::graphics::{parse_rule_area, parse_schematic_graphic};
 use crate::group::parse_group;
 use crate::image::parse_image;

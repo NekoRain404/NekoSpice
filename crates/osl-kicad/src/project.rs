@@ -1,3 +1,5 @@
+//! KiCad project file (.kicad_pro) parsing.
+
 use crate::json::{json_option, json_u64_option};
 use osl_core::{OslError, OslResult, json_escape};
 use std::path::Path;

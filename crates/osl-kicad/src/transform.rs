@@ -1,3 +1,5 @@
+//! Transform helpers — mirror, rotate, and normalize symbol placements.
+
 use crate::{KicadAt, KicadPoint};
 use osl_core::{OslError, OslResult};
 use std::collections::BTreeSet;

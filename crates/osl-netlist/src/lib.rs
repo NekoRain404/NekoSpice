@@ -1,3 +1,5 @@
+//! Netlist parsing and conversion — KiCad, LTspice, and SPICE format support.
+
 mod kicad_import;
 mod ltspice_import;
 

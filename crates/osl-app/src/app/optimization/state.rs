@@ -1,3 +1,5 @@
+//! Optimization workspace state — active tab and parameter configuration.
+
 use crate::app::localization::UiText;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

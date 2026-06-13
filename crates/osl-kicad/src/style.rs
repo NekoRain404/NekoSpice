@@ -1,3 +1,5 @@
+//! KiCad visual style — fill, stroke, margins, colors, and text effects.
+
 use crate::sexpr::{
     Sexp, atom_text, child, child_value, format_number, head, list_items, list_value,
     sexpr_atom_or_string, sexpr_string,

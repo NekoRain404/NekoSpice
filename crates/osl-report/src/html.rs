@@ -1,3 +1,5 @@
+//! HTML report formatter.
+
 use crate::VerifyReport;
 use crate::format::{parameters_text, summary_text};
 use osl_core::html_escape;

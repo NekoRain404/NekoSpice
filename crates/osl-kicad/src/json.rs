@@ -1,3 +1,5 @@
+//! JSON serialization helpers for KiCad canvas scene data.
+
 use osl_core::json_escape;
 
 use crate::{KicadBoundingBox, KicadProperty, kicad_at_value, kicad_text_effects_value};

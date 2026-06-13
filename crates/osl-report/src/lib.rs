@@ -1,3 +1,5 @@
+//! Simulation report generation — HTML, JSON, Markdown, and JUnit formats.
+
 mod bundle;
 mod directory;
 mod format;

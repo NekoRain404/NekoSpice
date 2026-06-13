@@ -1,3 +1,5 @@
+//! Schematic check diagnostics — error/warning/info reports for ERC.
+
 use crate::json::json_option;
 use osl_core::json_escape;
 

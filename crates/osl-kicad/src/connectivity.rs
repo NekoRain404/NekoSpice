@@ -1,3 +1,5 @@
+//! Schematic connectivity graph — net detection, bus alias resolution, and net-to-pin mapping.
+
 use crate::{KicadPoint, KicadSchematic, KicadSize};
 use std::collections::{BTreeMap, BTreeSet};
 

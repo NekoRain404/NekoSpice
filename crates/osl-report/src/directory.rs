@@ -1,3 +1,5 @@
+//! Directory-based report output — writes reports to run output directories.
+
 use crate::report_css;
 use osl_core::{OslError, OslResult, html_escape, read_text, write_text};
 use std::path::{Path, PathBuf};

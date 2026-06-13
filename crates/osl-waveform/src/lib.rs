@@ -1,3 +1,5 @@
+//! Waveform data library — raw file parsing, measurement computation, CSV export, and FFT.
+
 pub mod fft;
 use osl_core::{OslError, OslResult, json_escape, read_text};
 use std::fs;

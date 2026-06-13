@@ -1,3 +1,5 @@
+//! Canvas scene generation — converts parsed KicadSchematic into renderable KicadCanvasScene.
+
 use crate::geometry::{
     KICAD_CANVAS_LINE_BOUNDS_PADDING, KICAD_CANVAS_POINT_BOUNDS_RADIUS, KicadBoundingBoxBuilder,
     kicad_arc_hits_point, kicad_at_bounds, kicad_bezier_hits_point, kicad_circle_hits_point,

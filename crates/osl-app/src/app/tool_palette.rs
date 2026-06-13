@@ -29,10 +29,6 @@ impl NekoSpiceApp {
     /// Draw the vertical tool palette on the left side of the schematic canvas.
     ///
     /// Each tool gets a square button with an icon. The active tool is highlighted
-    /// with an accent background. Returns the width allocated by the palette.
-    /// Draw the vertical tool palette on the left side of the schematic canvas.
-    ///
-    /// Each tool gets a square button with an icon. The active tool is highlighted
     /// with an accent background and left bar indicator. Returns the width allocated.
     pub(crate) fn draw_tool_palette(&mut self, ui: &mut egui::Ui) -> f32 {
         let palette = self.theme_palette();

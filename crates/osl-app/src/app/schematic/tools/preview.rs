@@ -1,3 +1,5 @@
+//! Schematic tool preview rendering — ghost preview for wire, bus, label placement.
+
 use crate::canvas;
 use crate::canvas::colors::SchematicColors;
 use crate::viewport::CanvasViewport;

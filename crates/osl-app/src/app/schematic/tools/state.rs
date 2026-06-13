@@ -1,3 +1,5 @@
+//! Schematic tool state — definitions for available drawing tools and their runtime state.
+
 use osl_kicad::{KicadPoint, KicadSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,3 +1,5 @@
+//! Schematic inspector panel — component properties editor.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use super::widgets::inspector_tab;

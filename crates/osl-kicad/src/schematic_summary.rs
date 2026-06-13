@@ -1,3 +1,5 @@
+//! Schematic summary — quick stats about symbols, wires, labels, and sheets.
+
 use crate::json::{json_bool_option, json_option};
 use crate::{KicadProperty, KicadSchematic};
 use osl_core::json_escape;

@@ -1,3 +1,6 @@
+//! Simulation artifact management - collects output files, logs, waveforms, and reports from runs.
+
+
 use osl_core::{Artifact, OslError, OslResult, RunMetadata, RunStatus, html_escape, write_text};
 use osl_waveform::read_ngspice_raw;
 use std::fs;

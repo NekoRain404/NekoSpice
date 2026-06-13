@@ -1,3 +1,5 @@
+//! JUnit XML report formatter.
+
 use crate::format::{
     cdata_escape, junit_seconds, option_f64_text, parameters_text, summary_text, xml_escape,
 };

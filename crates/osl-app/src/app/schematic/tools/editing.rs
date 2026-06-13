@@ -1,3 +1,5 @@
+//! Schematic tool editing — handles click-to-place logic for wires, buses, labels, and other tools.
+
 use super::state::SchematicTool;
 use crate::app::NekoSpiceApp;
 use crate::document::KicadGuiDocument;

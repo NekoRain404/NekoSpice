@@ -1,3 +1,6 @@
+//! KiCad simulation directive parsing - .tran, .ac, .dc, .op, .noise, .disto, .sens.
+
+
 use crate::edit::validate_at;
 use crate::{KicadAt, KicadEditSummary, KicadSchematic, KicadTextItem};
 use osl_core::{OslError, OslResult};

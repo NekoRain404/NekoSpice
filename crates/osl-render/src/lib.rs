@@ -1,3 +1,5 @@
+//! SVG rendering engine for KiCad schematics.
+
 use osl_core::html_escape;
 use osl_kicad::{
     KicadAt, KicadBoundingBox, KicadCanvasDirectiveLabel, KicadCanvasGraphic, KicadCanvasImage,

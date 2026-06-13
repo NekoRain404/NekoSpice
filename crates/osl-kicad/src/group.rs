@@ -1,3 +1,5 @@
+//! KiCad group element parsing.
+
 use crate::sexpr::{Sexp, atom_text, child, child_value, list_items, list_value, sexpr_string};
 use crate::util::parse_kicad_bool_value;
 

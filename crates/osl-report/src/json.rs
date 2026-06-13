@@ -1,3 +1,5 @@
+//! JSON report formatter.
+
 use crate::VerifyReport;
 use crate::format::{option_f64_json, summary_json};
 use osl_core::{json_escape, parameters_json};

@@ -1,3 +1,5 @@
+//! CLI KiCad edit commands — batch schematic editing operations.
+
 use crate::{parse_number, parse_optional_positive_u32, parse_positive_u32, trailing_positionals};
 use osl_core::{OslError, OslResult};
 use osl_kicad::{

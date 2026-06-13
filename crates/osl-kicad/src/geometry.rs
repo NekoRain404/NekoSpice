@@ -1,3 +1,5 @@
+//! Geometry primitives — bounding box, arc sampling, and spatial calculations.
+
 use crate::{
     KicadAt, KicadFill, KicadPoint, KicadSize, KicadStroke, KicadTextEffects,
     transform::rotate_point,

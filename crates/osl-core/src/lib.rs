@@ -1,3 +1,6 @@
+//! Core data types and utilities for NekoSpice.
+//! Defines error types, run metadata, artifact management, and shared helpers.
+
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs;

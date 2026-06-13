@@ -1,3 +1,5 @@
+//! Schematic inspector simulator info — simulation-related component details.
+
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use super::widgets::{compact_action, property_row, status_pill};

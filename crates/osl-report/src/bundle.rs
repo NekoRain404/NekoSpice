@@ -1,3 +1,5 @@
+//! Report bundle — collects all artifacts and generates formatted reports.
+
 use crate::VerifyReport;
 use osl_core::{OslResult, write_text};
 use std::path::Path;

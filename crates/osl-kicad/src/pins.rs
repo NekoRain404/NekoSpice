@@ -1,3 +1,5 @@
+//! KiCad pin definitions — pin names, numbers, types, display, and alternates.
+
 use crate::coordinates::{KicadAt, parse_at};
 use crate::sexpr::{
     Sexp, atom_text, child, child_value, direct_children, format_number, list_items, list_value,

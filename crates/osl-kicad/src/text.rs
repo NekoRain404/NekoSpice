@@ -1,3 +1,5 @@
+//! KiCad text elements — text items and text boxes.
+
 use crate::coordinates::{KicadAt, KicadSize, parse_at, parse_size};
 use crate::geometry::{KicadBoundingBox, kicad_rotated_rect_bounds};
 use crate::sexpr::{Sexp, child, child_value, format_number, list_items, list_value, sexpr_string};
