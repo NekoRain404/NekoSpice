@@ -1,3 +1,5 @@
+//! colors implementation.
+//!
 #![allow(dead_code)]
 //! Theme-aware schematic rendering color palette.
 //!
