@@ -1,0 +1,195 @@
+//! Simulation status display — shows run results, error logs, artifacts,
+//! report links, and waveform previews after a simulation completes.
+//!
+//! Includes a "View Waveforms" button that navigates to the Waveforms workspace
+//! for detailed analysis of the simulation results.
+
+use crate::app::NekoSpiceApp;
+use crate::app::localization::UiText;
+use crate::app::navigation::StudioWorkspace;
+use crate::app::simulation::artifacts_panel::draw_simulation_artifacts_panel;
+use crate::app::simulation::report_panel::draw_simulation_report_panel;
+use crate::app::simulation::waveform_panel::draw_simulation_waveform_panel;
+use crate::app::status_strip::severity_color;
+use crate::app::theme::StudioTheme;
+use crate::waveform_summary::GuiWaveformSummaryState;
+use eframe::egui;
+use nsp_core::RunStatus;
+use nsp_schema::NspDiagnosticSeverity;
+
+impl NekoSpiceApp {
+    /// Draw the run status section: netlist warnings, current task state,
+    /// errors, ngspice log, last run info, artifacts, report, and waveform summary.
+    pub(in crate::app) fn draw_simulation_run_status(&mut self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+
+        // Show netlist validation warnings (persistent until next run)
+        if !self.simulation_panel.netlist_warnings.is_empty() {
+            for warning in &self.simulation_panel.netlist_warnings {
+                ui.colored_label(
+                    severity_color(mode, NspDiagnosticSeverity::Warning),
+                    format!("Warning: {}", warning),
+                );
+            }
+            ui.add_space(4.0);
+        }
+
+        if self.simulation_panel.active_task.is_some() {
+            ui.label(self.text(UiText::Running));
+        }
+        // Show parsed ngspice/xyce log summary + collapsible raw log
+        if let Some(run) = &self.simulation_panel.last_run {
+            let log_path = run.output_dir.join("ngspice.log");
+            let fallback = run.output_dir.join("xyce.log");
+            let actual = if log_path.is_file() {
+                log_path
+            } else {
+                fallback
+            };
+            if actual.is_file()
+                && let Ok(content) = std::fs::read_to_string(&actual)
+            {
+                // Parse the log for structured error/warning display
+                let (errors, warnings, summary) = nsp_sim::parse_ngspice_log(&content);
+                if !errors.is_empty() || !warnings.is_empty() || summary.is_some() {
+                    ui.separator();
+                    let palette = self.theme_palette();
+                    StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+                        ui.label(StudioTheme::section_title_for(mode, "Log Summary"));
+                        if let Some(summary) = &summary {
+                            ui.label(egui::RichText::new(summary).color(palette.text));
+                        }
+                        if !errors.is_empty() {
+                            ui.colored_label(palette.danger, format!("{} error(s):", errors.len()));
+                            for err in errors.iter().take(3) {
+                                ui.label(
+                                    egui::RichText::new(format!("  {}", err))
+                                        .size(11.0)
+                                        .color(palette.text_muted),
+                                );
+                            }
+                        }
+                        if !warnings.is_empty() {
+                            ui.colored_label(
+                                palette.warning,
+                                format!("{} warning(s)", warnings.len()),
+                            );
+                        }
+                    });
+                }
+                // Collapsible raw log for advanced users
+                egui::CollapsingHeader::new(
+                    egui::RichText::new("Raw Log").color(self.theme_palette().text_muted),
+                )
+                .id_salt("ngspice_raw_log")
+                .default_open(false)
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("ngspice_log_viewer")
+                        .max_height(100.0)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.monospace(&content);
+                        });
+                });
+            }
+        }
+        if let Some(run) = &self.simulation_panel.last_run {
+            let palette = self.theme_palette();
+            let color = match run.metadata.status {
+                RunStatus::Passed => palette.success,
+                RunStatus::Failed => severity_color(mode, NspDiagnosticSeverity::Error),
+            };
+
+            // Structured result summary card
+            StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+                ui.label(StudioTheme::section_title_for(mode, "Run Result"));
+                ui.add_space(4.0);
+
+                // Status row with colored indicator
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("●").color(color).size(14.0));
+                    ui.label(
+                        egui::RichText::new(run.metadata.status.as_str())
+                            .strong()
+                            .color(color),
+                    );
+                });
+                ui.add_space(2.0);
+
+                // Key metrics grid
+                egui::Grid::new("run_result_metrics")
+                    .num_columns(2)
+                    .spacing([8.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label(StudioTheme::muted_for(mode, "Duration"));
+                        ui.label(
+                            egui::RichText::new(format!("{} ms", run.metadata.duration_ms))
+                                .monospace(),
+                        );
+                        ui.end_row();
+
+                        ui.label(StudioTheme::muted_for(mode, "Exit Code"));
+                        ui.label(
+                            egui::RichText::new(format!("{:?}", run.metadata.exit_code))
+                                .monospace(),
+                        );
+                        ui.end_row();
+
+                        ui.label(StudioTheme::muted_for(mode, "Backend"));
+                        ui.label(egui::RichText::new(&run.metadata.backend).monospace());
+                        ui.end_row();
+
+                        ui.label(StudioTheme::muted_for(mode, "Output"));
+                        ui.label(
+                            egui::RichText::new(run.output_dir.display().to_string())
+                                .monospace()
+                                .size(10.0),
+                        );
+                        ui.end_row();
+                    });
+            });
+
+            ui.add_space(4.0);
+
+            // Quick action: view waveforms in dedicated workspace
+            if ui
+                .button(self.text(UiText::WaveformAnalysis))
+                .on_hover_text("Open Waveforms workspace for detailed analysis")
+                .clicked()
+            {
+                self.active_workspace = StudioWorkspace::Waveforms;
+            }
+
+            ui.add_space(4.0);
+            draw_simulation_report_panel(ui, &run.report);
+            draw_simulation_artifacts_panel(ui, run);
+            draw_simulation_waveform_panel(
+                ui,
+                mode,
+                &run.waveform,
+                &mut self.simulation_panel.selected_waveform_signal,
+            );
+        }
+    }
+
+    /// Sync the selected waveform signal with the latest run's available signals.
+    pub(in crate::app) fn sync_selected_waveform_signal(
+        &mut self,
+        waveform: &GuiWaveformSummaryState,
+    ) {
+        let GuiWaveformSummaryState::Ready(summary) = waveform else {
+            self.simulation_panel.selected_waveform_signal = None;
+            return;
+        };
+        let keep_current = self
+            .simulation_panel
+            .selected_waveform_signal
+            .as_deref()
+            .is_some_and(|signal| summary.has_preview_signal(signal));
+        if !keep_current {
+            self.simulation_panel.selected_waveform_signal =
+                summary.default_signal_name().map(ToOwned::to_owned);
+        }
+    }
+}

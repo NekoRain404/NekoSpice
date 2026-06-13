@@ -19,9 +19,9 @@ Each crate may contain a `docs/` directory with internal architecture notes:
 
 | Crate | Documents |
 |-------|-----------|
-| `osl-app` | [crate-structure](../crates/osl-app/docs/crate-structure.md), [ui-improvements](../crates/osl-app/docs/ui-improvements.md), [schematic-bottom-dock](../crates/osl-app/docs/schematic-bottom-dock.md), [simulation-profile-editor](../crates/osl-app/docs/simulation-profile-editor.md), [context-menu-tool-palette](../crates/osl-app/docs/context-menu-tool-palette.md) |
-| `osl-kicad` | [file-split](../crates/osl-kicad/docs/file-split.md), [schematic-impl-split](../crates/osl-kicad/docs/schematic-impl-split.md) |
-| `osl-cli` | [file-split](../crates/osl-cli/docs/file-split.md) |
-| `osl-netlist` | [file-split](../crates/osl-netlist/docs/file-split.md) |
-| `osl-render` | [file-split](../crates/osl-render/docs/file-split.md) |
-| `osl-waveform` | [file-split](../crates/osl-waveform/docs/file-split.md) |
+| `nsp-app` | [crate-structure](../crates/nsp-app/docs/crate-structure.md), [ui-improvements](../crates/nsp-app/docs/ui-improvements.md), [schematic-bottom-dock](../crates/nsp-app/docs/schematic-bottom-dock.md), [simulation-profile-editor](../crates/nsp-app/docs/simulation-profile-editor.md), [context-menu-tool-palette](../crates/nsp-app/docs/context-menu-tool-palette.md) |
+| `nsp-schema` | [file-split](../crates/nsp-schema/docs/file-split.md), [schematic-impl-split](../crates/nsp-schema/docs/schematic-impl-split.md) |
+| `nsp-cli` | [file-split](../crates/nsp-cli/docs/file-split.md) |
+| `nsp-netlist` | [file-split](../crates/nsp-netlist/docs/file-split.md) |
+| `nsp-render` | [file-split](../crates/nsp-render/docs/file-split.md) |
+| `nsp-waveform` | [file-split](../crates/nsp-waveform/docs/file-split.md) |

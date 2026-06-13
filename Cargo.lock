@@ -1706,6 +1706,97 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 
 [[package]]
+name = "nsp-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "nsp-core",
+ "nsp-model",
+ "nsp-report",
+ "nsp-schema",
+ "nsp-sim",
+ "nsp-waveform",
+ "rfd",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "nsp-cli"
+version = "0.1.0"
+dependencies = [
+ "nsp-core",
+ "nsp-model",
+ "nsp-netlist",
+ "nsp-render",
+ "nsp-report",
+ "nsp-schema",
+ "nsp-sim",
+ "nsp-waveform",
+ "serde",
+ "serde_yaml",
+]
+
+[[package]]
+name = "nsp-core"
+version = "0.1.0"
+
+[[package]]
+name = "nsp-model"
+version = "0.1.0"
+dependencies = [
+ "nsp-core",
+]
+
+[[package]]
+name = "nsp-netlist"
+version = "0.1.0"
+dependencies = [
+ "nsp-core",
+ "nsp-schema",
+]
+
+[[package]]
+name = "nsp-render"
+version = "0.1.0"
+dependencies = [
+ "nsp-core",
+ "nsp-schema",
+]
+
+[[package]]
+name = "nsp-report"
+version = "0.1.0"
+dependencies = [
+ "nsp-core",
+ "nsp-waveform",
+]
+
+[[package]]
+name = "nsp-schema"
+version = "0.1.0"
+dependencies = [
+ "nsp-core",
+ "serde_json",
+]
+
+[[package]]
+name = "nsp-sim"
+version = "0.1.0"
+dependencies = [
+ "nsp-core",
+ "nsp-waveform",
+ "regex",
+]
+
+[[package]]
+name = "nsp-waveform"
+version = "0.1.0"
+dependencies = [
+ "nsp-core",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2080,97 +2171,6 @@ checksum = "9aa2b01e1d916879f73a53d01d1d6cee68adbb31d6d9177a8cfce093cced1d50"
 dependencies = [
  "futures-core",
  "pin-project-lite",
-]
-
-[[package]]
-name = "osl-app"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "osl-core",
- "osl-kicad",
- "osl-model",
- "osl-report",
- "osl-sim",
- "osl-waveform",
- "rfd",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "osl-cli"
-version = "0.1.0"
-dependencies = [
- "osl-core",
- "osl-kicad",
- "osl-model",
- "osl-netlist",
- "osl-render",
- "osl-report",
- "osl-sim",
- "osl-waveform",
- "serde",
- "serde_yaml",
-]
-
-[[package]]
-name = "osl-core"
-version = "0.1.0"
-
-[[package]]
-name = "osl-kicad"
-version = "0.1.0"
-dependencies = [
- "osl-core",
- "serde_json",
-]
-
-[[package]]
-name = "osl-model"
-version = "0.1.0"
-dependencies = [
- "osl-core",
-]
-
-[[package]]
-name = "osl-netlist"
-version = "0.1.0"
-dependencies = [
- "osl-core",
- "osl-kicad",
-]
-
-[[package]]
-name = "osl-render"
-version = "0.1.0"
-dependencies = [
- "osl-core",
- "osl-kicad",
-]
-
-[[package]]
-name = "osl-report"
-version = "0.1.0"
-dependencies = [
- "osl-core",
- "osl-waveform",
-]
-
-[[package]]
-name = "osl-sim"
-version = "0.1.0"
-dependencies = [
- "osl-core",
- "osl-waveform",
- "regex",
-]
-
-[[package]]
-name = "osl-waveform"
-version = "0.1.0"
-dependencies = [
- "osl-core",
 ]
 
 [[package]]

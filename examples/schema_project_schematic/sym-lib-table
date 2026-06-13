@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "NekoSpice")(type "KiCad")(uri "${KIPRJMOD}/../schema_schematic/neko_spice.kicad_sym")(options "")(descr "NekoSpice analog simulation symbols"))
+)

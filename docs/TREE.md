@@ -14,14 +14,14 @@ NekoSpice/
 │   └── ui/                       # UI 参考图片
 │       └── ui-ref-01..10.png
 ├── crates/
-│   ├── osl-core/                 # 核心数据类型与工具
+│   ├── nsp-core/                 # 核心数据类型与工具
 │   │   └── src/
 │   │       ├── lib.rs            # OslResult, RunMetadata, Artifact, write_text
 │   │       ├── error.rs          # 错误类型定义
 │   │       ├── run_metadata.rs   # 仿真运行元数据
 │   │       └── measure.rs        # 测量与检查逻辑
 │   │
-│   ├── osl-kicad/                # KiCad 格式解析器（Rust 原生）
+│   ├── nsp-schema/                # Schema 格式解析器（Rust 原生）
 │   │   ├── src/
 │   │   │   ├── lib.rs            # S-expression 解析器、公有 API
 │   │   │   ├── schematic.rs      # 原理图解析与写回
@@ -33,41 +33,41 @@ NekoSpice/
 │   │   │   ├── text.rs           # 文本效果解析
 │   │   │   ├── sexpr.rs          # S-expression 低层解析
 │   │   │   ├── new_schematic.rs    # 工厂函数：创建空白原理图
-│   │   │   ├── spice_export.rs   # KiCad → SPICE 网表导出
+│   │   │   ├── spice_export.rs   # Schema → SPICE 网表导出
 │   │   │   ├── tests.rs          # 26+ 单元测试
 │   │   │   └── ...               # 更多解析模块
 │   │   └── tests/
-│   │       └── kicad_demo_smoke.rs
+│   │       └── schema_demo_smoke.rs
 │   │
-│   ├── osl-sim/                  # 仿真后端（ngspice/Xyce）
+│   ├── nsp-sim/                  # 仿真后端（ngspice/Xyce）
 │   │   └── src/
 │   │       ├── lib.rs            # SimulatorBackend trait
 │   │       ├── profile.rs        # SimulationProfile, 指令注入, .ic/.nodeset
 │   │       ├── artifacts.rs      # 仿真产物管理
 │   │       └── netlist.rs        # 网表验证与转换
 │   │
-│   ├── osl-waveform/             # 波形数据解析（raw/csv/FFT）
+│   ├── nsp-waveform/             # 波形数据解析（raw/csv/FFT）
 │   │   └── src/
 │   │       ├── lib.rs            # 波形数据结构、测量、CSV 导出
 │   │       ├── raw_parser_impl.rs # ngspice binary/ASCII raw 解析
 │   │       └── fft.rs            # FFT 计算（Cooley-Tukey）、窗函数、Bode
 │   │
-│   ├── osl-netlist/              # 网表解析与转换
+│   ├── nsp-netlist/              # 网表解析与转换
 │   │   └── src/
 │   │       ├── lib.rs
-│   │       ├── kicad_import.rs
+│   │       ├── schema_import.rs
 │   │       ├── ltspice_import.rs
 │   │       ├── ltspice_builtins_impl.rs
 │   │       ├── netlist_parse_impl.rs
 │   │       └── netlist_suggest_impl.rs
 │   │
-│   ├── osl-render/               # SVG 渲染
+│   ├── nsp-render/               # SVG 渲染
 │   │   └── src/
 │   │       ├── lib.rs
 │   │       ├── svg_render_impl.rs
 │   │       └── svg_helpers_impl.rs
 │   │
-│   ├── osl-report/               # HTML/JSON 报告生成
+│   ├── nsp-report/               # HTML/JSON 报告生成
 │   │   └── src/
 │   │       ├── lib.rs
 │   │       ├── html.rs
@@ -75,13 +75,13 @@ NekoSpice/
 │   │       ├── markdown.rs
 │   │       └── junit.rs
 │   │
-│   ├── osl-model/                # TI/ADI 厂商模型目录
+│   ├── nsp-model/                # TI/ADI 厂商模型目录
 │   │   └── src/
 │   │       ├── lib.rs
 │   │       ├── vendor_import.rs
 │   │       └── model_check_impl.rs
 │   │
-│   ├── osl-cli/                  # 命令行工具
+│   ├── nsp-cli/                  # 命令行工具
 │   │   └── src/
 │   │       ├── main.rs
 │   │       ├── run.rs
@@ -91,7 +91,7 @@ NekoSpice/
 │   │       ├── import.rs
 │   │       └── waveform.rs
 │   │
-│   └── osl-app/                  # GUI 应用（egui + wgpu）
+│   └── nsp-app/                  # GUI 应用（egui + wgpu）
 │       └── src/
 │           ├── main.rs           # 二进制入口
 │           ├── lib.rs            # 库根，模块声明与常量
@@ -335,7 +335,7 @@ load_schematic(path)
 - **状态分离**: `state.rs` 定义状态结构，`sim_options.rs` 定义指令参数
 - **UI 组件**: `*_widgets.rs` 提供无状态渲染函数
 - **可选区块**: `section_toggles.rs` 控制仿真设置中的可选区块开关
-- **双向兼容**: 兼容 KiCad 原理图格式，支持 ngspice + Xyce 双后端
+- **双向兼容**: 兼容 Schema 原理图格式，支持 ngspice + Xyce 双后端
 
 ### Simulation Workflow
 ```
@@ -368,7 +368,7 @@ rf                 → RF circuits, mixers, oscillators — tight accuracy
 
 ### Build & Test
 ```bash
-cargo build -p osl-app          # 构建 GUI
+cargo build -p nsp-app          # 构建 GUI
 cargo test --workspace           # 运行所有测试（218 预期）
-cargo run -p osl-app             # 启动 GUI
+cargo run -p nsp-app             # 启动 GUI
 ```

@@ -1,21 +1,21 @@
-# OpenSpiceLab-RS 开发文档 v0.1
+# NekoSpice-RS 开发文档 v0.1
 
 ## 1. 项目定位
 
-OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标不是简单复制 LTspice / KiCad，而是参考 KiCad 源码和公开文件格式，在 Rust 中重构兼容 KiCad 的原理图绘制与 symbol library 能力，并在以下方向形成优势：
+NekoSpice-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标不是简单复制 LTspice / Schema，而是参考 Schema 源码和公开文件格式，在 Rust 中重构兼容 Schema 的原理图绘制与 symbol library 能力，并在以下方向形成优势：
 
 * 高性能波形查看器
 * 自动化仿真验证
 * 参数扫描、Corner、Monte Carlo
 * 模型兼容性诊断
-* Rust-native KiCad-compatible 原理图绘制与 symbol library
+* Rust-native Schema-compatible 原理图绘制与 symbol library
 * LTspice / 通用 SPICE 迁移导入
 * CI / 批量验证 / 报告系统
 * 可扩展多后端仿真架构
 
 项目核心口号：
 
-> LTspice 适合手动仿真，OpenSpiceLab-RS 适合工程级自动验证。
+> LTspice 适合手动仿真，NekoSpice-RS 适合工程级自动验证。
 
 ---
 
@@ -30,7 +30,7 @@ OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标
 * ngspice CLI
 * ngspice shared library，后期可选
 * Xyce CLI，后期可选
-* KiCad 公开源码、文件格式文档和 `kicad-cli` 作为参考/对照验证
+* Schema 公开源码、文件格式文档和 `schema-cli` 作为参考/对照验证
 * Python 插件，后期可选
 
 不在第一阶段做：
@@ -39,7 +39,7 @@ OpenSpiceLab-RS 是一款基于 Rust 的开源 SPICE 仿真验证平台，目标
 * Electron
 * 自研完整 SPICE 求解器
 * GPU SPICE 求解器
-* 逐行翻译 KiCad C++ 或绑定 KiCad GUI 作为主实现
+* 逐行翻译 Schema C++ 或绑定 Schema GUI 作为主实现
 * 完整 PCB 编辑器
 
 ---
@@ -112,7 +112,7 @@ GPU 渲染：wgpu
 
 * 不建议完全依赖现成 plot 库。
 * 波形查看器必须自研。
-* 原理图画布也必须自研，但文件格式、library 语义和用户资产兼容 KiCad。
+* 原理图画布也必须自研，但文件格式、library 语义和用户资产兼容 Schema。
 * egui 用于菜单、面板、参数配置、日志窗口、属性面板和 library browser。
 * wgpu 用于高性能波形、schematic canvas、热力图、Monte Carlo 云图、频谱图。
 
@@ -340,9 +340,9 @@ tera = "*"
 ## 5. 系统架构
 
 ```text
-OpenSpiceLab-RS
+NekoSpice-RS
 │
-├── osl-cli
+├── nsp-cli
 │   ├── run
 │   ├── verify
 │   ├── bench
@@ -350,7 +350,7 @@ OpenSpiceLab-RS
 │   ├── import-ltspice
 │   └── report
 │
-├── osl-app
+├── nsp-app
 │   ├── winit shell
 │   ├── egui panels
 │   ├── wgpu waveform viewer
@@ -360,43 +360,43 @@ OpenSpiceLab-RS
 │   ├── symbol library browser
 │   └── property inspector
 │
-├── osl-core
+├── nsp-core
 │   ├── CircuitIR
 │   ├── Project
 │   ├── SimulationConfig
 │   ├── Measurement
 │   └── Diagnostics
 │
-├── osl-kicad
+├── nsp-schema
 │   ├── S-expression parser
-│   ├── .kicad_sch reader/writer
-│   ├── .kicad_sym reader/writer
+│   ├── .schema_sch reader/writer
+│   ├── .schema_sym reader/writer
 │   ├── schematic IR
 │   ├── symbol library index
 │   ├── connectivity graph
 │   └── drawing primitives
 │
-├── osl-sim
+├── nsp-sim
 │   ├── SimulatorBackend trait
 │   ├── NgspiceCliBackend
 │   ├── NgspiceSharedBackend
 │   └── XyceCliBackend
 │
-├── osl-netlist
+├── nsp-netlist
 │   ├── SPICE parser
 │   ├── LTspice parser
-│   ├── KiCad schematic-to-SPICE adapter
-│   ├── KiCad netlist importer
+│   ├── Schema schematic-to-SPICE adapter
+│   ├── Schema netlist importer
 │   └── netlist normalizer
 │
-├── osl-model
+├── nsp-model
 │   ├── model index
 │   ├── subckt pin parser
 │   ├── dialect detector
 │   ├── pin mapping checker
 │   └── compatibility report
 │
-├── osl-waveform
+├── nsp-waveform
 │   ├── raw parser
 │   ├── waveform table
 │   ├── mmap cache
@@ -404,27 +404,27 @@ OpenSpiceLab-RS
 │   ├── min/max downsampling
 │   └── viewport query engine
 │
-├── osl-render
+├── nsp-render
 │   ├── waveform renderer
 │   ├── grid renderer
 │   ├── marker renderer
 │   ├── density renderer
 │   └── FFT renderer
 │
-├── osl-experiment
+├── nsp-experiment
 │   ├── sweep
 │   ├── corner
 │   ├── Monte Carlo
 │   ├── job scheduler
 │   └── result aggregator
 │
-├── osl-measure
+├── nsp-measure
 │   ├── expression parser
 │   ├── measurement functions
 │   ├── pass/fail evaluator
 │   └── statistics
 │
-└── osl-report
+└── nsp-report
     ├── HTML
     ├── JSON
     ├── Markdown
@@ -440,18 +440,18 @@ openspicelab-rs/
   Cargo.toml
 
   crates/
-    osl-core/
-    osl-cli/
-    osl-app/
-    osl-sim/
-    osl-netlist/
-    osl-model/
-    osl-waveform/
-    osl-render/
-    osl-experiment/
-    osl-measure/
-    osl-report/
-    osl-bench/
+    nsp-core/
+    nsp-cli/
+    nsp-app/
+    nsp-sim/
+    nsp-netlist/
+    nsp-model/
+    nsp-waveform/
+    nsp-render/
+    nsp-experiment/
+    nsp-measure/
+    nsp-report/
+    nsp-bench/
 
   examples/
     rc_filter/
@@ -685,7 +685,7 @@ pub struct MeasurementResult {
 
 要求：
 
-* 独立 crate：`osl-ngspice-sys`
+* 独立 crate：`nsp-ngspice-sys`
 * unsafe 代码隔离
 * FFI 边界清晰
 * 崩溃隔离方案明确
@@ -715,7 +715,7 @@ pub struct MeasurementResult {
 命令：
 
 ```bash
-osl verify project.osl.yaml
+nsp verify project.nsp.yaml
 ```
 
 输出：
@@ -899,7 +899,7 @@ Suggestions:
 命令：
 
 ```bash
-osl bench benchmarks/
+nsp bench benchmarks/
 ```
 
 记录：
@@ -1000,9 +1000,9 @@ CI 输出 JUnit XML
 产物：
 
 ```text
-osl --version
-osl bench
-osl run examples/rc_filter/rc.cir
+nsp --version
+nsp bench
+nsp run examples/rc_filter/rc.cir
 ```
 
 验收：
@@ -1031,7 +1031,7 @@ ngspice CLI 可以被调用
 命令：
 
 ```bash
-osl run examples/rc_filter/rc.cir --output runs/rc_001
+nsp run examples/rc_filter/rc.cir --output runs/rc_001
 ```
 
 输出：
@@ -1068,7 +1068,7 @@ ngspice.log
 命令：
 
 ```bash
-osl verify examples/buck_converter/validation.yaml
+nsp verify examples/buck_converter/validation.yaml
 ```
 
 验收：
@@ -1153,15 +1153,15 @@ osl verify examples/buck_converter/validation.yaml
 
 ---
 
-### 阶段 6：KiCad-compatible 原理图/库子系统与迁移导入，6–8 个月
+### 阶段 6：Schema-compatible 原理图/库子系统与迁移导入，6–8 个月
 
 目标：
 
 ```text
-完成 KiCad .kicad_pro / .kicad_sch 初版 Rust-native 解析
-完成 KiCad .kicad_sym symbol library 解析和索引
+完成 Schema .schema_pro / .schema_sch 初版 Rust-native 解析
+完成 Schema .schema_sym symbol library 解析和索引
 完成基础 schematic canvas 数据模型
-完成 KiCad netlist 导入
+完成 Schema netlist 导入
 完成 LTspice .asc / .asy 迁移导入
 完成导入兼容性报告
 ```
@@ -1169,10 +1169,10 @@ osl verify examples/buck_converter/validation.yaml
 验收：
 
 ```text
-NekoSpice 能打开并显示常见 KiCad 原理图
-NekoSpice 能读取 KiCad symbol library 并完成基础放置/属性/引脚语义
-常见 KiCad 模拟电路可从 KiCad 工程进入 NekoSpice 验证
-KiCad 导出的 SPICE netlist 可运行
+NekoSpice 能打开并显示常见 Schema 原理图
+NekoSpice 能读取 Schema symbol library 并完成基础放置/属性/引脚语义
+常见 Schema 模拟电路可从 Schema 工程进入 NekoSpice 验证
+Schema 导出的 SPICE netlist 可运行
 常见 LTspice 模拟电路可迁移导入
 不能运行时必须明确指出原因
 ```
@@ -1301,7 +1301,7 @@ model compatibility test
 ```text
 - 完整 GUI
 - 完整 LTspice 导入
-- 完整 KiCad PCB 编辑能力
+- 完整 Schema PCB 编辑能力
 - ngspice shared library
 - Python 插件
 - GPU compute
@@ -1316,9 +1316,9 @@ model compatibility test
 
 ```text
 - 创建 Cargo workspace
-- 创建 osl-cli
-- 创建 osl-core
-- 创建 osl-sim
+- 创建 nsp-cli
+- 创建 nsp-core
+- 创建 nsp-sim
 - 建立 tracing 日志
 - 实现 ngspice 进程调用
 - 准备 RC 示例电路
@@ -1355,9 +1355,9 @@ model compatibility test
 v0.1 验收命令：
 
 ```bash
-osl run examples/rc_filter/rc.cir
-osl run examples/diode_rectifier/rectifier.cir
-osl bench benchmarks/basic
+nsp run examples/rc_filter/rc.cir
+nsp run examples/diode_rectifier/rectifier.cir
+nsp bench benchmarks/basic
 ```
 
 ---
@@ -1378,7 +1378,7 @@ osl bench benchmarks/basic
 v0.2 验收命令：
 
 ```bash
-osl verify examples/buck_converter/validation.yaml
+nsp verify examples/buck_converter/validation.yaml
 ```
 
 预期输出：
@@ -1397,7 +1397,7 @@ FAIL ripple
 
 ## 20. 最终技术路线总结
 
-OpenSpiceLab-RS 的主路线：
+NekoSpice-RS 的主路线：
 
 ```text
 Rust CLI
@@ -1408,7 +1408,7 @@ Rust CLI
 → high-performance waveform storage
 → wgpu waveform viewer
 → model compatibility
-→ Rust-native KiCad schematic/library
+→ Rust-native Schema schematic/library
 → LTspice migration import
 → Monte Carlo / corner
 → CI integration
@@ -1441,8 +1441,8 @@ GPU 负责：
 ngspice / Xyce 负责：
 - SPICE 求解
 
-KiCad 资产兼容层负责：
-- .kicad_sch / .kicad_sym / .kicad_pro 读写
+Schema 资产兼容层负责：
+- .schema_sch / .schema_sym / .schema_pro 读写
 - symbol placement
 - wiring and labels
 - library management

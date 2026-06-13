@@ -1,0 +1,21 @@
+[package]
+name = "nsp-app"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "nekospice"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.34.3", default-features = false, features = ["default_fonts", "wgpu", "x11", "wayland"] }
+nsp-core = { path = "../nsp-core" }
+nsp-schema = { path = "../nsp-schema" }
+nsp-report = { path = "../nsp-report" }
+nsp-sim = { path = "../nsp-sim" }
+nsp-waveform = { path = "../nsp-waveform" }
+rfd = "0.15"
+nsp-model = { path = "../nsp-model" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

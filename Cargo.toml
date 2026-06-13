@@ -1,19 +1,19 @@
 [workspace]
 members = [
-    "crates/osl-core",
-    "crates/osl-kicad",
-    "crates/osl-model",
-    "crates/osl-netlist",
-    "crates/osl-render",
-    "crates/osl-report",
-    "crates/osl-waveform",
-    "crates/osl-sim",
-    "crates/osl-cli",
-    "crates/osl-app",
+    "crates/nsp-core",
+    "crates/nsp-schema",
+    "crates/nsp-model",
+    "crates/nsp-netlist",
+    "crates/nsp-render",
+    "crates/nsp-report",
+    "crates/nsp-waveform",
+    "crates/nsp-sim",
+    "crates/nsp-cli",
+    "crates/nsp-app",
 ]
 resolver = "3"
 
 [workspace.package]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://example.invalid/nekospice"
+repository = "https://github.com/NekoRain404/NekoSpice"

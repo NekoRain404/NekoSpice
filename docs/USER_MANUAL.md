@@ -1,16 +1,16 @@
 # NekoSpice 用户手册
 
-NekoSpice 是一款基于 Rust 原生构建的 SPICE 仿真平台，兼容 KiCad 原理图格式，支持 ngspice 和 Xyce 双后端求解器。
+NekoSpice 是一款基于 Rust 原生构建的 SPICE 仿真平台，兼容 Schema 原理图格式，支持 ngspice 和 Xyce 双后端求解器。
 
 ## 快速开始
 
 ### 启动应用
 
 ```bash
-cargo run -p osl-app
+cargo run -p nsp-app
 ```
 
-应用启动后默认加载 `examples/cm5_minima/CM5.kicad_sch` 示例原理图。
+应用启动后默认加载 `examples/cm5_minima/CM5.schema_sch` 示例原理图。
 
 ### 基本工作流
 
@@ -310,11 +310,11 @@ NekoSpice 内置 10 种求解器预设，适用于不同电路类型：
 
 ```bash
 # 构建 GUI
-cargo build -p osl-app
+cargo build -p nsp-app
 
 # 运行所有测试
 cargo test --workspace
 
 # 启动 GUI
-cargo run -p osl-app
+cargo run -p nsp-app
 ```
