@@ -204,6 +204,7 @@ NekoSpice/
 │               │   ├── history_panel.rs           # 历史表格显示
 │               │   ├── waveform_panel.rs          # 波形预览卡片
 │               │   ├── report_panel.rs            # 报告摘要
+│               │   ├── export_panel.rs             # 导出选项面板
 │               │   └── artifacts_panel.rs         # 仿真产物
 │               │
 │               ├── waveform/             # ── 波形分析工作区（10 文件）──
