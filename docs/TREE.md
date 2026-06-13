@@ -178,7 +178,7 @@ NekoSpice/
 │               │       ├── editing.rs
 │               │       └── preview.rs
 │               │
-│               ├── simulation/           # ── 仿真工作区（28 文件）──
+│               ├── simulation/           # ── 仿真工作区（38 文件）──
 │               │   ├── mod.rs
 │               │   ├── analysis.rs       # AnalysisParams（结构化分析参数）
 │               │   ├── step_sweep.rs     # StepSweep（参数/温度扫描配置）
@@ -206,6 +206,9 @@ NekoSpice/
 │               │   ├── report_panel.rs            # 报告摘要
 │               │   ├── export_panel.rs             # 导出选项面板
 │               │   ├── custom_presets.rs           # 自定义预设保存/加载
+│               │   ├── options_xyce.rs             # Xyce 专用求解选项
+│               │   ├── run_compare.rs              # 仿真历史对比面板
+│               │   ├── profile_summary.rs          # 配置概览摘要
 │               │   ├── step_sweep_grids.rs          # 步进扫描输入网格
 │               │   └── artifacts_panel.rs         # 仿真产物
 │               │
