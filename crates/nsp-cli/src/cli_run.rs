@@ -303,14 +303,20 @@ fn resolve_include_paths(netlist: &str, base_dir: &Path) -> String {
                         base_dir.join(&search)
                     };
                     // Also try just the filename in base dir (for Windows paths)
-                    let _fallback = base_dir.join(&normalized);
-                    if absolute.exists() {
-                        let abs_str = absolute.to_string_lossy().to_string();
-                        let prefix = &trimmed[..directive_end];
-                        let rest = &trimmed[directive_end..];
-                        let resolved = rest.replace(unquoted, &abs_str);
-                        return format!("{prefix}{resolved}");
-                    }
+                    let fallback = base_dir.join(&normalized);
+                    let resolved_path = if absolute.exists() {
+                        absolute
+                    } else if fallback.exists() {
+                        fallback
+                    } else {
+                        // Path not found — return original line
+                        return line.to_string();
+                    };
+                    let abs_str = resolved_path.to_string_lossy().to_string();
+                    let prefix = &trimmed[..directive_end];
+                    let rest = &trimmed[directive_end..];
+                    let resolved = rest.replace(unquoted, &abs_str);
+                    return format!("{prefix}{resolved}");
                 }
             }
             line.to_string()
