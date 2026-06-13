@@ -23,6 +23,7 @@ pub(crate) mod freq_domain_primitives;
 pub(crate) mod freq_domain_preview;
 pub(crate) mod workspace;
 pub(crate) mod workspace_sections;
+pub(crate) mod workspace_measurements;
 pub(crate) mod workspace_sidepanels;
 pub(crate) mod workspace_widgets;
 
