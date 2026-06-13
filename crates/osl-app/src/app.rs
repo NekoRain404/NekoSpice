@@ -17,6 +17,7 @@ mod app_sim_sync;
 mod canvas_context_menu;
 mod canvas_panel;
 mod canvas_shortcuts;
+mod global_shortcuts;
 mod center_workspace;
 mod diagnostics_panel;
 mod file_dialog;

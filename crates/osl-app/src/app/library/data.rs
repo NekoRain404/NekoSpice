@@ -125,6 +125,7 @@ impl NekoSpiceApp {
                             pins: subckt.pins.clone(),
                             source: subckt.source_file.display().to_string(),
                             vendor: subckt.vendor,
+                            body: subckt.body.clone(),
                         },
                     );
                 }
@@ -136,6 +137,7 @@ impl NekoSpiceApp {
                             pins: Vec::new(),
                             source: model.source_file.display().to_string(),
                             vendor: model.vendor,
+                            body: format!(".model {} {}", model.name, model.params),
                         },
                     );
                 }

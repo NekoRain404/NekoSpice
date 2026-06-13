@@ -164,6 +164,11 @@ pub struct SimulationProfile {
     // ── Measurements ──────────────────────────────────────────────────
     /// `.measure` directives for post-simulation extraction.
     pub measure_directives: Vec<String>,
+
+    // -- Vendor Models --
+    /// SPICE subcircuit/model body text from vendor models (TI/ADI).
+    /// Injected before .end so the solver can instantiate vendor components.
+    pub vendor_model_bodies: Vec<String>,
 }
 
 impl Default for SimulationProfile {
@@ -200,6 +205,8 @@ impl Default for SimulationProfile {
             // Parameter overrides
             component_params: Vec::new(),
             model_params: Vec::new(),
+            // Vendor models
+            vendor_model_bodies: Vec::new(),
             step_directive: None,
             measure_directives: Vec::new(),
         }
@@ -506,6 +513,24 @@ pub fn inject_profile_directives(netlist: &str, profile: &SimulationProfile) -> 
     if !inserted_analysis {
         output.push("* --- NekoSpice simulation profile ---".to_string());
         output.extend(directives);
+    }
+
+    // Inject vendor model/subcircuit bodies before .end
+    if !profile.vendor_model_bodies.is_empty() {
+        let mut final_output = Vec::new();
+        for line in &output {
+            if line.trim().eq_ignore_ascii_case(".end") {
+                final_output.push("* --- NekoSpice vendor models ---".to_string());
+                for body in &profile.vendor_model_bodies {
+                    final_output.push(body.clone());
+                }
+                final_output.push(String::new());
+            }
+            final_output.push(line.clone());
+        }
+        if final_output.len() > output.len() {
+            return final_output.join("\n");
+        }
     }
 
     output.join("\n")

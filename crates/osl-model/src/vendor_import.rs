@@ -315,6 +315,7 @@ pub fn build_model_catalog(results: &[VendorImportResult]) -> VendorModelCatalog
                     pins: subckt.pins.clone(),
                     source: subckt.source_file.display().to_string(),
                     vendor: subckt.vendor,
+                    body: subckt.body.clone(),
                 },
             );
         }
@@ -326,6 +327,7 @@ pub fn build_model_catalog(results: &[VendorImportResult]) -> VendorModelCatalog
                     pins: Vec::new(),
                     source: model.source_file.display().to_string(),
                     vendor: model.vendor,
+                    body: format!(".model {} {}", model.name, model.params),
                 },
             );
         }
@@ -341,6 +343,8 @@ pub struct ModelCatalogEntry {
     pub pins: Vec<String>,
     pub source: String,
     pub vendor: VendorKind,
+    /// Full SPICE body text (.subckt ... .ends or .model ...) for netlist injection.
+    pub body: String,
 }
 
 /// 厂商模型目录
@@ -447,12 +451,14 @@ E1 OUT 0 IN+ IN- 10
             pins: vec!["IN".into(), "OUT".into()],
             source: "ti.lib".into(),
             vendor: VendorKind::Ti,
+            body: String::new(),
         });
         catalog.subckts.insert("AD8065".to_string(), ModelCatalogEntry {
             name: "AD8065".to_string(),
             pins: vec!["IN+".into(), "IN-".into(), "OUT".into()],
             source: "adi.lib".into(),
             vendor: VendorKind::Adi,
+            body: String::new(),
         });
 
         let ti_only = catalog.filter_by_vendor(VendorKind::Ti);

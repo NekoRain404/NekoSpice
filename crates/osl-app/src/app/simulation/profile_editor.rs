@@ -102,22 +102,31 @@ impl NekoSpiceApp {
     /// Draw the full profile editor: three-column layout within a panel frame.
     pub(crate) fn draw_profile_editor(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
+        let palette = self.theme_palette();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             self.draw_profile_editor_header(ui);
+            ui.add_space(4.0);
+
+            // Quick run bar: preset selector + run button
+            self.draw_preset_selector(ui);
+            ui.add_space(4.0);
+
+            // Slim divider
+            ui.separator();
             ui.add_space(6.0);
 
-            // Preset selector row at the top
-            self.draw_preset_selector(ui);
-            ui.add_space(8.0);
+            // Three-column layout
+            let total_width = ui.available_width();
+            let left_width = (total_width * 0.30).max(220.0);
+            let center_width = (total_width * 0.38).max(220.0);
 
-            // Three-column layout: left (analysis + params), center (definitions), right (options)
             ui.horizontal_top(|ui| {
-                // Left column: Analysis Setup + togglable optional sections
+                // ── Left Column: Analysis + Optional Sections ──
                 ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() * 0.34).max(240.0));
+                    ui.set_width(left_width);
                     draw_analysis_setup_panel(self, ui);
-                    ui.add_space(8.0);
-                    // Read toggle state first to avoid borrow conflicts
+                    ui.add_space(6.0);
+                    // Read toggle state to avoid borrow conflicts
                     let show_step = self.simulation_profile_editor.toggles.step_sweep;
                     let show_meas = self.simulation_profile_editor.toggles.measurements;
                     let show_comp = self.simulation_profile_editor.toggles.component_params;
@@ -125,33 +134,48 @@ impl NekoSpiceApp {
                     let show_ic = self.simulation_profile_editor.toggles.initial_conditions;
                     if show_step {
                         self.draw_step_sweep_editor(ui, mode);
-                        ui.add_space(8.0);
+                        ui.add_space(6.0);
                     }
                     if show_meas {
                         self.draw_measure_editor(ui, mode);
-                        ui.add_space(8.0);
+                        ui.add_space(6.0);
                     }
                     if show_comp {
                         draw_component_params(self, ui);
-                        ui.add_space(8.0);
+                        ui.add_space(6.0);
                     }
                     if show_model {
                         draw_model_params(self, ui);
-                        ui.add_space(8.0);
+                        ui.add_space(6.0);
                     }
                     if show_ic {
                         super::options_ic::draw_initial_conditions_section(self, ui, mode);
-                        ui.add_space(8.0);
                     }
                 });
-                ui.add_space(8.0);
-                // Center column: Parameter Definitions editor + Initial Conditions
+
+                // Vertical separator
+                let sep_rect = egui::Rect::from_min_size(
+                    ui.cursor().min,
+                    egui::Vec2::new(1.0, ui.available_height()),
+                );
+                ui.painter().rect_filled(sep_rect, 0.0, palette.border);
+                ui.allocate_space(egui::Vec2::new(8.0, 0.0));
+
+                // ── Center Column: Parameter Definitions ──
                 ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() * 0.48).max(240.0));
+                    ui.set_width(center_width);
                     draw_parameter_definitions(self, ui);
                 });
-                ui.add_space(8.0);
-                // Right column: Simulation Options + Run Status + Recent Runs
+
+                // Vertical separator
+                let sep_rect = egui::Rect::from_min_size(
+                    ui.cursor().min,
+                    egui::Vec2::new(1.0, ui.available_height()),
+                );
+                ui.painter().rect_filled(sep_rect, 0.0, palette.border);
+                ui.allocate_space(egui::Vec2::new(8.0, 0.0));
+
+                // ── Right Column: Options + Status ──
                 ui.vertical(|ui| {
                     ui.set_min_width(200.0);
                     draw_profile_options(self, ui);

@@ -1,5 +1,9 @@
 //! 画布键盘快捷键处理。分发键盘事件到对应编辑操作。
 //!
+//! 本模块仅处理原理图画布编辑相关的快捷键（工具切换、微调、
+//! 删除、旋转等）。全局快捷键（F5、Ctrl+S 等）在
+//! [`global_shortcuts`] 中统一处理。
+
 use super::EditNudgeDirection;
 use super::NekoSpiceApp;
 use super::schematic::tools::SchematicTool;
@@ -10,7 +14,10 @@ impl NekoSpiceApp {
     ///
     /// Tool shortcuts: V=Select, W=Wire, L=Label, B=Bus, S=Sheet,
     /// J=Junction, Q=NoConnect, R=Rotate, F=Fit, Del=Delete, Esc=Cancel.
-    /// Navigation: Arrow keys for nudge, Ctrl+Z/Y for undo/redo.
+    /// Navigation: Arrow keys for nudge.
+    ///
+    /// Global shortcuts (F5, Ctrl+S, Ctrl+O, Ctrl+Z, etc.) are handled
+    /// by [`super::global_shortcuts`].
     pub(super) fn handle_canvas_shortcuts(&mut self, ui: &egui::Ui) {
         if ui.ctx().text_edit_focused() {
             return;
@@ -72,39 +79,6 @@ impl NekoSpiceApp {
         }
         if ui.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
             self.nudge_selected(EditNudgeDirection::Down);
-        }
-
-        // --- Undo / Redo ---
-        if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::Z)) {
-            if ui.input(|input| input.modifiers.shift) {
-                self.redo();
-            } else {
-                self.undo();
-            }
-        }
-        // F5 = Run simulation
-        if ui.input(|input| input.key_pressed(egui::Key::F5)) {
-            self.run_simulation_from_panel();
-        }
-        // Ctrl+S = Save
-        if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::S)) {
-            self.save_document();
-        }
-        // Ctrl+Y as alternative redo shortcut
-        if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::Y)) {
-            self.redo();
-        }
-        // Ctrl+O = Open file
-        if ui.input(|input| input.modifiers.ctrl && input.key_pressed(egui::Key::O)) {
-            self.open_file_dialog();
-        }
-        // Ctrl+Shift+S = Save As
-        if ui.input(|input| input.modifiers.ctrl && input.modifiers.shift && input.key_pressed(egui::Key::S)) {
-            self.save_document_with_dialog();
-        }
-        // Ctrl+Shift+E = Export netlist
-        if ui.input(|input| input.modifiers.ctrl && input.modifiers.shift && input.key_pressed(egui::Key::E)) {
-            self.export_netlist_dialog();
         }
     }
 }

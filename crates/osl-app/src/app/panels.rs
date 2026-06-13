@@ -18,6 +18,8 @@ impl eframe::App for NekoSpiceApp {
         let palette = self.theme_palette();
         StudioTheme::apply(ui.ctx(), theme_mode);
 
+        // Handle global keyboard shortcuts (works in every workspace).
+        self.handle_global_shortcuts(ui.ctx());
         let root = ui.max_rect();
         ui.painter().rect_filled(root, 0.0, palette.background);
         let top = Rect::from_min_max(

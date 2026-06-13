@@ -102,6 +102,22 @@ impl NekoSpiceApp {
                     unit: unit.clone(),
                 })
                 .collect(),
+            // Vendor model bodies for models the user added to the profile
+            vendor_model_bodies: {
+                let added_names: Vec<&str> = self.simulation_profile_editor.model_params.iter()
+                    .filter(|(name, _, _)| !name.trim().is_empty())
+                    .map(|(name, _, _)| name.as_str())
+                    .collect();
+                let mut bodies = Vec::new();
+                for name in &added_names {
+                    if let Some(entry) = self.vendor_catalog.subckts.get(*name) {
+                        bodies.push(entry.body.clone());
+                    } else if let Some(entry) = self.vendor_catalog.models.get(*name) {
+                        bodies.push(entry.body.clone());
+                    }
+                }
+                bodies
+            },
         }
     }
 
@@ -258,6 +274,75 @@ impl NekoSpiceApp {
             match std::fs::write(&path, &netlist) {
                 Ok(()) => self.status_message = Some(format!("Netlist exported to {}", path.display())),
                 Err(error) => self.status_message = Some(format!("Export failed: {error}")),
+            }
+        }
+    }
+    /// Export waveform data to CSV file via file dialog.
+    ///
+    /// Reads the raw waveform from the last run's output directory and
+    /// writes it as a comma-separated values file for external analysis.
+    pub(crate) fn export_csv_dialog(&mut self) {
+        let Some(run) = &self.simulation_panel.last_run else {
+            self.status_message = Some("No simulation run available for CSV export".to_string());
+            return;
+        };
+        let raw_path = run.output_dir.join("waveform.raw");
+        if !raw_path.is_file() {
+            self.status_message = Some(format!("Waveform file not found: {}", raw_path.display()));
+            return;
+        }
+        match osl_waveform::read_ngspice_raw(&raw_path) {
+            Ok(waveform) => match waveform.to_csv() {
+                Ok(csv) => {
+                    let dialog = rfd::FileDialog::new()
+                        .add_filter("CSV Data", &["csv"])
+                        .set_file_name("waveform.csv");
+                    if let Some(path) = dialog.save_file() {
+                        match std::fs::write(&path, &csv) {
+                            Ok(()) => self.status_message = Some(format!(
+                                "CSV exported to {} ({} bytes)", path.display(), csv.len()
+                            )),
+                            Err(error) => self.status_message =
+                                Some(format!("CSV export failed: {error}")),
+                        }
+                    }
+                }
+                Err(error) => {
+                    self.status_message = Some(format!("CSV generation failed: {error}"));
+                }
+            },
+            Err(error) => {
+                self.status_message = Some(format!("Waveform parse failed: {error}"));
+            }
+        }
+    }
+    /// Export simulation log to a file via file dialog.
+    ///
+    /// Copies the ngspice or Xyce log from the last run to a user-selected path.
+    pub(crate) fn export_log_dialog(&mut self) {
+        let Some(run) = &self.simulation_panel.last_run else {
+            self.status_message = Some("No simulation run available for log export".to_string());
+            return;
+        };
+        let ngspice_log = run.output_dir.join("ngspice.log");
+        let xyce_log = run.output_dir.join("xyce.log");
+        let source = if ngspice_log.is_file() {
+            ngspice_log
+        } else if xyce_log.is_file() {
+            xyce_log
+        } else {
+            self.status_message = Some("No simulation log found".to_string());
+            return;
+        };
+        let dialog = rfd::FileDialog::new()
+            .add_filter("Simulation Log", &["log", "txt"])
+            .set_file_name(source.file_name().and_then(|n| n.to_str()).unwrap_or("simulation.log").to_string());
+        if let Some(path) = dialog.save_file() {
+            match std::fs::copy(&source, &path) {
+                Ok(bytes) => self.status_message = Some(format!(
+                    "Log exported to {} ({} bytes)", path.display(), bytes
+                )),
+                Err(error) => self.status_message = Some(format!("Log export failed: {error}")),
             }
         }
     }

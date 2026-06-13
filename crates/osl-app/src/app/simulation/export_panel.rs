@@ -1,5 +1,5 @@
 //! Simulation export panel — provides export actions for netlists, CSV,
-//! and simulation reports in backend-aware formats.
+//! log files, and simulation reports in backend-aware formats.
 //!
 //! Each export action checks the current backend (ngspice/Xyce) and
 //! formats the output accordingly.
@@ -13,7 +13,7 @@ impl NekoSpiceApp {
     /// Draw the export options panel in the overview workspace.
     ///
     /// Shows export buttons for netlist (.cir), CSV waveform data,
-    /// and simulation report, with backend-aware formatting hints.
+    /// simulation log, and output directory access.
     pub(crate) fn draw_export_options_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = StudioTheme::palette(mode);
@@ -44,17 +44,37 @@ impl NekoSpiceApp {
 
             ui.add_space(4.0);
 
-            // CSV export (only available after a successful run)
+            // CSV waveform export (only available after a run)
             let csv_btn = ui.add_enabled(
                 has_run,
                 egui::Button::new(
-                    egui::RichText::new("Export CSV").color(palette.text),
+                    egui::RichText::new("Export Waveform CSV").color(palette.text),
                 )
                 .fill(palette.panel_soft)
                 .stroke(egui::Stroke::new(1.0, palette.border))
                 .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
             );
-            csv_btn.on_hover_text("Export waveform data as CSV for external analysis");
+            if csv_btn.clicked() {
+                self.export_csv_dialog();
+            }
+            csv_btn.on_hover_text("Export all waveform signals as CSV for external analysis");
+
+            ui.add_space(4.0);
+
+            // Log export
+            let log_btn = ui.add_enabled(
+                has_run,
+                egui::Button::new(
+                    egui::RichText::new("Export Simulation Log").color(palette.text),
+                )
+                .fill(palette.panel_soft)
+                .stroke(egui::Stroke::new(1.0, palette.border))
+                .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
+            );
+            if log_btn.clicked() {
+                self.export_log_dialog();
+            }
+            log_btn.on_hover_text("Export ngspice/Xyce simulation log for debugging");
 
             ui.add_space(4.0);
 

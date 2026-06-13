@@ -283,11 +283,29 @@ NekoSpice/
 ```
 UI directive_kind + analysis_params.to_body()
   → build_simulation_profile()
+    + vendor_model_bodies (TI/ADI subcircuit injection)
   → inject_profile_directives()
+    + vendor model bodies before .end
   → ensure_ngspice_control_exports()
   → ngspice/Xyce CLI executes
   → parse_ngspice_log() on failure
   → display in status panel
+  → record in SimulationHistory → save to disk
+```
+
+### Export Capabilities
+```
+Export Netlist (.cir)  → ngspice/Xyce-compatible SPICE netlist
+Export Waveform CSV    → All signals as comma-separated values
+Export Simulation Log  → ngspice.log or xyce.log for debugging
+```
+
+### Vendor Model Integration
+```
+VendorModelCatalog     → BTreeMap of subcircuits + models
+ModelCatalogEntry.body → Full .subckt/.model text for netlist injection
+build_simulation_profile() → matches added models against catalog
+inject_profile_directives() → inserts vendor bodies before .end
 ```
 
 ### Schematic Loading
