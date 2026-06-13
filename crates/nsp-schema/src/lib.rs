@@ -143,7 +143,7 @@ pub fn read_symbol_library(path: &Path) -> OslResult<NspSymbolLibrary> {
 
 /// write schema symbol library。
 pub fn write_symbol_library(path: &Path, library: &NspSymbolLibrary) -> OslResult<()> {
-    write_text(path, &library.to_kicad_symbol_library_sexpr())
+    write_text(path, &library.to_symbol_library_sexpr())
 }
 
 /// read schema symbol library table。

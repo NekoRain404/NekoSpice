@@ -70,4 +70,4 @@ UI 仿真参数 → build_simulation_profile()
 - **文件管理**: 单文件不超过 300 行
 - **状态分离**: state.rs 定义状态，sim_options.rs 定义参数
 - **双后端**: 兼容 ngspice + Xyce
-- **格式兼容**: 支持 .kicad_sch/.kicad_sym 格式读写
+- **格式兼容**: 兼容 .kicad_sch/.kicad_sym 文件格式读写（文件格式标准命名）

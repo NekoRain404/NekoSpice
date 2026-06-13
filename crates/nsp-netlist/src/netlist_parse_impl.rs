@@ -416,7 +416,7 @@ XU1 in out vcc vee GOODAMP
     }
 
     #[test]
-    fn imports_kicad_project_schematic_with_external_symbol_library() {
+    fn imports_project_schematic_with_external_symbol_library() {
         let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)

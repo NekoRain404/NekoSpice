@@ -32,7 +32,7 @@ impl NspSymbolLibrary {
     }
 
     /// to schema symbol library sexpr。
-    pub fn to_kicad_symbol_library_sexpr(&self) -> String {
+    pub fn to_symbol_library_sexpr(&self) -> String {
         let mut output = String::new();
         output.push_str("(kicad_symbol_lib\n");
         if let Some(version) = &self.version {

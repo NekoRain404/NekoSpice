@@ -242,7 +242,7 @@ fn honors_no_connect_markers_on_unconnected_symbol_pins() {
         )
     }));
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(no_connect"));
     assert!(roundtrip.contains("(uuid \"12121212-1212-1212-1212-121212121212\")"));
     let reparsed = parse_schematic(&roundtrip, "roundtrip.kicad_sch").unwrap();
@@ -299,7 +299,7 @@ fn parses_schematic_junction_styles_and_roundtrips() {
         })
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(junction"));
     assert!(roundtrip.contains("(diameter 0.8128)"));
     assert!(roundtrip.contains("(color 255 0 239 1)"));
@@ -423,7 +423,7 @@ fn parses_schema_bus_items_and_roundtrips() {
     assert!(scene.to_summary_json().contains("\"bus_count\": 1"));
     assert!(scene.to_summary_json().contains("\"bus_entry_count\": 1"));
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(bus_alias \"DATA\" (members \"D0\" \"D1\" \"D2\" \"D3\"))"));
     assert!(roundtrip.contains("(bus"));
     assert!(roundtrip.contains("(bus_entry"));
@@ -511,7 +511,7 @@ fn parses_net_chains_and_roundtrips() {
             .contains("\"net_chain_member_net_count\": 2")
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(net_chain \"Signal1\""));
     assert!(roundtrip.contains("(from \"U1\" \"A1\")"));
     assert!(roundtrip.contains("(to \"J1\" \"2\")"));
@@ -693,7 +693,7 @@ fn parses_schematic_graphics_and_roundtrips() {
             .contains("\"schematic_graphic_count\": 5")
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(polyline"));
     assert!(roundtrip.contains("(stroke (width 0.3556) (type dot) (color 255 89 101 1))"));
     assert!(roundtrip.contains("(bezier"));
@@ -818,7 +818,7 @@ fn parses_rule_areas_and_roundtrips() {
     assert_eq!(scene_json["rule_areas"][0]["stroke"]["type"], "dash");
     assert_eq!(scene_json["rule_areas"][0]["fill"]["color"]["alpha"], 0.25);
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(rule_area"));
     assert!(roundtrip.contains("(locked yes)"));
     assert!(roundtrip.contains("(exclude_from_sim no)"));
@@ -957,7 +957,7 @@ fn parses_schematic_text_boxes_and_roundtrips() {
         37.0
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(text_box \"Bigger\\nMultiline\\nText\""));
     assert!(roundtrip.contains("(size 17.78 12.7)"));
     assert!(roundtrip.contains("(margins 0.9525 0.9525 0.9525 0.9525)"));
@@ -1079,7 +1079,7 @@ fn parses_schematic_images_and_roundtrips() {
         "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(image (at 36.83 39.37) (scale 1.5)"));
     assert!(roundtrip.contains("(data"));
     assert!(roundtrip.contains("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmH"));
@@ -1248,7 +1248,7 @@ fn parses_schematic_tables_and_roundtrips() {
         "top"
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(table"));
     assert!(roundtrip.contains("(column_count 2)"));
     assert!(roundtrip.contains(
@@ -1394,7 +1394,7 @@ fn parses_schematic_groups_and_roundtrips() {
     assert_eq!(scene_json["groups"][0]["member_count"], 2);
     assert!(scene_json["groups"][0]["bounds"]["width"].as_f64().unwrap() > 5.0);
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(group \"GroupName\""));
     assert!(roundtrip.contains("(uuid \"7267eac2-0eb2-494a-bc81-61295bcdf08c\")"));
     assert!(roundtrip.contains("(locked yes)"));
@@ -1499,7 +1499,7 @@ fn preserves_schematic_file_metadata_and_instances() {
             .contains("\"embedded_fonts\": false")
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(generator_version \"9.99\")"));
     assert!(roundtrip.contains("(title \"Control Board\")"));
     assert!(roundtrip.contains("(comment 4 \"${APPROVER}\")"));
@@ -1558,7 +1558,7 @@ fn preserves_symbol_instance_pin_alternates_and_roundtrips() {
             .contains("\"symbol_pin_alternate_count\": 2")
     );
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(alternate \"CAN0_DIN\")"));
     assert!(exported.contains("(alternate \"CAN0_DOUT\")"));
 
@@ -1647,7 +1647,7 @@ fn preserves_embedded_project_instances_and_variants() {
             .contains("\"variant_instance_count\": 1")
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(instances"));
     assert!(roundtrip.contains("(project \"variants\""));
     assert!(roundtrip.contains("(reference \"J1\")"));
@@ -1737,7 +1737,7 @@ fn preserves_symbol_and_sheet_assembly_flags() {
             .contains("\"fields_autoplaced_count\": 2")
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(mirror x y)"));
     assert!(roundtrip.contains("(in_bom no)"));
     assert!(roundtrip.contains("(on_board yes)"));
@@ -1833,7 +1833,7 @@ fn preserves_property_display_flags_and_effects() {
             .contains("\"property_effect_count\": 2")
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(hide yes)"));
     assert!(roundtrip.contains("(id 0)"));
     assert!(roundtrip.contains("(show_name no)"));
@@ -1983,7 +1983,7 @@ fn preserves_canvas_text_effects() {
     );
     assert_eq!(scene_json["text_boxes"][0]["effects"]["font_italic"], true);
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(justify left bottom) hide"));
     assert!(roundtrip.contains("(thickness 0.254)"));
     assert!(roundtrip.contains("(bold yes)"));
@@ -2100,7 +2100,7 @@ fn preserves_schema_directive_labels_and_roundtrips() {
         true
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(netclass_flag \"\""));
     assert!(roundtrip.contains("(length 3.81)"));
     assert!(roundtrip.contains("(shape dot)"));
@@ -2178,7 +2178,7 @@ fn preserves_label_shape_autoplace_and_properties() {
             .contains("\"hidden_property_count\": 1")
     );
 
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(global_label \"NET_OK\" (shape input)"));
     assert!(roundtrip.contains("(fields_autoplaced yes)"));
     assert!(
@@ -2310,7 +2310,7 @@ fn parses_hierarchical_sheet_items_and_reports_unsupported_expansion() {
     assert!(
         netlist.contains("* Unsupported schema hierarchical sheet gain_stage gain_stage.kicad_sch")
     );
-    let roundtrip = schematic.to_kicad_schematic_sexpr();
+    let roundtrip = schematic.to_schematic_sexpr();
     assert!(roundtrip.contains("(sheet"));
     assert!(roundtrip.contains("(stroke (width 0.3048) (type dash) (color 139 160 255 1))"));
     assert!(roundtrip.contains("(fill (color 247 255 168 0.3607843137))"));
@@ -2424,7 +2424,7 @@ fn exports_schema_sim_fields_to_spice_netlist() {
     assert!(!netlist.contains("Rskip"));
     assert!(netlist.contains(".op"));
     let reparsed = parse_schematic(
-        &schematic.to_kicad_schematic_sexpr(),
+        &schematic.to_schematic_sexpr(),
         "sim_fields_roundtrip.kicad_sch",
     )
     .unwrap();
@@ -2822,7 +2822,7 @@ fn selects_schema_symbol_unit_scope_for_canvas_and_netlist() {
     let netlist = schematic.to_spice_netlist().unwrap();
     assert!(netlist.contains("R1 in 0 10k"));
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(body_style 1)"));
     assert!(exported.contains("(symbol \"Multi_0_1\""));
     assert!(exported.contains("(symbol \"Multi_1_1\""));
@@ -2902,7 +2902,7 @@ fn preserves_schema_symbol_unit_display_names() {
             .contains("\"library_unit_name_count\": 2")
     );
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(unit_name \"Power\")"));
     assert!(exported.contains("(unit_name \"Logic\")"));
     let reparsed = parse_schematic(&exported, "named_units_roundtrip.kicad_sch").unwrap();
@@ -2938,7 +2938,7 @@ fn preserves_schema_symbol_unit_display_names() {
     .unwrap();
 
     assert!(library.to_summary_json().contains("\"unit_name_count\": 2"));
-    let exported_library = library.to_kicad_symbol_library_sexpr();
+    let exported_library = library.to_symbol_library_sexpr();
     assert!(exported_library.contains("(unit_name \"Power\")"));
     assert!(exported_library.contains("(unit_name \"Logic\")"));
 }
@@ -2952,7 +2952,7 @@ fn roundtrips_schema_schematic_fixture_through_writer() {
     let schematic =
         read_schematic(&workspace_root.join("examples/schema_schematic/rc.kicad_sch")).unwrap();
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(kicad_sch"));
     assert!(exported.contains("(lib_symbols"));
     assert!(exported.contains("(lib_id \"NekoSpice:R\")"));
@@ -3161,7 +3161,7 @@ fn edits_schema_schematic_in_rust_ir_and_roundtrips() {
             .any(|directive| directive.text == ".save v(sense)")
     );
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(bus"));
     assert!(exported.contains("(uuid \"33333333-aaaa-bbbb-cccc-333333333333\")"));
     assert!(exported.contains("(bus_entry"));
@@ -3266,7 +3266,7 @@ fn sets_structured_simulation_directives_and_roundtrips() {
             && directive.uuid.as_deref() == Some("aaaaaaaa-0000-4000-8000-000000000002")
     }));
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(text \".tran 2u 2m\""));
     assert!(exported.contains("(text \".save v(out)\""));
     let reparsed = parse_schematic(&exported, "simulation_directives.kicad_sch").unwrap();
@@ -3304,7 +3304,7 @@ fn deletes_schema_schematic_items_by_uuid_and_roundtrips() {
     assert_eq!(schematic.labels.len(), 2);
     assert!(schematic.spice_directives().is_empty());
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(!exported.contains("22222222-2222-2222-2222-222222222222"));
     assert!(!exported.contains("66666666-6666-6666-6666-666666666666"));
     assert!(!exported.contains("77777777-7777-7777-7777-777777777777"));
@@ -3373,7 +3373,7 @@ fn edits_schema_table_cells_by_uuid_and_roundtrips() {
     assert_eq!(schematic.tables[0].cells.len(), 1);
     assert_eq!(schematic.tables[0].cells[0].text, "Move me");
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(table"));
     assert!(exported.contains("(table_cell \"Move me\""));
     assert!(exported.contains("(at 12.54 8.73 45)"));
@@ -3433,7 +3433,7 @@ fn edits_schema_sheet_pins_by_uuid_and_roundtrips() {
     assert_eq!(schematic.sheets[0].pins.len(), 1);
     assert_eq!(schematic.sheets[0].pins[0].name, "in");
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(sheet"));
     assert!(exported.contains("(pin \"in\" input (at 52.54 43.73 180)"));
     assert!(!exported.contains("pin \"out\""));
@@ -3545,7 +3545,7 @@ fn moves_schema_schematic_items_by_uuid_and_roundtrips() {
     assert_close(schematic.sheets[0].at.unwrap().x, 106.68);
     assert_close(schematic.sheets[0].pins[0].at.unwrap().x, 106.68);
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(at 72.39 49.53 0)"));
     assert!(exported.contains("(xy 52.07 53.34)"));
     assert!(exported.contains("(at 86.36 52.07 0)"));
@@ -3614,7 +3614,7 @@ fn places_symbol_from_schema_library_into_schematic_ir() {
             .any(|symbol| symbol.name == "NekoSpice:C")
     );
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(property \"Reference\" \"C2\""));
     assert!(exported.contains("(property \"Value\" \"47n\""));
     let reparsed = parse_schematic(&exported, "placed.kicad_sch").unwrap();
@@ -3699,7 +3699,7 @@ fn places_derived_symbol_with_parent_library_context() {
     assert_eq!(placed.pins.len(), 2);
     assert_eq!(schematic.canvas_scene().symbols[0].graphics.len(), 1);
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(symbol \"NekoSpice:ParentR\""));
     assert!(exported.contains("(symbol \"NekoSpice:DerivedR\""));
     assert!(exported.contains("(extends \"NekoSpice:ParentR\")"));
@@ -3858,7 +3858,7 @@ fn places_selected_schema_symbol_unit_and_body_style() {
         vec!["3", "4"]
     );
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(unit 2)"));
     assert!(exported.contains("(body_style 2)"));
     assert!(exported.contains("(pin \"3\""));
@@ -4622,7 +4622,7 @@ fn configures_existing_symbol_scope_mirror_and_pin_alternates() {
     assert_close(pin3.start.x, 22.54);
     assert_close(pin3.end.x, 20.0);
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(mirror x y)"));
     assert!(exported.contains("(unit 2)"));
     assert!(exported.contains("(body_style 2)"));
@@ -4717,7 +4717,7 @@ fn roundtrips_schema_symbol_library_fixture_through_writer() {
         read_symbol_library(&workspace_root.join("examples/schema_schematic/neko_spice.kicad_sym"))
             .unwrap();
 
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(exported.contains("(kicad_symbol_lib"));
     assert!(exported.contains("(symbol \"NekoSpice:R\""));
     let reparsed = parse_symbol_library(&exported, "roundtrip.kicad_sym").unwrap();
@@ -4775,7 +4775,7 @@ fn preserves_schema_symbol_library_file_metadata() {
     assert!(summary.contains("\"generator_version\": \"9.0\""));
     assert!(summary.contains("\"embedded_font_symbol_count\": 2"));
 
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(exported.contains("(generator_version \"9.0\")"));
     assert!(exported.contains("(embedded_fonts no)"));
     assert!(exported.contains("(embedded_fonts yes)"));
@@ -4823,7 +4823,7 @@ fn parses_schema_symbol_library_bezier_graphics_and_roundtrips() {
     assert_close(bounds.min.x, -2.54);
     assert_close(bounds.max.y, 2.54);
 
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(exported.contains("(bezier"));
     assert!(exported.contains("(pts (xy -2.54 0) (xy -1.27 -2.54) (xy 1.27 2.54) (xy 2.54 0))"));
     let reparsed = parse_symbol_library(&exported, "curve_roundtrip.kicad_sym").unwrap();
@@ -4960,7 +4960,7 @@ fn preserves_schema_symbol_pin_display_and_text_effects() {
         })
     );
 
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(exported.contains("(pin_numbers"));
     assert!(exported.contains("(hide yes)"));
     assert!(exported.contains("(pin_names"));
@@ -5070,7 +5070,7 @@ fn preserves_schema_symbol_pin_alternates_and_canvas_metadata() {
         "output"
     );
 
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(exported.contains("(alternate \"SDA\" bidirectional line)"));
     assert!(exported.contains("(alternate \"SDO\" output clock)"));
 
@@ -5156,7 +5156,7 @@ fn preserves_schema_symbol_definition_flags_and_roundtrips() {
     assert!(summary.contains("\"symbol_in_pos_files_setting_count\": 2"));
     assert!(summary.contains("\"duplicate_pin_numbers_are_jumpers_count\": 1"));
 
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(exported.contains("(power)"));
     assert!(exported.contains("(power global)"));
     assert!(exported.contains("(power local)"));
@@ -5244,7 +5244,7 @@ fn preserves_schema_symbol_inheritance_body_styles_and_jumpers() {
     assert!(summary.contains("\"body_style_symbol_count\": 2"));
     assert!(summary.contains("\"jumper_pin_group_count\": 2"));
 
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(exported.contains("(body_styles demorgan)"));
     assert!(exported.contains("(duplicate_pin_numbers_are_jumpers yes)"));
     assert!(exported.contains("(jumper_pin_groups"));
@@ -5335,7 +5335,7 @@ fn resolves_schema_symbol_inheritance_for_canvas_netlist_and_placement() {
     let netlist = schematic.to_spice_netlist().unwrap();
     assert!(netlist.contains("R1 in 0 2.2k"));
 
-    let exported = schematic.to_kicad_schematic_sexpr();
+    let exported = schematic.to_schematic_sexpr();
     assert!(exported.contains("(extends \"NekoSpice:ParentR\")"));
     assert!(!exported.contains("(symbol \"DerivedR_0_1\""));
 
@@ -5514,7 +5514,7 @@ fn preserves_schema_symbol_graphic_styles_and_roundtrips() {
             && fill.fill_type.as_deref() == Some("outline")
     ));
 
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(
         library
             .to_summary_json()
@@ -5881,7 +5881,7 @@ fn indexes_schema_symbol_library_browser_metadata() {
             "Connector Foo:*".to_string()
         ]
     );
-    let exported = library.to_kicad_symbol_library_sexpr();
+    let exported = library.to_symbol_library_sexpr();
     assert!(exported.contains("(property \"Description\" \"Parent analog switch\""));
     assert!(exported.contains("(property \"ki_keywords\" \"switch analog mux\""));
     assert!(

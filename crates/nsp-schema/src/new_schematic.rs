@@ -9,7 +9,7 @@ use crate::{NspSchematic, NspTitleBlock, NspTitleComment};
 /// Create a new empty schematic with default A4 paper size.
 ///
 /// The returned schematic is valid schema v6+ format and can be
-/// serialized with `to_kicad_schematic_sexpr()` immediately.
+/// serialized with `to_schematic_sexpr()` immediately.
 pub fn new_schema_empty() -> NspSchematic {
     let now = current_date_string();
     NspSchematic {

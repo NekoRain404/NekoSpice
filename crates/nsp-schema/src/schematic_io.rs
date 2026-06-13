@@ -41,7 +41,7 @@ pub fn read_schematic_with_libraries(path: &Path) -> OslResult<NspSchematic> {
 
 /// write schema schematic。
 pub fn write_schematic(path: &Path, schematic: &NspSchematic) -> OslResult<()> {
-    write_text(path, &schematic.to_kicad_schematic_sexpr())
+    write_text(path, &schematic.to_schematic_sexpr())
 }
 
 /// parse schema schematic。
@@ -137,7 +137,7 @@ pub fn parse_schematic(input: &str, source: &str) -> OslResult<NspSchematic> {
 
 impl NspSchematic {
     /// to schema schematic sexpr。
-    pub fn to_kicad_schematic_sexpr(&self) -> String {
+    pub fn to_schematic_sexpr(&self) -> String {
         let mut output = String::new();
         output.push_str("(kicad_sch\n");
         if let Some(version) = &self.version {

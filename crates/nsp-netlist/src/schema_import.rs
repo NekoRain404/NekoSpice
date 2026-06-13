@@ -74,11 +74,11 @@ fn discover_schema_project_source(
     project_dir: &Path,
     hints: &NspProjectSourceHints,
 ) -> OslResult<PathBuf> {
-    discover_kicad_project_schematic(project_dir, hints)
+    discover_project_schematic(project_dir, hints)
         .or_else(|_| discover_schema_project_netlist(project_dir))
 }
 
-fn discover_kicad_project_schematic(
+fn discover_project_schematic(
     project_dir: &Path,
     hints: &NspProjectSourceHints,
 ) -> OslResult<PathBuf> {
