@@ -37,31 +37,51 @@ impl NekoSpiceApp {
         if self.simulation_panel.active_task.is_some() {
             ui.label(self.text(UiText::Running));
         }
-
-        // Show ngspice/xyce log if available
+        // Show parsed ngspice/xyce log summary + collapsible raw log
         if let Some(run) = &self.simulation_panel.last_run {
             let log_path = run.output_dir.join("ngspice.log");
             let fallback = run.output_dir.join("xyce.log");
             let actual = if log_path.is_file() { log_path } else { fallback };
             if actual.is_file() {
                 if let Ok(content) = std::fs::read_to_string(&actual) {
-                    ui.separator();
-                    ui.label(StudioTheme::muted_for(mode, "Simulation Log"));
-                    egui::ScrollArea::vertical()
-                        .id_salt("ngspice_log_viewer")
-                        .max_height(100.0)
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            ui.monospace(&content);
+                    // Parse the log for structured error/warning display
+                    let (errors, warnings, summary) = osl_sim::parse_ngspice_log(&content);
+                    if !errors.is_empty() || !warnings.is_empty() || summary.is_some() {
+                        ui.separator();
+                        let palette = self.theme_palette();
+                        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+                            ui.label(StudioTheme::section_title_for(mode, "Log Summary"));
+                            if let Some(summary) = &summary {
+                                ui.label(egui::RichText::new(summary).color(palette.text));
+                            }
+                            if !errors.is_empty() {
+                                ui.colored_label(palette.danger, format!("{} error(s):", errors.len()));
+                                for err in errors.iter().take(3) {
+                                    ui.label(egui::RichText::new(format!("  {}", err)).size(11.0).color(palette.text_muted));
+                                }
+                            }
+                            if !warnings.is_empty() {
+                                ui.colored_label(palette.warning, format!("{} warning(s)", warnings.len()));
+                            }
                         });
+                    }
+                    // Collapsible raw log for advanced users
+                    egui::CollapsingHeader::new(
+                        egui::RichText::new("Raw Log").color(self.theme_palette().text_muted),
+                    )
+                    .id_salt("ngspice_raw_log")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        egui::ScrollArea::vertical()
+                            .id_salt("ngspice_log_viewer")
+                            .max_height(100.0)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                ui.monospace(&content);
+                            });
+                    });
                 }
             }
-        }
-        if let Some(error) = &self.simulation_panel.last_error {
-            ui.colored_label(
-                severity_color(mode, KicadDiagnosticSeverity::Error),
-                error,
-            );
         }
         if let Some(run) = &self.simulation_panel.last_run {
             let palette = self.theme_palette();
