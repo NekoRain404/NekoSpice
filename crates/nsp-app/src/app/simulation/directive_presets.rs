@@ -10,27 +10,39 @@ use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 /// AC frequency range presets.
-const AC_PRESETS: [(&str, &str, &str); 4] = [
+const AC_PRESETS: [(&str, &str, &str); 8] = [
     ("Audio", "20", "20k"),
     ("RF", "1M", "6G"),
     ("Low-freq", "1", "100k"),
     ("Wideband", "10", "1G"),
+    ("Power-supply", "10", "100M"),
+    ("Digital", "100", "1G"),
+    ("EMC", "150k", "30M"),
+    ("Ultra-wide", "1", "10G"),
 ];
 
 /// DC voltage range presets.
-const DC_PRESETS: [(&str, &str, &str, &str); 4] = [
+const DC_PRESETS: [(&str, &str, &str, &str); 8] = [
     ("3.3V logic", "0", "3.3", "0.1"),
     ("5V logic", "0", "5", "0.1"),
     ("12V rail", "0", "12", "0.5"),
     ("Battery", "2.5", "4.2", "0.01"),
+    ("Op-amp supply", "-15", "15", "0.5"),
+    ("MOSFET Vgs", "-5", "10", "0.05"),
+    ("Diode I-V", "0", "1.5", "0.01"),
+    ("Transformer", "-200", "200", "1"),
 ];
 
 /// Transient time range presets.
-const TRAN_PRESETS: [(&str, &str, &str); 4] = [
+const TRAN_PRESETS: [(&str, &str, &str); 8] = [
     ("RC 1kHz", "10u", "5m"),
     ("RC 10kHz", "1u", "500u"),
     ("Switching 100kHz", "100n", "100u"),
     ("Power startup", "1u", "10m"),
+    ("555 timer", "1u", "10m"),
+    ("Class-D audio", "100n", "500u"),
+    ("Boost converter", "10n", "5m"),
+    ("Motor drive", "1u", "50m"),
 ];
 
 impl NekoSpiceApp {
