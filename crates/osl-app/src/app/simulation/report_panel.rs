@@ -1,3 +1,5 @@
+//! Simulation report panel — displays structured report summary with measurements.
+
 use crate::report_summary::{GuiReportSummary, GuiReportSummaryState};
 use eframe::egui;
 

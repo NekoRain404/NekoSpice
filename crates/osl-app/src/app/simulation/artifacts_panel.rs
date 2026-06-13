@@ -1,3 +1,5 @@
+//! Simulation artifacts panel — lists output files, logs, and reports from a completed run.
+
 use crate::simulation::GuiSimulationRun;
 use eframe::egui;
 use osl_core::Artifact;

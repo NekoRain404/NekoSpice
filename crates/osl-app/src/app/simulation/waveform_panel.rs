@@ -1,3 +1,5 @@
+//! Simulation waveform panel — compact waveform preview in the simulation sidebar.
+
 use crate::app::theme::StudioThemeMode;
 use crate::app::waveform::preview::{draw_single_waveform_preview, format_compact_f64};
 use crate::waveform_summary::{

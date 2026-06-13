@@ -32,6 +32,7 @@ NekoSpice/
 │   │   │   ├── property.rs       # 属性解析与写回
 │   │   │   ├── text.rs           # 文本效果解析
 │   │   │   ├── sexpr.rs          # S-expression 低层解析
+│   │   │   ├── new_schematic.rs    # 工厂函数：创建空白原理图
 │   │   │   ├── spice_export.rs   # KiCad → SPICE 网表导出
 │   │   │   ├── tests.rs          # 26+ 单元测试
 │   │   │   └── ...               # 更多解析模块
