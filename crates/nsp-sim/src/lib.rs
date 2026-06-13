@@ -262,6 +262,11 @@ fn ensure_ngspice_control_exports(source: &str) -> String {
     for line in &lines {
         let trimmed = line.trim().to_ascii_lowercase();
         if !inserted && trimmed == ".endc" {
+            // If there's no analysis directive, inject .tran before .endc
+            if !has_tran_ac_dc && !has_op {
+                output.push_str(".tran 1u 10m\n");
+                output.push_str("run\n");
+            }
             output.push_str("set filetype=binary\n");
             output.push_str("write waveform.raw all\n");
             inserted = true;
