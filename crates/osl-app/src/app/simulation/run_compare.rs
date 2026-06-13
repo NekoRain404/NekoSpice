@@ -108,6 +108,7 @@ impl NekoSpiceApp {
 
                             compare_row(ui, mode, "Analysis", &ea.analysis_label(), &eb.analysis_label(), palette);
                             compare_row(ui, mode, "Backend", &ea.backend, &eb.backend, palette);
+                            compare_row(ui, mode, "Settings", &ea.settings_summary, &eb.settings_summary, palette);
                             compare_row(ui, mode, "Duration", &format!("{} ms", ea.duration_ms), &format!("{} ms", eb.duration_ms), palette);
                             compare_status_row(ui, mode, "Status", ea.status_label(), eb.status_label(), &ea, &eb, &palette);
                             compare_row(ui, mode, "Time", &ea.time_label(), &eb.time_label(), palette);

@@ -79,20 +79,36 @@ impl NekoSpiceApp {
                 profile_row(ui, mode, "ITL5 (total)", &opts.itl5, "limit");
             }
 
-            // Step sweep
-            if let super::state::StepSweep::Parametric { param_name, sweep_mode, start, stop, step } = &self.simulation_panel.step_sweep {
-                ui.add_space(4.0);
-                ui.separator();
-                ui.add_space(4.0);
-                ui.label(StudioTheme::muted_for(mode, "Step Sweep"));
-                let sweep_desc = match sweep_mode.as_str() {
-                    "list" => format!("{} list {}", param_name, start),
-                    "lin" => format!("{} {} to {} step {}", param_name, start, stop, step),
-                    "dec" => format!("{} dec {} pts/dec {} to {}", param_name, step, start, stop),
-                    "oct" => format!("{} oct {} pts/oct {} to {}", param_name, step, start, stop),
-                    _ => format!("{} {} {} {}", param_name, sweep_mode, start, stop),
-                };
-                profile_row(ui, mode, ".step", &sweep_desc, "sweep");
+            // Step sweep (parametric or temperature)
+            match &self.simulation_panel.step_sweep {
+                super::state::StepSweep::Parametric { param_name, sweep_mode, start, stop, step } => {
+                    ui.add_space(4.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label(StudioTheme::muted_for(mode, "Step Sweep"));
+                    let sweep_desc = match sweep_mode.as_str() {
+                        "list" => format!("{} list {}", param_name, start),
+                        "lin" => format!("{} {} to {} step {}", param_name, start, stop, step),
+                        "dec" => format!("{} dec {} pts/dec {} to {}", param_name, step, start, stop),
+                        "oct" => format!("{} oct {} pts/oct {} to {}", param_name, step, start, stop),
+                        _ => format!("{} {} {} {}", param_name, sweep_mode, start, stop),
+                    };
+                    profile_row(ui, mode, ".step", &sweep_desc, "sweep");
+                }
+                super::state::StepSweep::Temperature { sweep_mode, start, stop, step } => {
+                    ui.add_space(4.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label(StudioTheme::muted_for(mode, "Temperature Sweep"));
+                    let sweep_desc = match sweep_mode.as_str() {
+                        "lin" => format!("TEMP {} to {} step {}", start, stop, step),
+                        "dec" => format!("TEMP dec {} pts/dec {} to {}", step, start, stop),
+                        "oct" => format!("TEMP oct {} pts/oct {} to {}", step, start, stop),
+                        _ => format!("TEMP {} {} to {} step {}", sweep_mode, start, stop, step),
+                    };
+                    profile_row(ui, mode, ".step", &sweep_desc, "sweep");
+                }
+                super::state::StepSweep::None => {}
             }
 
             // Measurements
@@ -118,6 +134,20 @@ impl NekoSpiceApp {
                     if !node.trim().is_empty() {
                         profile_row(ui, mode, &format!(".ic {}", node), value, "ic");
                     }
+                }
+            }
+
+            // Vendor models
+            let vendor_count = self.vendor_catalog.total_count();
+            let added_models = self.simulation_profile_editor.model_params.len();
+            if vendor_count > 0 {
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.label(StudioTheme::muted_for(mode, "Vendor Models"));
+                profile_row(ui, mode, "Available", &format!("{} models", vendor_count), "catalog");
+                if added_models > 0 {
+                    profile_row(ui, mode, "Added to profile", &format!("{} models", added_models), "active");
                 }
             }
 
