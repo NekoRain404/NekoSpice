@@ -5,14 +5,15 @@
 //! the same configuration.
 
 use crate::simulation::GuiSimulationRun;
-use osl_core::RunStatus;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Maximum number of runs retained in history.
 const MAX_HISTORY: usize = 20;
 
 /// A single historical simulation run entry.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SimulationHistoryEntry {
     /// Timestamp (Unix seconds) when the run completed.
     pub(crate) completed_at: u64,
@@ -24,8 +25,8 @@ pub(crate) struct SimulationHistoryEntry {
     pub(crate) backend: String,
     /// Run duration in milliseconds.
     pub(crate) duration_ms: u128,
-    /// Whether the run passed or failed.
-    pub(crate) status: RunStatus,
+    /// Whether the run passed or failed (stored as string for serialization).
+    pub(crate) status_str: String,
     /// Output directory path for artifact access.
     #[allow(dead_code)]
     pub(crate) output_dir: String,
@@ -54,7 +55,7 @@ impl SimulationHistoryEntry {
             analysis_body: analysis_body.to_string(),
             backend: backend.to_string(),
             duration_ms: run.metadata.duration_ms as u128,
-            status: run.metadata.status,
+            status_str: run.metadata.status.as_str().to_string(),
             output_dir: run.output_dir.display().to_string(),
             settings_summary,
         }
@@ -84,26 +85,29 @@ impl SimulationHistoryEntry {
         &self,
         palette: &crate::app::theme::StudioPalette,
     ) -> eframe::egui::Color32 {
-        match self.status {
-            RunStatus::Passed => palette.success,
-            RunStatus::Failed => palette.danger,
+        match self.status_str.as_str() {
+            "Passed" => palette.success,
+            _ => palette.danger,
         }
     }
 
     /// Status label.
-    pub(crate) fn status_label(&self) -> &'static str {
-        match self.status {
-            RunStatus::Passed => "Passed",
-            RunStatus::Failed => "Failed",
-        }
+    pub(crate) fn status_label(&self) -> &str {
+        &self.status_str
     }
 }
 
 /// Simulation run history manager.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct SimulationHistory {
     /// Historical entries, most recent first.
     entries: Vec<SimulationHistoryEntry>,
+}
+
+impl Default for SimulationHistory {
+    fn default() -> Self {
+        Self::load_from_disk()
+    }
 }
 
 impl SimulationHistory {
@@ -125,6 +129,7 @@ impl SimulationHistory {
         );
         self.entries.insert(0, entry);
         self.entries.truncate(MAX_HISTORY);
+        self.save_to_disk();
     }
 
     /// Get the list of historical entries (most recent first).
@@ -147,4 +152,39 @@ impl SimulationHistory {
     pub(crate) fn clear(&mut self) {
         self.entries.clear();
     }
+
+    /// Save history to disk.
+    pub(crate) fn save_to_disk(&self) {
+        let path = history_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(&self.entries) {
+            let _ = std::fs::write(&path, json);
+        }
+    }
+
+    /// Load history from disk.
+    pub(crate) fn load_from_disk() -> Self {
+        let path = history_path();
+        let data = match std::fs::read_to_string(&path) {
+            Ok(d) => d,
+            Err(_) => return Self::default(),
+        };
+        let entries: Vec<SimulationHistoryEntry> = match serde_json::from_str(&data) {
+            Ok(e) => e,
+            Err(_) => return Self::default(),
+        };
+        Self { entries }
+    }
+}
+
+
+/// Path to the history JSON file.
+fn history_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home)
+        .join(".config")
+        .join("nekospice")
+        .join("simulation_history.json")
 }
