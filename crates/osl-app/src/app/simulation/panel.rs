@@ -107,6 +107,9 @@ impl NekoSpiceApp {
         // Quick configuration summary
         self.draw_panel_config_summary(ui);
 
+
+        // Collapsible netlist preview
+        self.draw_panel_netlist_preview(ui);
         ui.add_space(8.0);
 
         // Diagnostics
@@ -214,13 +217,57 @@ impl NekoSpiceApp {
                 });
         });
     }
+
+    /// Collapsible netlist preview in the sidebar panel.
+    fn draw_panel_netlist_preview(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        let palette = StudioTheme::palette(mode);
+        egui::CollapsingHeader::new(
+            egui::RichText::new("Netlist Preview").color(palette.text),
+        )
+        .id_salt("panel_netlist_preview")
+        .default_open(false)
+        .show(ui, |ui| {
+            let Some(document) = &self.document else {
+                ui.label(StudioTheme::muted_for(mode, "No schematic loaded"));
+                return;
+            };
+            let profile = self.build_simulation_profile();
+            match document.spice_netlist_preview().map(|raw| {
+                osl_sim::inject_profile_directives(&raw, &profile)
+            }) {
+                Ok(netlist) => {
+                    let line_count = netlist.lines().count();
+                    ui.label(StudioTheme::muted_for(
+                        mode,
+                        format!("{} lines — {} backend", line_count, self.simulation_panel.backend.label()),
+                    ));
+                    ui.add_space(2.0);
+                    egui::ScrollArea::vertical()
+                        .id_salt("panel_netlist_scroll")
+                        .max_height(120.0)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            for line in netlist.lines().take(30) {
+                                ui.monospace(egui::RichText::new(line).size(10.0).color(palette.text_muted));
+                            }
+                            if line_count > 30 {
+                                ui.label(StudioTheme::muted_for(
+                                    mode,
+                                    format!("... {} more lines", line_count - 30),
+                                ));
+                            }
+                        });
+                }
+                Err(error) => {
+                    ui.colored_label(palette.danger, format!("Netlist error: {}", error));
+                }
+            }
+        });
+    }
 }
 
 /// Draw a workflow step indicator dot with label.
-///
-/// Shows a colored circle (completed/active/pending) and label text.
-/// Used in the simulation panel to guide the user through the
-/// configure → run → analyze workflow.
 fn workflow_step(
     ui: &mut egui::Ui,
     mode: crate::app::theme::StudioThemeMode,
