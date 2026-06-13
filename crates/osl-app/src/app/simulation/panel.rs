@@ -129,6 +129,11 @@ impl NekoSpiceApp {
 
         ui.add_space(8.0);
 
+        // Simulation readiness indicator
+        self.draw_simulation_readiness(ui);
+
+        ui.add_space(8.0);
+
         // Validation status
         self.draw_panel_validation_status(ui);
 

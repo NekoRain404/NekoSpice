@@ -186,6 +186,55 @@ impl NekoSpiceApp {
         });
     }
 
+    /// Simulation readiness indicator — shows what's needed before running.
+    pub(crate) fn draw_simulation_readiness(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        let palette = StudioTheme::palette(mode);
+
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(mode, "Readiness"));
+            ui.add_space(4.0);
+
+            let has_doc = self.document.is_some();
+            let has_analysis = !self.simulation_panel.analysis_params.to_body().trim().is_empty();
+            let running = self.simulation_panel.active_task.is_some();
+            let _has_netlist = self.simulation_panel.last_error.is_none() || self.simulation_panel.last_run.is_some();
+
+            let items = [
+                ("Schematic loaded", has_doc),
+                ("Analysis configured", has_analysis),
+                ("Netlist ready", has_doc && has_analysis),
+            ];
+
+            for (label, ok) in items {
+                ui.horizontal(|ui| {
+                    let color = if ok { palette.success } else { palette.text_muted };
+                    let icon = if ok { "✓" } else { "○" };
+                    ui.label(egui::RichText::new(icon).color(color).size(12.0).strong());
+                    ui.label(egui::RichText::new(label).color(if ok { palette.text } else { palette.text_muted }));
+                });
+            }
+
+            if running {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("▶").color(palette.accent).size(12.0));
+                    ui.label(egui::RichText::new("Simulation running...").color(palette.accent).strong());
+                });
+            }
+
+            let all_ready = has_doc && has_analysis && !running;
+            ui.add_space(4.0);
+            if all_ready {
+                ui.label(StudioTheme::muted_for(mode, "Ready to simulate — press F5 or click Run"));
+            } else if !has_doc {
+                ui.label(StudioTheme::muted_for(mode, "Load a schematic to begin"));
+            } else if !has_analysis {
+                ui.label(StudioTheme::muted_for(mode, "Configure analysis parameters"));
+            }
+        });
+    }
+
     /// Collapsible netlist preview in the sidebar panel.
     pub(crate) fn draw_panel_netlist_preview(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();

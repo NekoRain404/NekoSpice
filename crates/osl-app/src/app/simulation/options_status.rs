@@ -47,6 +47,15 @@ pub(crate) fn draw_run_status_summary(app: &NekoSpiceApp, ui: &mut egui::Ui, mod
                 ui.label(egui::RichText::new("Error").strong().color(palette.danger));
             });
             ui.label(StudioTheme::muted_for(mode, error));
+            ui.add_space(4.0);
+            ui.label(StudioTheme::section_title_for(mode, "Suggested Actions"));
+            ui.add_space(2.0);
+            for suggestion in error_suggestions(error) {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("→").color(palette.accent).size(11.0));
+                    ui.label(StudioTheme::muted_for(mode, suggestion));
+                });
+            }
         } else {
             ui.label(StudioTheme::muted_for(mode, "No simulation run yet."));
         }
@@ -84,4 +93,37 @@ pub(crate) fn draw_recent_runs(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: Stud
             ui.label(StudioTheme::muted_for(mode, "No recent runs."));
         }
     });
+}
+
+/// Suggest actionable steps based on common simulation errors.
+fn error_suggestions(error: &str) -> Vec<&'static str> {
+    let lower = error.to_lowercase();
+    let mut suggestions = Vec::new();
+
+    if lower.contains("no such file") || lower.contains("not found") {
+        suggestions.push("Check that ngspice/Xyce is installed and in PATH");
+        suggestions.push("Verify the executable path in Settings");
+    }
+    if lower.contains("convergence") || lower.contains("singular matrix") {
+        suggestions.push("Try the 'Convergence Aid' preset");
+        suggestions.push("Increase SRCSTEPS or GMINSTEPS in solver settings");
+        suggestions.push("Check for floating nodes or missing ground connections");
+    }
+    if lower.contains("netlist") || lower.contains("parse") {
+        suggestions.push("Check the netlist preview for syntax errors");
+        suggestions.push("Verify all components have valid SPICE models");
+    }
+    if lower.contains("timeout") || lower.contains("iteration") {
+        suggestions.push("Increase ITL4 or ITL5 iteration limits");
+        suggestions.push("Try the 'Fast' preset for quicker convergence");
+    }
+    if lower.contains("model") || lower.contains("subcircuit") {
+        suggestions.push("Import vendor models via the Library workspace");
+        suggestions.push("Check that .include/.lib paths are correct in the schematic");
+    }
+    if suggestions.is_empty() {
+        suggestions.push("Check the raw log for detailed error information");
+        suggestions.push("Try the 'Convergence Aid' preset and re-run");
+    }
+    suggestions
 }

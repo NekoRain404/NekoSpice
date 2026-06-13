@@ -15,6 +15,7 @@ use osl_kicad::KicadSimulationDirectiveKind;
 use eframe::egui;
 use super::state::AnalysisParams;
 use super::profile_editor_widgets::labeled_edit;
+use super::field_validation::{validate_spice_value, FieldValidity};
 
 impl NekoSpiceApp {
     /// Draw the structured directive editor in the panel sidebar.
@@ -104,6 +105,28 @@ impl NekoSpiceApp {
                             .on_hover_text("Start time for plotting (0 = beginning)");
                         labeled_edit(ui, mode, "Tmax", tmax, "auto")
                             .on_hover_text("Maximum internal timestep (0 = auto)");
+                        // Validation feedback for key fields
+                        ui.label(StudioTheme::muted_for(mode, "UIC"));
+                        ui.checkbox(uic, "Use Initial Conditions")
+                    });
+                    // Validation indicators
+                    ui.add_space(4.0);
+                    let tstep_valid = validate_spice_value(tstep);
+                    let tstop_valid = validate_spice_value(tstop);
+                    if tstep_valid != FieldValidity::Ok || tstop_valid != FieldValidity::Ok {
+                        ui.horizontal(|ui| {
+                            if tstep_valid != FieldValidity::Ok {
+                                ui.colored_label(tstep_valid.color(&palette), format!("Tstep: {}", tstep_valid.tooltip()));
+                            }
+                            if tstop_valid != FieldValidity::Ok {
+                                ui.colored_label(tstop_valid.color(&palette), format!("Tstop: {}", tstop_valid.tooltip()));
+                            }
+                        });
+                    }
+                    egui::Grid::new("tran_params_grid_extra")
+                        .num_columns(2)
+                        .spacing([8.0, 6.0])
+                        .show(ui, |ui| {
                         ui.label(StudioTheme::muted_for(mode, "UIC"));
                         ui.checkbox(uic, "Use Initial Conditions")
                             .on_hover_text("Skip initial operating point calculation");
@@ -227,6 +250,19 @@ impl NekoSpiceApp {
                         labeled_edit(ui, mode, "Fstop", fstop, "100Meg")
                             .on_hover_text("Stop frequency (Hz)");
                     });
+                    // AC validation
+                    let fstart_valid = validate_spice_value(fstart);
+                    let fstop_valid = validate_spice_value(fstop);
+                    if fstart_valid != FieldValidity::Ok || fstop_valid != FieldValidity::Ok {
+                        ui.horizontal(|ui| {
+                            if fstart_valid != FieldValidity::Ok {
+                                ui.colored_label(fstart_valid.color(&palette), format!("Fstart: {}", fstart_valid.tooltip()));
+                            }
+                            if fstop_valid != FieldValidity::Ok {
+                                ui.colored_label(fstop_valid.color(&palette), format!("Fstop: {}", fstop_valid.tooltip()));
+                            }
+                        });
+                    }
             }
         }
 
