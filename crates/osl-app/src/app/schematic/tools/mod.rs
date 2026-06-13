@@ -10,8 +10,8 @@ mod editing;
 mod preview;
 pub(crate) mod state;
 
-pub(crate) use state::SchematicToolState;
 pub(crate) use state::SchematicTool;
+pub(crate) use state::SchematicToolState;
 
 impl NekoSpiceApp {
     /// draw schematic tool preview。

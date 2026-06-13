@@ -4,8 +4,8 @@
 //! - [`waveforms`] — Waveforms, FFT, Bode tabs
 //! - [`debug`] — Console, Netlist, ERC, Inspector tabs
 
-mod waveforms;
 mod debug;
+mod waveforms;
 
 use crate::app::NekoSpiceApp;
 use crate::app::SchematicBottomTab;
@@ -30,21 +30,41 @@ impl NekoSpiceApp {
                         (SchematicBottomTab::Waveforms, self.text(UiText::Waveforms)),
                         (SchematicBottomTab::Fft, "FFT"),
                         (SchematicBottomTab::Bode, "Bode"),
-                        (SchematicBottomTab::Console, self.text(UiText::StatusConsole)),
+                        (
+                            SchematicBottomTab::Console,
+                            self.text(UiText::StatusConsole),
+                        ),
                         (SchematicBottomTab::Netlist, self.text(UiText::Netlist)),
                         (SchematicBottomTab::Erc, "ERC"),
                         (SchematicBottomTab::Inspector, self.text(UiText::Inspector)),
                     ];
                     for &(tab, label) in tab_defs {
                         let is_active = current_tab == tab;
-                        let fill = if is_active { palette.accent_soft } else { egui::Color32::TRANSPARENT };
-                        let text_color = if is_active { palette.accent } else { palette.text_muted };
-                        if ui.add(
-                            egui::Button::new(egui::RichText::new(label).size(12.0).color(text_color))
+                        let fill = if is_active {
+                            palette.accent_soft
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        };
+                        let text_color = if is_active {
+                            palette.accent
+                        } else {
+                            palette.text_muted
+                        };
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new(label).size(12.0).color(text_color),
+                                )
                                 .fill(fill)
-                                .stroke(if is_active { Stroke::new(1.0, palette.accent) } else { Stroke::NONE })
+                                .stroke(if is_active {
+                                    Stroke::new(1.0, palette.accent)
+                                } else {
+                                    Stroke::NONE
+                                })
                                 .corner_radius(CornerRadius::same(4)),
-                        ).clicked() {
+                            )
+                            .clicked()
+                        {
                             self.schematic_bottom_tab = tab;
                         }
                     }

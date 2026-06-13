@@ -195,8 +195,12 @@ impl NekoSpiceApp {
         }
         if let Some(run) = &self.simulation_panel.last_run {
             return match run.metadata.status {
-                RunStatus::Passed => format!("{} passed in {} ms", backend, run.metadata.duration_ms),
-                RunStatus::Failed => format!("{} failed in {} ms", backend, run.metadata.duration_ms),
+                RunStatus::Passed => {
+                    format!("{} passed in {} ms", backend, run.metadata.duration_ms)
+                }
+                RunStatus::Failed => {
+                    format!("{} failed in {} ms", backend, run.metadata.duration_ms)
+                }
             };
         }
         if self.simulation_panel.last_error.is_some() {

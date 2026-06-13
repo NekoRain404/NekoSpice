@@ -2,16 +2,15 @@
 //! visualization (time domain, FFT, Bode, noise, eye) based on the active tab,
 //! and draws measurement tables and run statistics below the plot.
 
-use crate::app::NekoSpiceApp;
-use crate::app::localization::UiText;
-use crate::app::theme::StudioTheme;
-use super::freq_domain_preview::{draw_fft_magnitude_plot, draw_bode_plot, draw_noise_plot};
+use super::freq_domain_preview::{draw_bode_plot, draw_fft_magnitude_plot, draw_noise_plot};
 use super::interactive::draw_interactive_waveform_plot;
 use super::workspace::WaveformAnalysisTab;
 use super::workspace_widgets::{
-    trace_chip, trace_chip_toggle,
-    waveform_empty_state, waveform_mode_tab,
+    trace_chip, trace_chip_toggle, waveform_empty_state, waveform_mode_tab,
 };
+use crate::app::NekoSpiceApp;
+use crate::app::localization::UiText;
+use crate::app::theme::StudioTheme;
 use crate::waveform_summary::{GuiWaveformSummary, GuiWaveformSummaryState};
 use eframe::egui;
 
@@ -37,28 +36,47 @@ impl NekoSpiceApp {
             }
             if ui.button(self.text(UiText::AutoScale)).clicked() {
                 // AutoScale: reset viewport to fit all visible data
-                if let Some(run) = &self.simulation_panel.last_run {
-                    if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) = &run.waveform {
-                        self.status_message = Some(format!("Auto-scaled {} signals", summary.variable_count));
-                    }
+                if let Some(run) = &self.simulation_panel.last_run
+                    && let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) =
+                        &run.waveform
+                {
+                    self.status_message =
+                        Some(format!("Auto-scaled {} signals", summary.variable_count));
                 }
             }
             ui.separator();
-            let overlay_label = if self.waveform_workspace.overlay_mode { "Overlay: ON" } else { "Overlay: OFF" };
-            if ui.selectable_label(self.waveform_workspace.overlay_mode, overlay_label).on_hover_text("Toggle multi-signal overlay mode").clicked() {
+            let overlay_label = if self.waveform_workspace.overlay_mode {
+                "Overlay: ON"
+            } else {
+                "Overlay: OFF"
+            };
+            if ui
+                .selectable_label(self.waveform_workspace.overlay_mode, overlay_label)
+                .on_hover_text("Toggle multi-signal overlay mode")
+                .clicked()
+            {
                 self.waveform_workspace.overlay_mode = !self.waveform_workspace.overlay_mode;
                 self.waveform_workspace.visible_signals.clear();
                 if self.waveform_workspace.overlay_mode {
-                    self.status_message = Some("Overlay mode: all signals shown on single lane".to_string());
+                    self.status_message =
+                        Some("Overlay mode: all signals shown on single lane".to_string());
                 } else {
                     self.status_message = Some("Overlay mode: single signal view".to_string());
                 }
             }
             ui.separator();
-            if ui.button("Export CSV").on_hover_text("Export all waveform data as CSV").clicked() {
+            if ui
+                .button("Export CSV")
+                .on_hover_text("Export all waveform data as CSV")
+                .clicked()
+            {
                 self.export_measurements_csv();
             }
-            if ui.button("Export Report").on_hover_text("Export simulation report as HTML").clicked() {
+            if ui
+                .button("Export Report")
+                .on_hover_text("Export simulation report as HTML")
+                .clicked()
+            {
                 self.export_report_html();
             }
         });
@@ -208,7 +226,6 @@ impl NekoSpiceApp {
         }
     }
 
-
     fn draw_waveform_trace_chips(&mut self, ui: &mut egui::Ui, summary: &GuiWaveformSummary) {
         let mode = self.theme_mode();
         let overlay = self.waveform_workspace.overlay_mode;
@@ -228,7 +245,8 @@ impl NekoSpiceApp {
                         .as_deref()
                         .is_some_and(|signal| signal.eq_ignore_ascii_case(&preview.signal));
                     if trace_chip(ui, mode, &preview.signal, &preview.unit, selected) {
-                        self.simulation_panel.selected_waveform_signal = Some(preview.signal.clone());
+                        self.simulation_panel.selected_waveform_signal =
+                            Some(preview.signal.clone());
                     }
                 }
             }
@@ -244,5 +262,4 @@ impl NekoSpiceApp {
             }
         });
     }
-
 }

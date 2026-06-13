@@ -90,21 +90,11 @@ impl Default for MonteCarloParam {
 }
 
 /// A Monte Carlo response measurement with pass/fail spec.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct MonteCarloMeasurement {
     pub name: String,
     pub kind: String,
     pub spec: String,
-}
-
-impl Default for MonteCarloMeasurement {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            kind: String::new(),
-            spec: String::new(),
-        }
-    }
 }
 
 /// Full state for the optimization workspace.

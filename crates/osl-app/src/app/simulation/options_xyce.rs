@@ -8,8 +8,8 @@
 //!
 //! These options are only shown when the Xyce backend is selected.
 
-use crate::app::NekoSpiceApp;
 use super::profile_editor_widgets::{labeled_field, section_header};
+use crate::app::NekoSpiceApp;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
 
@@ -75,11 +75,9 @@ pub(crate) fn draw_xyce_options_section(
                         .fill(palette.panel_soft)
                         .stroke(egui::Stroke::new(1.0, palette.border))
                 };
-                if ui.add(btn).clicked() {
-                    if app.xyce_options.convergence_method != method {
-                        app.xyce_options.convergence_method = method.to_string();
-                        changed = true;
-                    }
+                if ui.add(btn).clicked() && app.xyce_options.convergence_method != method {
+                    app.xyce_options.convergence_method = method.to_string();
+                    changed = true;
                 }
             }
         });
@@ -92,13 +90,15 @@ pub(crate) fn draw_xyce_options_section(
             .spacing([8.0, 6.0])
             .show(ui, |ui| {
                 changed |= labeled_field(
-                    ui, mode,
+                    ui,
+                    mode,
                     "Max Newton Iters",
                     &mut app.xyce_options.max_newton_iterations,
                     100.0,
                 );
                 changed |= labeled_field(
-                    ui, mode,
+                    ui,
+                    mode,
                     "Partition Count",
                     &mut app.xyce_options.partition_count,
                     100.0,
@@ -133,7 +133,10 @@ pub(crate) fn draw_xyce_options_section(
 
         // Boolean toggles
         let mut parallel = app.xyce_options.parallel_partition;
-        if ui.checkbox(&mut parallel, "Enable parallel partitioning").changed() {
+        if ui
+            .checkbox(&mut parallel, "Enable parallel partitioning")
+            .changed()
+        {
             app.xyce_options.parallel_partition = parallel;
             changed = true;
         }
@@ -143,7 +146,10 @@ pub(crate) fn draw_xyce_options_section(
             changed = true;
         }
         let mut single = app.xyce_options.sweep_single_file;
-        if ui.checkbox(&mut single, "Sweep results to single file").changed() {
+        if ui
+            .checkbox(&mut single, "Sweep results to single file")
+            .changed()
+        {
             app.xyce_options.sweep_single_file = single;
             changed = true;
         }

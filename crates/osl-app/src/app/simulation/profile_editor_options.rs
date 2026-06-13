@@ -11,10 +11,12 @@ use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
-use super::options_preset::draw_preset_indicator;
 use super::options_environment::draw_environment_section;
-use super::options_solver::{draw_transient_solver_section, draw_convergence_section, draw_output_section};
-use super::options_status::{draw_run_status_summary, draw_recent_runs};
+use super::options_preset::draw_preset_indicator;
+use super::options_solver::{
+    draw_convergence_section, draw_output_section, draw_transient_solver_section,
+};
+use super::options_status::{draw_recent_runs, draw_run_status_summary};
 use super::state::SimulationBackendKind;
 
 /// Draw the complete right-column options panel.
@@ -94,14 +96,12 @@ pub(crate) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     ui.add_space(8.0);
 
     // Customize View — collapsible section toggles
-    egui::CollapsingHeader::new(
-        egui::RichText::new("Customize View").color(palette.text_muted),
-    )
-    .id_salt("customize_view_toggles")
-    .default_open(false)
-    .show(ui, |ui| {
-        app.draw_customize_view_menu(ui);
-    });
+    egui::CollapsingHeader::new(egui::RichText::new("Customize View").color(palette.text_muted))
+        .id_salt("customize_view_toggles")
+        .default_open(false)
+        .show(ui, |ui| {
+            app.draw_customize_view_menu(ui);
+        });
 
     if any_changed {
         app.save_simulation_settings();

@@ -8,11 +8,11 @@
 
 use crate::app::NekoSpiceApp;
 use crate::simulation::{GuiSimulationJob, GuiSimulationTask};
-use osl_sim::{SimulationProfile, SpiceMethod, ProfileParamEntry};
+use eframe::egui;
 use osl_kicad::KicadSimulationDirectiveKind;
+use osl_sim::{ProfileParamEntry, SimulationProfile, SpiceMethod};
 use std::path::Path;
 use std::time::Duration;
-use eframe::egui;
 
 impl NekoSpiceApp {
     /// Build a `SimulationProfile` from the current UI state.
@@ -104,7 +104,10 @@ impl NekoSpiceApp {
                 .collect(),
             // Vendor model bodies for models the user added to the profile
             vendor_model_bodies: {
-                let added_names: Vec<&str> = self.simulation_profile_editor.model_params.iter()
+                let added_names: Vec<&str> = self
+                    .simulation_profile_editor
+                    .model_params
+                    .iter()
                     .filter(|(name, _, _)| !name.trim().is_empty())
                     .map(|(name, _, _)| name.as_str())
                     .collect();
@@ -146,23 +149,23 @@ impl NekoSpiceApp {
                 let issues = job.validate();
                 self.simulation_panel.netlist_warnings = issues.clone();
                 if !issues.is_empty() {
-                    self.status_message =
-                        Some(format!("Netlist issues: {}", issues.join("; ")));
+                    self.status_message = Some(format!("Netlist issues: {}", issues.join("; ")));
                 }
                 self.simulation_panel.last_run = None;
                 self.simulation_panel.last_error = None;
                 let ngspice = self.preferences.ngspice_path.clone();
                 let xyce = self.preferences.xyce_path.clone();
-                self.simulation_panel.active_task =
-                    Some(GuiSimulationTask::spawn_with_backend(
-                        job,
-                        self.simulation_panel.backend.label(),
-                        &ngspice,
-                        &xyce,
-                    ));
+                self.simulation_panel.active_task = Some(GuiSimulationTask::spawn_with_backend(
+                    job,
+                    self.simulation_panel.backend.label(),
+                    &ngspice,
+                    &xyce,
+                ));
                 self.simulation_panel.run_start_time = Some(std::time::Instant::now());
-                self.status_message =
-                    Some(format!("Simulation started ({})", self.simulation_panel.backend.label()));
+                self.status_message = Some(format!(
+                    "Simulation started ({})",
+                    self.simulation_panel.backend.label()
+                ));
             }
             Err(error) => {
                 self.status_message = Some(error.clone());
@@ -188,7 +191,11 @@ impl NekoSpiceApp {
                 if run.metadata.status == osl_core::RunStatus::Failed {
                     let log_path = run.output_dir.join("ngspice.log");
                     let fallback = run.output_dir.join("xyce.log");
-                    let actual = if log_path.is_file() { log_path } else { fallback };
+                    let actual = if log_path.is_file() {
+                        log_path
+                    } else {
+                        fallback
+                    };
                     if actual.is_file() {
                         if let Ok(text) = std::fs::read_to_string(&actual) {
                             self.status_message = Some(text.clone());
@@ -228,7 +235,11 @@ impl NekoSpiceApp {
                     opts.temperature, opts.method, opts.reltol,
                 );
                 self.simulation_history.record_run(
-                    &run, &analysis_type, &analysis_body, &backend, settings_summary,
+                    &run,
+                    &analysis_type,
+                    &analysis_body,
+                    &backend,
+                    settings_summary,
                 );
                 self.sync_selected_waveform_signal(&run.waveform);
                 self.simulation_panel.last_run = Some(run);
@@ -249,4 +260,3 @@ impl NekoSpiceApp {
         }
     }
 }
-

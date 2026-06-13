@@ -1,7 +1,7 @@
 //! 网格渲染图元。绘制参考网格线。
 //!
-use crate::viewport::CanvasViewport;
 use super::super::colors::SchematicColors;
+use crate::viewport::CanvasViewport;
 use eframe::egui::{self, Pos2, Rect, Stroke};
 
 /// draw grid。
@@ -22,11 +22,14 @@ pub(crate) fn draw_grid(
     let mut x = start_x;
     while x < rect.width() {
         let screen_x = rect.left() + x;
-        let is_major = (x % major_step).abs() < 0.5
-            || ((major_step - (x % major_step)).abs() < 0.5);
+        let is_major =
+            (x % major_step).abs() < 0.5 || ((major_step - (x % major_step)).abs() < 0.5);
         let stroke = if is_major { major_stroke } else { minor_stroke };
         painter.line_segment(
-            [Pos2::new(screen_x, rect.top()), Pos2::new(screen_x, rect.bottom())],
+            [
+                Pos2::new(screen_x, rect.top()),
+                Pos2::new(screen_x, rect.bottom()),
+            ],
             stroke,
         );
         x += minor_step;
@@ -36,11 +39,14 @@ pub(crate) fn draw_grid(
     let mut y = start_y;
     while y < rect.height() {
         let screen_y = rect.top() + y;
-        let is_major = (y % major_step).abs() < 0.5
-            || ((major_step - (y % major_step)).abs() < 0.5);
+        let is_major =
+            (y % major_step).abs() < 0.5 || ((major_step - (y % major_step)).abs() < 0.5);
         let stroke = if is_major { major_stroke } else { minor_stroke };
         painter.line_segment(
-            [Pos2::new(rect.left(), screen_y), Pos2::new(rect.right(), screen_y)],
+            [
+                Pos2::new(rect.left(), screen_y),
+                Pos2::new(rect.right(), screen_y),
+            ],
             stroke,
         );
         y += minor_step;

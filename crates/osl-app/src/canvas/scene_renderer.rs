@@ -4,10 +4,10 @@
 //! 导线/总线层见 [`super::scene_renderer_wires`]，标注/标记层见
 //! [`super::scene_renderer_annotations`]。
 
-use crate::viewport::{CanvasViewport, item_visible};
 use super::colors::SchematicColors;
 use super::primitives;
 use super::transforms::{pin_text_offsets, transform_property_point};
+use crate::viewport::{CanvasViewport, item_visible};
 use eframe::egui::{self, Align2, FontId};
 use osl_kicad::{KicadAt, KicadBoundingBox, KicadCanvasScene, KicadPoint};
 
@@ -33,12 +33,54 @@ pub(crate) fn draw_scene(
     super::scene_renderer_wires::draw_buses(painter, rect, scene, viewport, visible_bounds, colors);
 
     // ── 标注层（scene_renderer_annotations） ──
-    super::scene_renderer_annotations::draw_directive_labels(painter, rect, scene, viewport, visible_bounds, colors);
-    super::scene_renderer_annotations::draw_net_labels(painter, rect, scene, viewport, visible_bounds, colors);
-    super::scene_renderer_annotations::draw_text_items(painter, rect, scene, viewport, visible_bounds, colors);
-    super::scene_renderer_annotations::draw_text_boxes(painter, rect, scene, viewport, visible_bounds, colors);
-    super::scene_renderer_annotations::draw_junction_dots(painter, rect, scene, viewport, visible_bounds, colors);
-    super::scene_renderer_annotations::draw_no_connects(painter, rect, scene, viewport, visible_bounds, colors);
+    super::scene_renderer_annotations::draw_directive_labels(
+        painter,
+        rect,
+        scene,
+        viewport,
+        visible_bounds,
+        colors,
+    );
+    super::scene_renderer_annotations::draw_net_labels(
+        painter,
+        rect,
+        scene,
+        viewport,
+        visible_bounds,
+        colors,
+    );
+    super::scene_renderer_annotations::draw_text_items(
+        painter,
+        rect,
+        scene,
+        viewport,
+        visible_bounds,
+        colors,
+    );
+    super::scene_renderer_annotations::draw_text_boxes(
+        painter,
+        rect,
+        scene,
+        viewport,
+        visible_bounds,
+        colors,
+    );
+    super::scene_renderer_annotations::draw_junction_dots(
+        painter,
+        rect,
+        scene,
+        viewport,
+        visible_bounds,
+        colors,
+    );
+    super::scene_renderer_annotations::draw_no_connects(
+        painter,
+        rect,
+        scene,
+        viewport,
+        visible_bounds,
+        colors,
+    );
 }
 
 // ── Layer 1: 层次化图纸 ──────────────────────────────────────────────
@@ -74,7 +116,13 @@ fn draw_rule_areas(
             continue;
         }
         primitives::draw_polyline(
-            painter, rect, viewport, &rule_area.points, true, colors.rule_area, 1.5,
+            painter,
+            rect,
+            viewport,
+            &rule_area.points,
+            true,
+            colors.rule_area,
+            1.5,
         );
     }
 }
@@ -126,11 +174,25 @@ fn draw_symbols(
                 let (ox, oy, align) = pin_text_offsets(&pin.start, &pin.end, true);
                 let pos = viewport.world_to_screen(
                     rect,
-                    KicadPoint { x: pin.end.x + ox, y: pin.end.y + oy },
+                    KicadPoint {
+                        x: pin.end.x + ox,
+                        y: pin.end.y + oy,
+                    },
                 );
-                let fs = pin.name_effects.as_ref().and_then(|e| e.font_size)
-                    .map(|s| s.width as f32).unwrap_or(8.0).max(5.0);
-                painter.text(pos, align, &pin.name, FontId::proportional(fs), colors.symbol_pin_name);
+                let fs = pin
+                    .name_effects
+                    .as_ref()
+                    .and_then(|e| e.font_size)
+                    .map(|s| s.width as f32)
+                    .unwrap_or(8.0)
+                    .max(5.0);
+                painter.text(
+                    pos,
+                    align,
+                    &pin.name,
+                    FontId::proportional(fs),
+                    colors.symbol_pin_name,
+                );
             }
 
             // 引脚编号（靠近外部端）
@@ -138,29 +200,57 @@ fn draw_symbols(
                 let (ox, oy, align) = pin_text_offsets(&pin.start, &pin.end, false);
                 let pos = viewport.world_to_screen(
                     rect,
-                    KicadPoint { x: pin.start.x + ox, y: pin.start.y + oy },
+                    KicadPoint {
+                        x: pin.start.x + ox,
+                        y: pin.start.y + oy,
+                    },
                 );
-                let fs = pin.number_effects.as_ref().and_then(|e| e.font_size)
-                    .map(|s| s.width as f32).unwrap_or(7.0).max(5.0);
-                painter.text(pos, align, &pin.number, FontId::monospace(fs), colors.symbol_pin_number);
+                let fs = pin
+                    .number_effects
+                    .as_ref()
+                    .and_then(|e| e.font_size)
+                    .map(|s| s.width as f32)
+                    .unwrap_or(7.0)
+                    .max(5.0);
+                painter.text(
+                    pos,
+                    align,
+                    &pin.number,
+                    FontId::monospace(fs),
+                    colors.symbol_pin_number,
+                );
             }
         }
 
         // 符号参考标识（R1、C2 等）
         draw_symbol_property(
-            painter, rect, viewport, symbol,
-            &symbol.reference, symbol.reference_at.as_ref(), symbol.reference_effects.as_ref(),
+            painter,
+            rect,
+            viewport,
+            symbol,
+            &symbol.reference,
+            symbol.reference_at.as_ref(),
+            symbol.reference_effects.as_ref(),
             !symbol.reference.is_empty(),
-            Align2::LEFT_TOP, colors.symbol_reference, 12.0,
+            Align2::LEFT_TOP,
+            colors.symbol_reference,
+            12.0,
         );
 
         // 符号值（100nF、10k 等）
         if !symbol.value.is_empty() {
             draw_symbol_property(
-                painter, rect, viewport, symbol,
-                &symbol.value, symbol.value_at.as_ref(), symbol.value_effects.as_ref(),
+                painter,
+                rect,
+                viewport,
+                symbol,
+                &symbol.value,
+                symbol.value_at.as_ref(),
+                symbol.value_effects.as_ref(),
                 true,
-                Align2::LEFT_TOP, colors.symbol_value, 12.0,
+                Align2::LEFT_TOP,
+                colors.symbol_value,
+                12.0,
             );
         }
     }
@@ -169,6 +259,7 @@ fn draw_symbols(
 /// 绘制符号的单个属性（reference 或 value）。
 ///
 /// 若提供了显式 `at` 坐标，则使用坐标变换定位；否则使用符号边界框角点。
+#[allow(clippy::too_many_arguments)]
 fn draw_symbol_property(
     painter: &egui::Painter,
     rect: egui::Rect,
@@ -185,11 +276,16 @@ fn draw_symbol_property(
     if !should_draw || text.is_empty() {
         return;
     }
-    let fs = effects.and_then(|e| e.font_size)
-        .map(|s| s.width as f32).unwrap_or(default_font_size).max(6.0);
+    let fs = effects
+        .and_then(|e| e.font_size)
+        .map(|s| s.width as f32)
+        .unwrap_or(default_font_size)
+        .max(6.0);
     if let Some(at) = at {
         let pp = transform_property_point(
-            KicadPoint { x: at.x, y: at.y }, symbol.at, symbol.mirror.as_deref(),
+            KicadPoint { x: at.x, y: at.y },
+            symbol.at,
+            symbol.mirror.as_deref(),
         );
         let sp = viewport.world_to_screen(rect, pp);
         painter.text(sp, fallback_align, text, FontId::proportional(fs), color);

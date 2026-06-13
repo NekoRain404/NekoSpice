@@ -22,20 +22,29 @@ impl NekoSpiceApp {
         if let Some(run) = &self.simulation_panel.last_run {
             let log_path = run.output_dir.join("ngspice.log");
             let fallback = run.output_dir.join("xyce.log");
-            let actual = if log_path.is_file() { log_path } else { fallback };
-            if actual.is_file() {
-                if let Ok(content) = std::fs::read_to_string(&actual) {
-                    ui.separator();
-                    egui::ScrollArea::vertical()
-                        .max_height(120.0)
-                        .show(ui, |ui| { ui.monospace(&content); });
-                }
+            let actual = if log_path.is_file() {
+                log_path
+            } else {
+                fallback
+            };
+            if actual.is_file()
+                && let Ok(content) = std::fs::read_to_string(&actual)
+            {
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .max_height(120.0)
+                    .show(ui, |ui| {
+                        ui.monospace(&content);
+                    });
             }
         }
         if let Some(document) = &self.document {
             let dir_count = document.simulation_directives().len();
             super::super::workspace_widgets::bottom_console_line(
-                ui, mode, &format!("Directives: {dir_count}"), palette.text_muted,
+                ui,
+                mode,
+                &format!("Directives: {dir_count}"),
+                palette.text_muted,
             );
         }
         if self.status_message.is_none()
@@ -54,18 +63,24 @@ impl NekoSpiceApp {
             return;
         };
         let profile = self.build_simulation_profile();
-        match document.spice_netlist_preview().map(|netlist| {
-            osl_sim::inject_profile_directives(&netlist, &profile)
-        }) {
+        match document
+            .spice_netlist_preview()
+            .map(|netlist| osl_sim::inject_profile_directives(&netlist, &profile))
+        {
             Ok(netlist) => {
                 egui::ScrollArea::vertical()
                     .max_height(140.0)
-                    .show(ui, |ui| { ui.monospace(netlist); });
+                    .show(ui, |ui| {
+                        ui.monospace(netlist);
+                    });
             }
             Err(error) => {
                 let palette = self.theme_palette();
                 super::super::workspace_widgets::bottom_console_line(
-                    ui, mode, &format!("Netlist generation failed: {error}"), palette.danger,
+                    ui,
+                    mode,
+                    &format!("Netlist generation failed: {error}"),
+                    palette.danger,
                 );
             }
         }
@@ -82,25 +97,35 @@ impl NekoSpiceApp {
         let report = document.check_report();
         let (error_count, warning_count) = (report.error_count(), report.warning_count());
         super::super::workspace_widgets::bottom_console_line(
-            ui, mode,
+            ui,
+            mode,
             &format!("ERC: {error_count} errors, {warning_count} warnings"),
-            if error_count > 0 { palette.danger }
-            else if warning_count > 0 { palette.warning }
-            else { palette.success },
+            if error_count > 0 {
+                palette.danger
+            } else if warning_count > 0 {
+                palette.warning
+            } else {
+                palette.success
+            },
         );
-        egui::ScrollArea::vertical().max_height(120.0).show(ui, |ui| {
-            for diag in &report.diagnostics {
-                use osl_kicad::KicadDiagnosticSeverity;
-                let (prefix, color) = match diag.severity {
-                    KicadDiagnosticSeverity::Error => ("ERROR", palette.danger),
-                    KicadDiagnosticSeverity::Warning => ("WARNING", palette.warning),
-                    KicadDiagnosticSeverity::Info => ("INFO", palette.text_muted),
-                };
-                super::super::workspace_widgets::bottom_console_line(
-                    ui, mode, &format!("{prefix}: {}", diag.message), color,
-                );
-            }
-        });
+        egui::ScrollArea::vertical()
+            .max_height(120.0)
+            .show(ui, |ui| {
+                for diag in &report.diagnostics {
+                    use osl_kicad::KicadDiagnosticSeverity;
+                    let (prefix, color) = match diag.severity {
+                        KicadDiagnosticSeverity::Error => ("ERROR", palette.danger),
+                        KicadDiagnosticSeverity::Warning => ("WARNING", palette.warning),
+                        KicadDiagnosticSeverity::Info => ("INFO", palette.text_muted),
+                    };
+                    super::super::workspace_widgets::bottom_console_line(
+                        ui,
+                        mode,
+                        &format!("{prefix}: {}", diag.message),
+                        color,
+                    );
+                }
+            });
     }
 
     /// 检查器标签页：当前选中项的属性显示。
@@ -111,13 +136,20 @@ impl NekoSpiceApp {
             return;
         };
         let palette = self.theme_palette();
-        ui.label(StudioTheme::section_title_for(mode, format!("Selected: {}", hit.kind)));
+        ui.label(StudioTheme::section_title_for(
+            mode,
+            format!("Selected: {}", hit.kind),
+        ));
         if let Some(ref uuid) = hit.uuid {
             ui.label(StudioTheme::muted_for(mode, format!("UUID: {uuid}")));
         }
         super::super::workspace_widgets::bottom_console_line(
-            ui, mode,
-            &format!("Bounds: ({:.1}, {:.1}) — ({:.1}, {:.1})", hit.bounds.min.x, hit.bounds.min.y, hit.bounds.max.x, hit.bounds.max.y),
+            ui,
+            mode,
+            &format!(
+                "Bounds: ({:.1}, {:.1}) — ({:.1}, {:.1})",
+                hit.bounds.min.x, hit.bounds.min.y, hit.bounds.max.x, hit.bounds.max.y
+            ),
             palette.text_muted,
         );
     }

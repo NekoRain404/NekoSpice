@@ -15,11 +15,7 @@ impl NekoSpiceApp {
     pub(crate) fn draw_history_panel(&self, ui: &mut egui::Ui, mode: StudioThemeMode) {
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             let count = self.simulation_history.len();
-            section_header(
-                ui,
-                mode,
-                &format!("Run History ({})", count),
-            );
+            section_header(ui, mode, &format!("Run History ({})", count));
             ui.add_space(4.0);
 
             if self.simulation_history.is_empty() {

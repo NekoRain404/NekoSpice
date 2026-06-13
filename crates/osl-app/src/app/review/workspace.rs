@@ -1,13 +1,12 @@
 //! Design review workspace — center panel for schematic risk triage and action items.
 
+use super::state::ReviewSeverityFilter;
+use super::widgets::{
+    REVIEW_FINDINGS, review_issue_row, review_metric_row, review_recommendation_row, severity_color,
+};
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::navigation::StudioWorkspace;
-use super::state::ReviewSeverityFilter;
-use super::widgets::{
-    REVIEW_FINDINGS, review_issue_row, review_metric_row,
-    review_recommendation_row, severity_color,
-};
 use crate::app::theme::StudioTheme;
 use crate::app::waveform::preview::draw_stacked_waveform_preview;
 use crate::waveform_summary::GuiWaveformSummaryState;
@@ -74,16 +73,32 @@ impl NekoSpiceApp {
                     ui.allocate_exact_size(egui::vec2(78.0, 78.0), egui::Sense::hover());
                 let painter = ui.painter_at(rect);
                 let report = self.document.as_ref().map(|d| d.check_report());
-                let (err, warn, info) = report.as_ref().map(|r| (r.error_count(), r.warning_count(), r.info_count())).unwrap_or((0, 0, 0));
-                let score = (100_i32 - err as i32 * 8 - warn as i32 * 3 - info as i32).max(0).min(100);
-                let score_label = if score >= 80 { "Good" } else if score >= 50 { "Fair" } else { "Needs Work" };
-                let score_color = if score >= 80 { palette.success } else if score >= 50 { palette.warning } else { palette.danger };
+                let (err, warn, info) = report
+                    .as_ref()
+                    .map(|r| (r.error_count(), r.warning_count(), r.info_count()))
+                    .unwrap_or((0, 0, 0));
+                let score =
+                    (100_i32 - err as i32 * 8 - warn as i32 * 3 - info as i32).clamp(0, 100);
+                let score_label = if score >= 80 {
+                    "Good"
+                } else if score >= 50 {
+                    "Fair"
+                } else {
+                    "Needs Work"
+                };
+                let score_color = if score >= 80 {
+                    palette.success
+                } else if score >= 50 {
+                    palette.warning
+                } else {
+                    palette.danger
+                };
                 painter.circle_stroke(rect.center(), 30.0, egui::Stroke::new(8.0, palette.border));
                 painter.circle_stroke(rect.center(), 30.0, egui::Stroke::new(8.0, score_color));
                 painter.text(
                     rect.center(),
                     egui::Align2::CENTER_CENTER,
-                    &score.to_string(),
+                    score.to_string(),
                     egui::FontId::proportional(20.0),
                     palette.text,
                 );
@@ -113,9 +128,7 @@ impl NekoSpiceApp {
                 if let Some(run) = &self.simulation_panel.last_run {
                     let status = run.metadata.status.as_str();
                     let ms = run.metadata.duration_ms;
-                    self.status_message = Some(
-                        format!("Last run: {} ({}ms)", status, ms)
-                    );
+                    self.status_message = Some(format!("Last run: {} ({}ms)", status, ms));
                 } else {
                     self.status_message = Some("No simulation data yet".to_string());
                 }

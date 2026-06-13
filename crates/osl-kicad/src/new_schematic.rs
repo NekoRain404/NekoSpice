@@ -3,8 +3,8 @@
 //! Provides [`new_empty_schematic`] which creates a minimal valid
 //! KiCad schematic with A4 paper and default title block.
 
-use crate::{KicadSchematic, KicadTitleBlock, KicadTitleComment};
 use crate::instances::KicadSheetInstance;
+use crate::{KicadSchematic, KicadTitleBlock, KicadTitleComment};
 
 /// Create a new empty schematic with default A4 paper size.
 ///
@@ -24,9 +24,10 @@ pub fn new_empty_schematic() -> KicadSchematic {
             date: Some(now),
             revision: Some("1.0".to_string()),
             company: None,
-            comments: vec![
-                KicadTitleComment { index: 1, text: "Created by NekoSpice".to_string() },
-            ],
+            comments: vec![KicadTitleComment {
+                index: 1,
+                text: "Created by NekoSpice".to_string(),
+            }],
         }),
         library_symbols: Vec::new(),
         bus_aliases: Vec::new(),
@@ -68,14 +69,31 @@ fn current_date_string() -> String {
     let mut remaining = days;
     loop {
         let days_in_year = if is_leap(y) { 366 } else { 365 };
-        if remaining < days_in_year as u64 { break; }
+        if remaining < days_in_year as u64 {
+            break;
+        }
         remaining -= days_in_year as u64;
         y += 1;
     }
     let mut m = 1u32;
-    let dim = [31, if is_leap(y) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let dim = [
+        31,
+        if is_leap(y) { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
     for &days_in_month in &dim {
-        if remaining < days_in_month as u64 { break; }
+        if remaining < days_in_month as u64 {
+            break;
+        }
         remaining -= days_in_month as u64;
         m += 1;
     }
@@ -83,5 +101,5 @@ fn current_date_string() -> String {
 }
 
 fn is_leap(y: u32) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)
+    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
 }

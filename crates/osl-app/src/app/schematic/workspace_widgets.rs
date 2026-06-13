@@ -18,22 +18,27 @@ pub(crate) fn canvas_toolbar_button(
     enabled: bool,
 ) -> Response {
     let palette = StudioTheme::palette(mode);
-    let text = RichText::new(label)
-        .size(13.0)
-        .color(if enabled { palette.text } else { palette.text_muted });
+    let text = RichText::new(label).size(13.0).color(if enabled {
+        palette.text
+    } else {
+        palette.text_muted
+    });
     let btn = egui::Button::new(text)
         .fill(palette.panel_soft)
-        .stroke(Stroke::new(1.0, if enabled { palette.border_strong } else { palette.border }))
+        .stroke(Stroke::new(
+            1.0,
+            if enabled {
+                palette.border_strong
+            } else {
+                palette.border
+            },
+        ))
         .corner_radius(CornerRadius::same(4));
     let response = ui.add_enabled(enabled, btn);
     // Apply hover effect by painting over
     if response.hovered() && enabled {
         let painter = ui.painter();
-        painter.rect_filled(
-            response.rect,
-            CornerRadius::same(4),
-            palette.panel_hover,
-        );
+        painter.rect_filled(response.rect, CornerRadius::same(4), palette.panel_hover);
         // Re-draw the text on top
         painter.text(
             response.rect.center(),
@@ -59,22 +64,27 @@ pub(crate) fn toolbar_icon_button(
     enabled: bool,
 ) -> Response {
     let palette = StudioTheme::palette(mode);
-    let text = RichText::new(icon)
-        .size(16.0)
-        .color(if enabled { palette.text } else { palette.text_muted });
+    let text = RichText::new(icon).size(16.0).color(if enabled {
+        palette.text
+    } else {
+        palette.text_muted
+    });
     let btn = egui::Button::new(text)
         .fill(palette.panel_soft)
-        .stroke(Stroke::new(1.0, if enabled { palette.border_strong } else { palette.border }))
+        .stroke(Stroke::new(
+            1.0,
+            if enabled {
+                palette.border_strong
+            } else {
+                palette.border
+            },
+        ))
         .corner_radius(CornerRadius::same(4));
     let response = ui.add_enabled(enabled, btn).on_hover_text(tooltip);
     // Hover feedback
     if response.hovered() && enabled {
         let painter = ui.painter();
-        painter.rect_filled(
-            response.rect,
-            CornerRadius::same(4),
-            palette.panel_hover,
-        );
+        painter.rect_filled(response.rect, CornerRadius::same(4), palette.panel_hover);
         painter.text(
             response.rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -85,8 +95,6 @@ pub(crate) fn toolbar_icon_button(
     }
     response
 }
-
-
 
 /// Draw a compact icon-only button with active state highlighting.
 ///
@@ -116,11 +124,7 @@ pub(crate) fn toolbar_icon_button_active(
     // Hover feedback for non-active buttons
     if response.hovered() && enabled && !active {
         let painter = ui.painter();
-        painter.rect_filled(
-            response.rect,
-            CornerRadius::same(4),
-            palette.panel_hover,
-        );
+        painter.rect_filled(response.rect, CornerRadius::same(4), palette.panel_hover);
         painter.text(
             response.rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -134,7 +138,12 @@ pub(crate) fn toolbar_icon_button_active(
 /// Draw a document tab in the tab bar.
 ///
 /// Active tab uses accent fill; inactive tabs use panel background.
-pub(crate) fn document_tab(ui: &mut egui::Ui, mode: StudioThemeMode, text: &str, active: bool) -> Response {
+pub(crate) fn document_tab(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    text: &str,
+    active: bool,
+) -> Response {
     let palette = StudioTheme::palette(mode);
     let fill = if active {
         palette.accent_soft
@@ -146,9 +155,11 @@ pub(crate) fn document_tab(ui: &mut egui::Ui, mode: StudioThemeMode, text: &str,
     } else {
         Stroke::new(1.0, palette.border)
     };
-    let label = RichText::new(text)
-        .size(12.0)
-        .color(if active { palette.accent } else { palette.text_muted });
+    let label = RichText::new(text).size(12.0).color(if active {
+        palette.accent
+    } else {
+        palette.text_muted
+    });
     ui.add(
         egui::Button::new(label)
             .fill(fill)
@@ -169,7 +180,11 @@ pub(crate) fn signal_row(
 ) {
     ui.horizontal(|ui| {
         ui.colored_label(color, "\u{25CF}"); // solid circle
-        ui.label(RichText::new(signal).size(12.0).color(StudioTheme::palette(mode).text));
+        ui.label(
+            RichText::new(signal)
+                .size(12.0)
+                .color(StudioTheme::palette(mode).text),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(StudioTheme::muted_for(mode, scale));
         });

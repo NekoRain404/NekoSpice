@@ -1,16 +1,20 @@
 //! Run status summary and recent runs display for the profile editor.
 
+use super::profile_editor_widgets::section_header;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
-use super::profile_editor_widgets::section_header;
 use crate::app::status_strip::severity_color;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
-use osl_kicad::KicadDiagnosticSeverity;
 use osl_core::RunStatus;
+use osl_kicad::KicadDiagnosticSeverity;
 
 /// Draw run status summary showing current state and last result.
-pub(crate) fn draw_run_status_summary(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: StudioThemeMode) {
+pub(crate) fn draw_run_status_summary(
+    app: &NekoSpiceApp,
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+) {
     let palette = StudioTheme::palette(mode);
     StudioTheme::panel_frame_for(mode).show(ui, |ui| {
         section_header(ui, mode, app.text(UiText::RunStatus));
@@ -20,7 +24,11 @@ pub(crate) fn draw_run_status_summary(app: &NekoSpiceApp, ui: &mut egui::Ui, mod
             ui.horizontal(|ui| {
                 ui.colored_label(palette.accent, "●");
                 ui.label(StudioTheme::muted_for(mode, "Status:"));
-                ui.label(egui::RichText::new("Running").strong().color(palette.accent));
+                ui.label(
+                    egui::RichText::new("Running")
+                        .strong()
+                        .color(palette.accent),
+                );
             });
         } else if let Some(run) = &app.simulation_panel.last_run {
             let (color, label) = match run.metadata.status {
@@ -82,9 +90,13 @@ pub(crate) fn draw_recent_runs(app: &NekoSpiceApp, ui: &mut egui::Ui, mode: Stud
                     ui.horizontal(|ui| {
                         ui.colored_label(color, "●");
                         ui.vertical(|ui| {
-                            ui.label(egui::RichText::new(format!(
-                                "{} -- {} ms", status_text, run.metadata.duration_ms
-                            )).color(palette.text));
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "{} -- {} ms",
+                                    status_text, run.metadata.duration_ms
+                                ))
+                                .color(palette.text),
+                            );
                             ui.label(StudioTheme::muted_for(mode, "Last simulation run"));
                         });
                     });

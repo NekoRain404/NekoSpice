@@ -4,8 +4,8 @@
 //! grid lines, magnitude/phase traces, log-frequency axis mapping,
 //! and compact frequency formatting.
 
-use osl_waveform::fft::FftBin;
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, Stroke};
+use osl_waveform::fft::FftBin;
 
 /// Draw frequency grid lines (horizontal + vertical decade markers).
 pub(crate) fn draw_freq_grid(painter: &egui::Painter, rect: Rect, bins: &[FftBin], color: Color32) {
@@ -34,11 +34,20 @@ pub(crate) fn draw_freq_grid(painter: &egui::Painter, rect: Rect, bins: &[FftBin
 }
 
 /// Draw the magnitude trace as a connected line.
-pub(crate) fn draw_magnitude_trace(painter: &egui::Painter, rect: Rect, bins: &[FftBin], color: Color32, width: f32) {
+pub(crate) fn draw_magnitude_trace(
+    painter: &egui::Painter,
+    rect: Rect,
+    bins: &[FftBin],
+    color: Color32,
+    width: f32,
+) {
     if bins.len() < 2 {
         return;
     }
-    let max_db = bins.iter().map(|b| b.magnitude_db).fold(f64::NEG_INFINITY, f64::max);
+    let max_db = bins
+        .iter()
+        .map(|b| b.magnitude_db)
+        .fold(f64::NEG_INFINITY, f64::max);
     let min_db = bins
         .iter()
         .map(|b| b.magnitude_db)
@@ -65,7 +74,13 @@ pub(crate) fn draw_magnitude_trace(painter: &egui::Painter, rect: Rect, bins: &[
 }
 
 /// Draw the phase trace as a connected line.
-pub(crate) fn draw_phase_trace(painter: &egui::Painter, rect: Rect, bins: &[FftBin], color: Color32, width: f32) {
+pub(crate) fn draw_phase_trace(
+    painter: &egui::Painter,
+    rect: Rect,
+    bins: &[FftBin],
+    color: Color32,
+    width: f32,
+) {
     if bins.len() < 2 {
         return;
     }
@@ -85,7 +100,10 @@ pub(crate) fn draw_phase_trace(painter: &egui::Painter, rect: Rect, bins: &[FftB
 
 /// Map a frequency to screen x-coordinate using log scale.
 pub(crate) fn log_freq_to_screen_x(rect: Rect, freq: f64, bins: &[FftBin]) -> f32 {
-    let min_freq = bins.first().map(|b| b.frequency.max(1e-10)).unwrap_or(1e-10);
+    let min_freq = bins
+        .first()
+        .map(|b| b.frequency.max(1e-10))
+        .unwrap_or(1e-10);
     let max_freq = bins.last().map(|b| b.frequency.max(1.0)).unwrap_or(1.0);
     if min_freq <= 0.0 || max_freq <= min_freq || freq <= 0.0 {
         return rect.left();
@@ -101,20 +119,25 @@ pub(crate) fn log_freq_to_screen_x(rect: Rect, freq: f64, bins: &[FftBin]) -> f3
 }
 
 /// Draw frequency axis labels at the edges and center.
-pub(crate) fn draw_freq_axis_labels(painter: &egui::Painter, rect: Rect, bins: &[FftBin], color: Color32) {
+pub(crate) fn draw_freq_axis_labels(
+    painter: &egui::Painter,
+    rect: Rect,
+    bins: &[FftBin],
+    color: Color32,
+) {
     if bins.is_empty() {
         return;
     }
-    if let Some(min_freq) = bins.first().map(|b| b.frequency) {
-        if min_freq > 0.0 {
-            painter.text(
-                Pos2::new(rect.left(), rect.bottom() + 4.0),
-                eframe::egui::Align2::LEFT_TOP,
-                format_compact_freq(min_freq),
-                FontId::monospace(9.0),
-                color,
-            );
-        }
+    if let Some(min_freq) = bins.first().map(|b| b.frequency)
+        && min_freq > 0.0
+    {
+        painter.text(
+            Pos2::new(rect.left(), rect.bottom() + 4.0),
+            eframe::egui::Align2::LEFT_TOP,
+            format_compact_freq(min_freq),
+            FontId::monospace(9.0),
+            color,
+        );
     }
     if let Some(max_freq) = bins.last().map(|b| b.frequency) {
         painter.text(
@@ -150,8 +173,12 @@ pub(crate) fn format_compact_freq(freq: f64) -> String {
 }
 
 /// Reconstruct approximate time-domain samples from bucket data.
-pub(crate) fn reconstruct_samples_from_buckets(preview: &crate::waveform_summary::GuiWaveformPreview) -> Vec<f64> {
-    preview.buckets.iter()
-        .flat_map(|b| std::iter::repeat((b.min + b.max) * 0.5).take(b.samples))
+pub(crate) fn reconstruct_samples_from_buckets(
+    preview: &crate::waveform_summary::GuiWaveformPreview,
+) -> Vec<f64> {
+    preview
+        .buckets
+        .iter()
+        .flat_map(|b| std::iter::repeat_n((b.min + b.max) * 0.5, b.samples))
         .collect()
 }

@@ -3,10 +3,12 @@
 use crate::document::KicadGuiDocument;
 use crate::report_summary::{GuiReportSummary, GuiReportSummaryState};
 use crate::waveform_summary::GuiWaveformSummaryState;
-#[cfg(test)]
-use osl_core::OslError;
 use osl_core::{OslResult, RunMetadata, make_run_id, write_text};
-use osl_sim::{NgspiceCliBackend, XyceCliBackend, SimulatorBackend, SimulationProfile, finalize_run_artifacts, inject_profile_directives, validate_netlist_for_simulation, parse_ngspice_log, format_simulation_log_summary};
+use osl_sim::{
+    NgspiceCliBackend, SimulationProfile, SimulatorBackend, XyceCliBackend, finalize_run_artifacts,
+    format_simulation_log_summary, inject_profile_directives, parse_ngspice_log,
+    validate_netlist_for_simulation,
+};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
@@ -33,7 +35,8 @@ pub(crate) struct GuiSimulationJob {
     runs_root: PathBuf,
     /// Simulation profile carrying user-configured settings (temperature,
     /// tolerances, method, component/model parameter overrides).
-    #[allow(dead_code)] profile: SimulationProfile,
+    #[allow(dead_code)]
+    profile: SimulationProfile,
 }
 
 impl GuiSimulationJob {
@@ -63,7 +66,6 @@ impl GuiSimulationJob {
     pub(crate) fn validate(&self) -> Vec<String> {
         validate_netlist_for_simulation(&self.netlist)
     }
-
 }
 
 #[derive(Debug)]
@@ -85,7 +87,12 @@ impl GuiSimulationTask {
     }
 
     /// spawn with backend。
-    pub(crate) fn spawn_with_backend(job: GuiSimulationJob, backend: &str, ngspice: &str, xyce: &str) -> Self {
+    pub(crate) fn spawn_with_backend(
+        job: GuiSimulationJob,
+        backend: &str,
+        ngspice: &str,
+        xyce: &str,
+    ) -> Self {
         match backend {
             "xyce" => Self::spawn_xyce(job, xyce),
             _ => Self::spawn_ngspice(job, ngspice),
@@ -118,7 +125,6 @@ impl GuiSimulationTask {
     }
 }
 
-
 fn run_job_with_backend(
     job: &GuiSimulationJob,
     backend: &dyn SimulatorBackend,
@@ -139,11 +145,9 @@ fn run_job_with_backend(
         if let Ok(log_content) = std::fs::read_to_string(&log_path) {
             let (errors, warnings, summary) = parse_ngspice_log(&log_content);
             if !errors.is_empty() || !warnings.is_empty() {
-                let log_summary = format_simulation_log_summary(&errors, &warnings, summary.as_deref());
-                write_text(
-                    &output_dir.join("simulation-error.txt"),
-                    &log_summary,
-                )?;
+                let log_summary =
+                    format_simulation_log_summary(&errors, &warnings, summary.as_deref());
+                write_text(&output_dir.join("simulation-error.txt"), &log_summary)?;
             }
         }
     }

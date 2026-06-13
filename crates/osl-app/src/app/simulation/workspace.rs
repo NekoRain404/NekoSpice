@@ -11,11 +11,11 @@
 //!    - Center: Parameter definitions editor
 //!    - Right: Simulation options, tolerances, run status, recent runs
 
+use super::profile_editor::SimulationSubView;
+use super::workspace_widgets::solver_metric_card;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::StudioLocale;
 use crate::app::localization::UiText;
-use super::profile_editor::SimulationSubView;
-use super::workspace_widgets::solver_metric_card;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 use osl_core::RunStatus;
@@ -43,24 +43,23 @@ impl NekoSpiceApp {
         let mode = self.theme_mode();
         let palette = StudioTheme::palette(mode);
         ui.horizontal(|ui| {
-            for view in [SimulationSubView::Overview, SimulationSubView::ProfileEditor] {
+            for view in [
+                SimulationSubView::Overview,
+                SimulationSubView::ProfileEditor,
+            ] {
                 let active = self.simulation_profile_editor.sub_view == view;
                 let label = match self.locale() {
                     StudioLocale::SimplifiedChinese => view.label_zh(),
                     _ => view.label(),
                 };
                 let btn = if active {
-                    egui::Button::new(
-                        egui::RichText::new(label).strong().color(palette.text),
-                    )
-                    .fill(palette.accent_soft)
-                    .stroke(egui::Stroke::new(1.0, palette.accent))
+                    egui::Button::new(egui::RichText::new(label).strong().color(palette.text))
+                        .fill(palette.accent_soft)
+                        .stroke(egui::Stroke::new(1.0, palette.accent))
                 } else {
-                    egui::Button::new(
-                        egui::RichText::new(label).color(palette.text_muted),
-                    )
-                    .fill(palette.panel_soft)
-                    .stroke(egui::Stroke::new(1.0, palette.border))
+                    egui::Button::new(egui::RichText::new(label).color(palette.text_muted))
+                        .fill(palette.panel_soft)
+                        .stroke(egui::Stroke::new(1.0, palette.border))
                 };
                 if ui.add(btn).clicked() {
                     self.simulation_profile_editor.sub_view = view;
@@ -106,7 +105,7 @@ impl NekoSpiceApp {
                 // Show current analysis as a subtitle
                 let analysis_summary = format!(
                     "{} {}",
-                    self.simulation_panel.directive_kind.to_string(),
+                    self.simulation_panel.directive_kind,
                     self.simulation_panel.analysis_params.to_body().trim()
                 );
                 ui.label(StudioTheme::muted_for(mode, analysis_summary.trim()));
@@ -125,13 +124,19 @@ impl NekoSpiceApp {
                     }
                     // Show running indicator with elapsed time
                     ui.label(StudioTheme::status_dot(palette.warning));
-                    let elapsed = self.simulation_panel.run_start_time
+                    let elapsed = self
+                        .simulation_panel
+                        .run_start_time
                         .map(|t| t.elapsed().as_secs())
                         .unwrap_or(0);
                     ui.label(
-                        egui::RichText::new(format!("{} ({}s)", self.text(UiText::Running), elapsed))
-                            .color(palette.warning)
-                            .strong(),
+                        egui::RichText::new(format!(
+                            "{} ({}s)",
+                            self.text(UiText::Running),
+                            elapsed
+                        ))
+                        .color(palette.warning)
+                        .strong(),
                     );
                 } else if ui
                     .add_enabled(
@@ -152,11 +157,7 @@ impl NekoSpiceApp {
                                 StudioLocale::SimplifiedChinese => kind.label_zh(),
                                 _ => kind.label(),
                             };
-                            ui.selectable_value(
-                                &mut self.simulation_panel.backend,
-                                kind,
-                                label,
-                            );
+                            ui.selectable_value(&mut self.simulation_panel.backend, kind, label);
                         }
                     });
             });

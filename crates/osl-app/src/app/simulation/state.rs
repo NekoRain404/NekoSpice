@@ -7,8 +7,8 @@
 pub(crate) use super::analysis::{AnalysisParams, StepSweep};
 
 use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
-use std::time::Instant;
 use osl_kicad::KicadSimulationDirectiveKind;
+use std::time::Instant;
 
 // ── Backend Engine ────────────────────────────────────────────────────
 

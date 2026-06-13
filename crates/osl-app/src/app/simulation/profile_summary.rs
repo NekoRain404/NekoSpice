@@ -1,12 +1,11 @@
 //! Profile summary — shows all configured simulation settings
 //! in a compact, readable format for the overview workspace.
 
+use super::workspace_widgets::profile_row;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
-use super::workspace_widgets::profile_row;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
-
 
 impl NekoSpiceApp {
     /// Draw comprehensive profile summary showing all configured simulation settings.
@@ -24,15 +23,22 @@ impl NekoSpiceApp {
             if preset_name != "default" {
                 ui.horizontal(|ui| {
                     ui.label(StudioTheme::muted_for(mode, "Preset:"));
-                    ui.label(egui::RichText::new(preset_name).strong().color(palette.accent));
+                    ui.label(
+                        egui::RichText::new(preset_name)
+                            .strong()
+                            .color(palette.accent),
+                    );
                 });
             }
 
             // Analysis directive (built from structured params)
-            let analysis = format!("{} {}",
-                self.simulation_panel.directive_kind.to_string(),
+            let analysis = format!(
+                "{} {}",
+                self.simulation_panel.directive_kind,
                 self.simulation_panel.analysis_params.to_body().trim()
-            ).trim().to_string();
+            )
+            .trim()
+            .to_string();
             profile_row(ui, mode, "Analysis", &analysis, "active");
 
             ui.add_space(4.0);
@@ -42,7 +48,13 @@ impl NekoSpiceApp {
             // Environment settings
             ui.label(StudioTheme::muted_for(mode, "Environment"));
             let opts = &self.simulation_profile_editor.options;
-            profile_row(ui, mode, "Temperature", &format!("{} °C", opts.temperature), "operating");
+            profile_row(
+                ui,
+                mode,
+                "Temperature",
+                &format!("{} °C", opts.temperature),
+                "operating",
+            );
             if opts.tnom != "27" {
                 profile_row(ui, mode, "TNOM", &format!("{} °C", opts.tnom), "nominal");
             }
@@ -81,7 +93,13 @@ impl NekoSpiceApp {
 
             // Step sweep (parametric or temperature)
             match &self.simulation_panel.step_sweep {
-                super::state::StepSweep::Parametric { param_name, sweep_mode, start, stop, step } => {
+                super::state::StepSweep::Parametric {
+                    param_name,
+                    sweep_mode,
+                    start,
+                    stop,
+                    step,
+                } => {
                     ui.add_space(4.0);
                     ui.separator();
                     ui.add_space(4.0);
@@ -89,13 +107,22 @@ impl NekoSpiceApp {
                     let sweep_desc = match sweep_mode.as_str() {
                         "list" => format!("{} list {}", param_name, start),
                         "lin" => format!("{} {} to {} step {}", param_name, start, stop, step),
-                        "dec" => format!("{} dec {} pts/dec {} to {}", param_name, step, start, stop),
-                        "oct" => format!("{} oct {} pts/oct {} to {}", param_name, step, start, stop),
+                        "dec" => {
+                            format!("{} dec {} pts/dec {} to {}", param_name, step, start, stop)
+                        }
+                        "oct" => {
+                            format!("{} oct {} pts/oct {} to {}", param_name, step, start, stop)
+                        }
                         _ => format!("{} {} {} {}", param_name, sweep_mode, start, stop),
                     };
                     profile_row(ui, mode, ".step", &sweep_desc, "sweep");
                 }
-                super::state::StepSweep::Temperature { sweep_mode, start, stop, step } => {
+                super::state::StepSweep::Temperature {
+                    sweep_mode,
+                    start,
+                    stop,
+                    step,
+                } => {
                     ui.add_space(4.0);
                     ui.separator();
                     ui.add_space(4.0);
@@ -145,9 +172,21 @@ impl NekoSpiceApp {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.label(StudioTheme::muted_for(mode, "Vendor Models"));
-                profile_row(ui, mode, "Available", &format!("{} models", vendor_count), "catalog");
+                profile_row(
+                    ui,
+                    mode,
+                    "Available",
+                    &format!("{} models", vendor_count),
+                    "catalog",
+                );
                 if added_models > 0 {
-                    profile_row(ui, mode, "Added to profile", &format!("{} models", added_models), "active");
+                    profile_row(
+                        ui,
+                        mode,
+                        "Added to profile",
+                        &format!("{} models", added_models),
+                        "active",
+                    );
                 }
             }
 

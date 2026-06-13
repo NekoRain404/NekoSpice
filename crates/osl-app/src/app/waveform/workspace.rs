@@ -86,8 +86,8 @@ impl WaveformViewport {
         let x_ratio = ((center_x - self.x_min) / x_range).clamp(0.0, 1.0);
         self.x_min = center_x - new_x_range * x_ratio;
         self.x_max = center_x + new_x_range * (1.0 - x_ratio);
-        self.y_min = self.y_min + (y_range - new_y_range) * 0.5;
-        self.y_max = self.y_max - (y_range - new_y_range) * 0.5;
+        self.y_min += (y_range - new_y_range) * 0.5;
+        self.y_max -= (y_range - new_y_range) * 0.5;
         self.user_modified = true;
     }
 
@@ -199,16 +199,15 @@ impl NekoSpiceApp {
                 {
                     self.run_simulation_from_panel();
                 }
-                if let Some(run) = &self.simulation_panel.last_run {
-                    if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) =
+                if let Some(run) = &self.simulation_panel.last_run
+                    && let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) =
                         &run.waveform
-                    {
-                        ui.label(StudioTheme::muted_for(
-                            mode,
-                            format!("{} signals", summary.variable_count),
-                        ));
-                        ui.separator();
-                    }
+                {
+                    ui.label(StudioTheme::muted_for(
+                        mode,
+                        format!("{} signals", summary.variable_count),
+                    ));
+                    ui.separator();
                 }
             });
         });

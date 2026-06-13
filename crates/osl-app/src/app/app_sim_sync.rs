@@ -137,10 +137,15 @@ fn classify_spice_component(lib_id: &str) -> &'static str {
     } else {
         let parts: Vec<&str> = lower.split(':').collect();
         if let Some(name) = parts.last() {
-            if name.starts_with('r') && name.len() <= 3 { "R" }
-            else if name.starts_with('c') && name.len() <= 3 { "C" }
-            else if name.starts_with('l') && name.len() <= 3 { "L" }
-            else { "" }
+            if name.starts_with('r') && name.len() <= 3 {
+                "R"
+            } else if name.starts_with('c') && name.len() <= 3 {
+                "C"
+            } else if name.starts_with('l') && name.len() <= 3 {
+                "L"
+            } else {
+                ""
+            }
         } else {
             ""
         }

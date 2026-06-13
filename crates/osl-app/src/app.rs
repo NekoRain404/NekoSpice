@@ -2,11 +2,11 @@
 //!
 //! 编辑操作（移动、旋转、删除、撤销/重做、文件加载）已拆分至 [`app_ops`] 模块。
 //!
+use crate::DEFAULT_GUI_SCHEMATIC;
 use crate::document::KicadGuiDocument;
 use crate::library::KicadGuiLibrary;
 use crate::placement_config::SymbolPlacementConfig;
 use crate::viewport::CanvasViewport;
-use crate::DEFAULT_GUI_SCHEMATIC;
 use osl_kicad::{KicadCanvasHit, KicadCanvasScene};
 
 // ── 编辑操作（从本文件拆分）────────────────────────────────────────────
@@ -17,14 +17,14 @@ mod app_sim_sync;
 mod canvas_context_menu;
 mod canvas_panel;
 mod canvas_shortcuts;
-mod clipboard;
-mod global_shortcuts;
 mod center_workspace;
+mod clipboard;
 mod diagnostics_panel;
 mod file_dialog;
+mod global_shortcuts;
 mod history;
-mod localization;
 mod locale;
+mod localization;
 mod navigation;
 mod navigation_panel;
 mod panels;
@@ -52,25 +52,24 @@ mod settings;
 mod simulation;
 mod waveform;
 
-
 pub use canvas_panel::load_canvas_scene;
 use navigation::StudioWorkspace;
 use optimization::OptimizationWorkspaceState;
 use placement::SymbolPlacementState;
 use preferences::StudioPreferences;
 use reports::ReportsWorkspaceState;
-use waveform::WaveformWorkspaceState;
 use review::ReviewWorkspaceState;
 pub use runtime::run_native;
-use simulation::SimulationProfileEditorState;
+use schematic::SelectionPropertyEditorState;
 use schematic::inspector::SchematicInspectorPanelState;
 use schematic::tools::SchematicToolState;
-use schematic::SelectionPropertyEditorState;
 use simulation::SimulationHistory;
-use simulation::measure_editor::MeasureEntry;
 use simulation::SimulationPanelState;
+use simulation::SimulationProfileEditorState;
+use simulation::measure_editor::MeasureEntry;
 use simulation::options_xyce::XyceOptions;
 use simulation::run_compare::RunCompareState;
+use waveform::WaveformWorkspaceState;
 
 const EDIT_NUDGE_MM: f64 = 2.54;
 
@@ -165,10 +164,22 @@ impl EditNudgeDirection {
     /// 返回该方向对应的偏移量（单位 mm）。
     pub(super) fn delta(self) -> osl_kicad::KicadPoint {
         match self {
-            Self::Left => osl_kicad::KicadPoint { x: -EDIT_NUDGE_MM, y: 0.0 },
-            Self::Right => osl_kicad::KicadPoint { x: EDIT_NUDGE_MM, y: 0.0 },
-            Self::Up => osl_kicad::KicadPoint { x: 0.0, y: -EDIT_NUDGE_MM },
-            Self::Down => osl_kicad::KicadPoint { x: 0.0, y: EDIT_NUDGE_MM },
+            Self::Left => osl_kicad::KicadPoint {
+                x: -EDIT_NUDGE_MM,
+                y: 0.0,
+            },
+            Self::Right => osl_kicad::KicadPoint {
+                x: EDIT_NUDGE_MM,
+                y: 0.0,
+            },
+            Self::Up => osl_kicad::KicadPoint {
+                x: 0.0,
+                y: -EDIT_NUDGE_MM,
+            },
+            Self::Down => osl_kicad::KicadPoint {
+                x: 0.0,
+                y: EDIT_NUDGE_MM,
+            },
         }
     }
 }

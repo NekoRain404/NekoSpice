@@ -1,9 +1,9 @@
 //! 原理图工作区顶部工具栏。包含文件操作、编辑操作、缩放控制、绘图工具切换、仿真状态、DRC 状态。
 
-use crate::app::NekoSpiceApp;
 use super::workspace_widgets::{canvas_toolbar_button, toolbar_icon_button_active};
-use crate::app::theme::StudioTheme;
+use crate::app::NekoSpiceApp;
 use crate::app::navigation::StudioWorkspace;
+use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 impl NekoSpiceApp {
@@ -124,7 +124,9 @@ impl NekoSpiceApp {
                 .show_ui(ui, |ui| {
                     for &kind in &crate::app::simulation::state::SimulationBackendKind::ALL {
                         let label = match self.locale() {
-                            crate::app::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
+                            crate::app::localization::StudioLocale::SimplifiedChinese => {
+                                kind.label_zh()
+                            }
                             _ => kind.label(),
                         };
                         ui.selectable_value(&mut self.simulation_panel.backend, kind, label);
@@ -134,14 +136,18 @@ impl NekoSpiceApp {
 
             // ── 仿真指令指示器 ──────────────────────────────
             let mut directive_parts = vec![
-                format!("{} {}", self.simulation_panel.directive_kind,
+                format!(
+                    "{} {}",
+                    self.simulation_panel.directive_kind,
                     self.simulation_panel.analysis_params.to_body().trim()
-                ).trim().to_string()
+                )
+                .trim()
+                .to_string(),
             ];
-            if self.simulation_panel.step_sweep != crate::app::simulation::state::StepSweep::None {
-                if let Some(step) = self.simulation_panel.step_sweep.to_directive() {
-                    directive_parts.push(step);
-                }
+            if self.simulation_panel.step_sweep != crate::app::simulation::state::StepSweep::None
+                && let Some(step) = self.simulation_panel.step_sweep.to_directive()
+            {
+                directive_parts.push(step);
             }
             if !self.simulation_measurements.is_empty() {
                 directive_parts.push(format!("{} measures", self.simulation_measurements.len()));
@@ -152,24 +158,29 @@ impl NekoSpiceApp {
                     .monospace()
                     .size(11.0)
                     .color(palette.accent),
-            ).on_hover_text("Current simulation configuration");
+            )
+            .on_hover_text("Current simulation configuration");
 
             // Netlist export quick button
-            if self.document.is_some() {
-                if ui.small_button("Export .cir")
+            if self.document.is_some()
+                && ui
+                    .small_button("Export .cir")
                     .on_hover_text("Export SPICE netlist to file")
                     .clicked()
-                {
-                    self.export_netlist_dialog();
-                }
+            {
+                self.export_netlist_dialog();
             }
 
             // ── DRC 状态 ──────────────────────────────────────
             ui.label(StudioTheme::muted_for(mode, "DRC"));
             let report = self.document.as_ref().map(|doc| doc.check_report());
             let (dot_color, drc_text) = match report {
-                Some(r) if r.error_count() > 0 => (palette.danger, format!("{} errors", r.error_count())),
-                Some(r) if r.warning_count() > 0 => (palette.warning, format!("{} warnings", r.warning_count())),
+                Some(r) if r.error_count() > 0 => {
+                    (palette.danger, format!("{} errors", r.error_count()))
+                }
+                Some(r) if r.warning_count() > 0 => {
+                    (palette.warning, format!("{} warnings", r.warning_count()))
+                }
                 Some(_) => (palette.success, "Clean".to_string()),
                 None => (palette.text_muted, "No doc".to_string()),
             };
@@ -182,7 +193,11 @@ impl NekoSpiceApp {
             // ── 波形快捷链接 ──────────────────────────────────
             if self.simulation_panel.last_run.is_some() {
                 ui.separator();
-                if ui.small_button("Waveforms").on_hover_text("Open waveform analysis workspace").clicked() {
+                if ui
+                    .small_button("Waveforms")
+                    .on_hover_text("Open waveform analysis workspace")
+                    .clicked()
+                {
                     self.active_workspace = StudioWorkspace::Waveforms;
                 }
             }

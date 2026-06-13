@@ -1,8 +1,8 @@
 //! Schematic inspector panel — component properties editor.
 
+use super::widgets::inspector_tab;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
-use super::widgets::inspector_tab;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
@@ -71,7 +71,10 @@ impl NekoSpiceApp {
     /// draw schematic inspector panel。
     pub(crate) fn draw_schematic_inspector_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        ui.label(StudioTheme::section_title_for(mode, self.text(UiText::Inspector)));
+        ui.label(StudioTheme::section_title_for(
+            mode,
+            self.text(UiText::Inspector),
+        ));
         ui.label(StudioTheme::muted_for(
             mode,
             self.text(UiText::SchematicInspectorCaption),

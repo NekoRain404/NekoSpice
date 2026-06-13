@@ -5,7 +5,7 @@ mod items;
 mod placement;
 mod simulation;
 
-use osl_kicad::{parse_kicad_symbol_library, KicadSymbolDef};
+use osl_kicad::{KicadSymbolDef, parse_kicad_symbol_library};
 
 /// 创建空的 `KicadSymbolDef` 用于测试。
 pub(super) fn test_symbol_definition(name: &str) -> KicadSymbolDef {

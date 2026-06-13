@@ -3,12 +3,12 @@
 //!
 //! 包含：加载原理图/符号库、删除/移动/旋转选中项、撤销/重做、保存文档。
 
+use crate::DEFAULT_GUI_LIBRARY_TABLE;
 use crate::document::KicadGuiDocument;
 use crate::library::KicadGuiLibrary;
 use crate::placement_config::SymbolPlacementConfig;
-use crate::DEFAULT_GUI_LIBRARY_TABLE;
-use std::path::PathBuf;
 use osl_kicad::KicadPoint;
+use std::path::PathBuf;
 
 use super::NekoSpiceApp;
 
@@ -57,7 +57,6 @@ impl NekoSpiceApp {
             }
         }
     }
-
 
     /// 从指定路径加载 KiCad 符号库。
     pub(super) fn load_symbol_library(&mut self, path: PathBuf) {

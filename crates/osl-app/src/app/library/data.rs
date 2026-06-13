@@ -145,7 +145,9 @@ impl NekoSpiceApp {
                 }
                 self.status_message = Some(format!(
                     "Imported {} subcircuits, {} models from {}",
-                    subckt_count, model_count, path.display()
+                    subckt_count,
+                    model_count,
+                    path.display()
                 ));
             }
             Err(err) => {

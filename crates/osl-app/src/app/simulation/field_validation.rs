@@ -53,9 +53,7 @@ pub(crate) fn validate_spice_value(value: &str) -> FieldValidity {
         return FieldValidity::Ok;
     }
     // Strip standard SPICE suffixes: k/M/G/T/m/u/n/p/f/a
-    let stripped = v.trim_end_matches(|c: char|
-        matches!(c, 'k' | 'K' | 'M' | 'G' | 'T' | 'm' | 'u' | 'n' | 'p' | 'f' | 'a')
-    );
+    let stripped = v.trim_end_matches(['k', 'K', 'M', 'G', 'T', 'm', 'u', 'n', 'p', 'f', 'a']);
     if stripped.is_empty() || stripped.parse::<f64>().is_ok() {
         return FieldValidity::Ok;
     }
@@ -85,9 +83,7 @@ pub(crate) fn validated_frame(
     } else {
         egui::Stroke::new(1.5, color)
     };
-    egui::Frame::new()
-        .stroke(stroke)
-        .corner_radius(3)
+    egui::Frame::new().stroke(stroke).corner_radius(3)
 }
 
 #[cfg(test)]

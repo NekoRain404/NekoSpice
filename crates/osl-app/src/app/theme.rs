@@ -4,17 +4,12 @@
 use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 
 /// 主题模式枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum StudioThemeMode {
+    #[default]
     Midnight,
     Graphite,
     Light,
-}
-
-impl Default for StudioThemeMode {
-    fn default() -> Self {
-        Self::Midnight
-    }
 }
 
 impl StudioThemeMode {
@@ -32,7 +27,7 @@ impl StudioThemeMode {
         self.label()
     }
 
-       pub(super) const ALL: [Self; 3] = [Self::Midnight, Self::Graphite, Self::Light];
+    pub(super) const ALL: [Self; 3] = [Self::Midnight, Self::Graphite, Self::Light];
 
     /// label。
     pub(super) fn label(self) -> &'static str {
@@ -221,7 +216,6 @@ impl StudioTheme {
     }
 
     /// 创建卡片帧样式
-
     /// 区段标题样式
     pub(crate) fn section_title_for(mode: StudioThemeMode, text: impl Into<String>) -> RichText {
         let palette = Self::palette(mode);
@@ -234,7 +228,9 @@ impl StudioTheme {
     /// 静音文字样式
     pub(crate) fn muted_for(mode: StudioThemeMode, text: impl Into<String>) -> RichText {
         let palette = Self::palette(mode);
-        RichText::new(text.into()).color(palette.text_muted).size(12.0)
+        RichText::new(text.into())
+            .color(palette.text_muted)
+            .size(12.0)
     }
 
     /// 强调文字样式
@@ -247,7 +243,6 @@ impl StudioTheme {
     pub(crate) fn status_dot(color: Color32) -> RichText {
         RichText::new("\u{25CF}").color(color).size(8.0)
     }
-
 }
 
 /// 诊断计数摘要（用于状态栏）

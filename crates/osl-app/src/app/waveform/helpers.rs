@@ -3,7 +3,7 @@
 //! Contains functions used by both static previews and interactive plots
 //! to avoid code duplication across modules.
 
-use crate::app::theme::{StudioThemeMode};
+use crate::app::theme::StudioThemeMode;
 use crate::waveform_summary::{GuiWaveformPreview, GuiWaveformSummary};
 use eframe::egui::{self, Align2, FontId, Pos2, Rect, Stroke, Vec2};
 

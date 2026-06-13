@@ -4,27 +4,18 @@
 //! - `rise time`, `fall time`, `bandwidth`, `peak`, `RMS`, etc.
 //! - These are processed by the solver and printed in the log output.
 
-use crate::app::NekoSpiceApp;
 use super::profile_editor_widgets::section_header;
+use crate::app::NekoSpiceApp;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
 
 /// A single measurement definition.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct MeasureEntry {
     /// Measurement name (e.g. "rise_time", "vout_rms").
     pub(crate) name: String,
     /// Measurement expression (e.g. "v(out) rise 10% 90%").
     pub(crate) expression: String,
-}
-
-impl Default for MeasureEntry {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            expression: String::new(),
-        }
-    }
 }
 
 /// Common measurement templates.
@@ -40,11 +31,7 @@ const MEASURE_TEMPLATES: [(&str, &str); 6] = [
 impl NekoSpiceApp {
     /// Draw the measure directive editor section.
     /// Returns the list of `.measure` directives as strings.
-    pub(crate) fn draw_measure_editor(
-        &mut self,
-        ui: &mut egui::Ui,
-        mode: StudioThemeMode,
-    ) {
+    pub(crate) fn draw_measure_editor(&mut self, ui: &mut egui::Ui, mode: StudioThemeMode) {
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             section_header(ui, mode, "Measurements (.measure)");
             ui.add_space(4.0);

@@ -23,7 +23,11 @@ pub(crate) fn analysis_mode_button(
         })
         .stroke(egui::Stroke::new(
             1.0,
-            if active { palette.accent } else { palette.border },
+            if active {
+                palette.accent
+            } else {
+                palette.border
+            },
         ))
         .corner_radius(5)
         .inner_margin(egui::Margin::same(10))
@@ -96,7 +100,11 @@ pub(crate) fn code_preview_line(ui: &mut egui::Ui, line_number: usize, text: &st
         palette.text
     };
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("{line_number:>2}")).monospace().color(Color32::from_rgb(80, 90, 100)));
+        ui.label(
+            RichText::new(format!("{line_number:>2}"))
+                .monospace()
+                .color(Color32::from_rgb(80, 90, 100)),
+        );
         ui.label(RichText::new(text).monospace().color(color));
     });
 }
@@ -126,12 +134,36 @@ pub(crate) fn analysis_modes() -> [(
     &'static str,
 ); 7] {
     [
-        (osl_kicad::KicadSimulationDirectiveKind::Op, ".op", "operating point"),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Op,
+            ".op",
+            "operating point",
+        ),
         (osl_kicad::KicadSimulationDirectiveKind::Dc, ".dc", "sweep"),
-        (osl_kicad::KicadSimulationDirectiveKind::Tran, ".tran", "time domain"),
-        (osl_kicad::KicadSimulationDirectiveKind::Ac, ".ac", "small signal"),
-        (osl_kicad::KicadSimulationDirectiveKind::Noise, ".noise", "noise analysis"),
-        (osl_kicad::KicadSimulationDirectiveKind::Disto, ".disto", "distortion"),
-        (osl_kicad::KicadSimulationDirectiveKind::Sens, ".sens", "sensitivity"),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Tran,
+            ".tran",
+            "time domain",
+        ),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Ac,
+            ".ac",
+            "small signal",
+        ),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Noise,
+            ".noise",
+            "noise analysis",
+        ),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Disto,
+            ".disto",
+            "distortion",
+        ),
+        (
+            osl_kicad::KicadSimulationDirectiveKind::Sens,
+            ".sens",
+            "sensitivity",
+        ),
     ]
 }

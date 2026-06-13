@@ -367,10 +367,8 @@ fn waveform_command(args: &[String]) -> OslResult<i32> {
     Ok(0)
 }
 
-
 include!("cli_kicad.rs");
 include!("cli_verify.rs");
-
 
 #[cfg(test)]
 mod tests {

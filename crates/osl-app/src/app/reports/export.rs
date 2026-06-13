@@ -33,8 +33,16 @@ impl NekoSpiceApp {
         for v in &summary.variables {
             csv.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{}\n",
-                v.name, v.unit, v.samples,
-                v.first, v.last, v.min, v.max, v.avg, v.rms, v.peak_to_peak,
+                v.name,
+                v.unit,
+                v.samples,
+                v.first,
+                v.last,
+                v.min,
+                v.max,
+                v.avg,
+                v.rms,
+                v.peak_to_peak,
             ));
         }
 

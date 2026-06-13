@@ -132,9 +132,7 @@ impl Default for SettingsFile {
 
 /// 获取设置文件路径：`~/.config/nekospice/settings.json`
 pub(super) fn settings_path() -> PathBuf {
-    dirs_or_fallback()
-        .join("nekospice")
-        .join("settings.json")
+    dirs_or_fallback().join("nekospice").join("settings.json")
 }
 
 /// 优先使用 XDG_CONFIG_HOME，回退到 HOME/.config

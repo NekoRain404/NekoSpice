@@ -1,7 +1,7 @@
 //! 图纸边界渲染图元。绘制原理图边框和标题栏。
 //!
-use crate::viewport::CanvasViewport;
 use super::super::colors::SchematicColors;
+use crate::viewport::CanvasViewport;
 use eframe::egui::{self, Align2, FontId, Rect, Stroke, StrokeKind, Vec2};
 use osl_kicad::{KicadCanvasSheet, KicadPoint};
 
@@ -50,7 +50,10 @@ pub(crate) fn draw_sheet(
         if let Some(pin_at) = pin.at {
             let pin_screen = viewport.world_to_screen(
                 rect,
-                KicadPoint { x: pin_at.x, y: pin_at.y },
+                KicadPoint {
+                    x: pin_at.x,
+                    y: pin_at.y,
+                },
             );
             // Determine pin direction based on position relative to sheet rect
             let on_left = (pin_screen.x - sheet_rect.left()).abs() < 5.0;
@@ -88,10 +91,7 @@ pub(crate) fn draw_sheet(
             };
 
             // Draw pin stub line
-            painter.line_segment(
-                [line_start, line_end],
-                Stroke::new(1.5, sc.sheet_pin),
-            );
+            painter.line_segment([line_start, line_end], Stroke::new(1.5, sc.sheet_pin));
 
             // Draw pin label
             let text_offset = match text_align {
@@ -101,7 +101,8 @@ pub(crate) fn draw_sheet(
                 Align2::CENTER_TOP => Vec2::new(0.0, 4.0),
                 _ => Vec2::ZERO,
             };
-            let font_size = pin.effects
+            let font_size = pin
+                .effects
                 .as_ref()
                 .and_then(|e| e.font_size)
                 .map(|s| s.width as f32)
@@ -121,4 +122,3 @@ pub(crate) fn draw_sheet(
 // ---------------------------------------------------------------------------
 // Graphic element drawing
 // ---------------------------------------------------------------------------
-

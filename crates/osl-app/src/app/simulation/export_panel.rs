@@ -4,8 +4,8 @@
 //! Each export action checks the current backend (ngspice/Xyce) and
 //! formats the output accordingly.
 
-use crate::app::NekoSpiceApp;
 use super::state::SimulationBackendKind;
+use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
@@ -27,19 +27,19 @@ impl NekoSpiceApp {
             // Netlist export
             let netlist_btn = ui.add_enabled(
                 has_doc,
-                egui::Button::new(
-                    egui::RichText::new("Export Netlist (.cir)").color(palette.text),
-                )
-                .fill(palette.panel_soft)
-                .stroke(egui::Stroke::new(1.0, palette.border))
-                .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
+                egui::Button::new(egui::RichText::new("Export Netlist (.cir)").color(palette.text))
+                    .fill(palette.panel_soft)
+                    .stroke(egui::Stroke::new(1.0, palette.border))
+                    .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
             );
             if netlist_btn.clicked() {
                 self.export_netlist_dialog();
             }
             netlist_btn.on_hover_text(match self.simulation_panel.backend {
                 SimulationBackendKind::Ngspice => "Export ngspice-compatible netlist",
-                SimulationBackendKind::Xyce => "Export Xyce-compatible netlist with .print directives",
+                SimulationBackendKind::Xyce => {
+                    "Export Xyce-compatible netlist with .print directives"
+                }
             });
 
             ui.add_space(4.0);
@@ -47,12 +47,10 @@ impl NekoSpiceApp {
             // CSV waveform export (only available after a run)
             let csv_btn = ui.add_enabled(
                 has_run,
-                egui::Button::new(
-                    egui::RichText::new("Export Waveform CSV").color(palette.text),
-                )
-                .fill(palette.panel_soft)
-                .stroke(egui::Stroke::new(1.0, palette.border))
-                .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
+                egui::Button::new(egui::RichText::new("Export Waveform CSV").color(palette.text))
+                    .fill(palette.panel_soft)
+                    .stroke(egui::Stroke::new(1.0, palette.border))
+                    .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
             );
             if csv_btn.clicked() {
                 self.export_csv_dialog();
@@ -64,12 +62,10 @@ impl NekoSpiceApp {
             // Log export
             let log_btn = ui.add_enabled(
                 has_run,
-                egui::Button::new(
-                    egui::RichText::new("Export Simulation Log").color(palette.text),
-                )
-                .fill(palette.panel_soft)
-                .stroke(egui::Stroke::new(1.0, palette.border))
-                .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
+                egui::Button::new(egui::RichText::new("Export Simulation Log").color(palette.text))
+                    .fill(palette.panel_soft)
+                    .stroke(egui::Stroke::new(1.0, palette.border))
+                    .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
             );
             if log_btn.clicked() {
                 self.export_log_dialog();
@@ -88,12 +84,12 @@ impl NekoSpiceApp {
                     .stroke(egui::Stroke::new(1.0, palette.border))
                     .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
                 );
-                if dir_btn.clicked() {
-                    if let Some(run) = &self.simulation_panel.last_run {
-                        let path = run.output_dir.display().to_string();
-                        ui.ctx().copy_text(path.clone());
-                        self.status_message = Some(format!("Output path copied: {}", path));
-                    }
+                if dir_btn.clicked()
+                    && let Some(run) = &self.simulation_panel.last_run
+                {
+                    let path = run.output_dir.display().to_string();
+                    ui.ctx().copy_text(path.clone());
+                    self.status_message = Some(format!("Output path copied: {}", path));
                 }
             }
         });

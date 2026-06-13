@@ -1,9 +1,9 @@
 //! Reports workspace sections — report list and detail views.
 
-use crate::app::NekoSpiceApp;
-use crate::app::localization::UiText;
 use super::preview::{draw_curve, draw_grid};
 use super::widgets::{artifact_row, export_toggle, formula_token, report_row};
+use crate::app::NekoSpiceApp;
+use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use crate::report_summary::GuiReportSummaryState;
 use crate::waveform_summary::GuiWaveformSummaryState;
@@ -210,16 +210,32 @@ impl NekoSpiceApp {
                 self.text(UiText::ExportReport),
             ));
             ui.horizontal_wrapped(|ui| {
-                if ui.button("HTML").on_hover_text("Export simulation report as HTML").clicked() {
+                if ui
+                    .button("HTML")
+                    .on_hover_text("Export simulation report as HTML")
+                    .clicked()
+                {
                     self.export_report_html();
                 }
-                if ui.button("CSV").on_hover_text("Export measurement data as CSV").clicked() {
+                if ui
+                    .button("CSV")
+                    .on_hover_text("Export measurement data as CSV")
+                    .clicked()
+                {
                     self.export_measurements_csv();
                 }
-                if ui.button("Markdown").on_hover_text("Export report as Markdown").clicked() {
+                if ui
+                    .button("Markdown")
+                    .on_hover_text("Export report as Markdown")
+                    .clicked()
+                {
                     self.export_report_markdown();
                 }
-                if ui.button("Netlist").on_hover_text("Export SPICE netlist to file").clicked() {
+                if ui
+                    .button("Netlist")
+                    .on_hover_text("Export SPICE netlist to file")
+                    .clicked()
+                {
                     self.export_netlist_dialog();
                 }
             });

@@ -23,47 +23,40 @@ pub(crate) fn param_table(
         return;
     }
 
-    egui::Grid::new(format!(
-        "param_table_{}",
-        std::ptr::from_ref(rows) as usize
-    ))
-    .num_columns(4)
-    .spacing([6.0, 4.0])
-    .striped(true)
-    .show(ui, |ui| {
-        // Column headers
-        ui.label(StudioTheme::muted_for(mode, ""));
-        ui.label(StudioTheme::muted_for(mode, "Name"));
-        ui.label(StudioTheme::muted_for(mode, "Value"));
-        ui.label(StudioTheme::muted_for(mode, "Unit"));
-        ui.end_row();
-
-        let mut remove_index = None;
-        for (index, row) in rows.iter_mut().enumerate() {
-            if ui.small_button("×").clicked() {
-                remove_index = Some(index);
-            }
-            ui.add(egui::TextEdit::singleline(&mut row.0).desired_width(80.0));
-            ui.add(egui::TextEdit::singleline(&mut row.1).desired_width(80.0));
-            ui.add(egui::TextEdit::singleline(&mut row.2).desired_width(60.0));
+    egui::Grid::new(format!("param_table_{}", std::ptr::from_ref(rows) as usize))
+        .num_columns(4)
+        .spacing([6.0, 4.0])
+        .striped(true)
+        .show(ui, |ui| {
+            // Column headers
+            ui.label(StudioTheme::muted_for(mode, ""));
+            ui.label(StudioTheme::muted_for(mode, "Name"));
+            ui.label(StudioTheme::muted_for(mode, "Value"));
+            ui.label(StudioTheme::muted_for(mode, "Unit"));
             ui.end_row();
-        }
 
-        if let Some(index) = remove_index {
-            rows.remove(index);
-        }
-    });
+            let mut remove_index = None;
+            for (index, row) in rows.iter_mut().enumerate() {
+                if ui.small_button("×").clicked() {
+                    remove_index = Some(index);
+                }
+                ui.add(egui::TextEdit::singleline(&mut row.0).desired_width(80.0));
+                ui.add(egui::TextEdit::singleline(&mut row.1).desired_width(80.0));
+                ui.add(egui::TextEdit::singleline(&mut row.2).desired_width(60.0));
+                ui.end_row();
+            }
+
+            if let Some(index) = remove_index {
+                rows.remove(index);
+            }
+        });
 }
 
 /// Render a status pill (colored badge) for a given label and state.
 #[allow(dead_code)]
 pub(crate) fn status_pill(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, ok: bool) {
     let palette = StudioTheme::palette(mode);
-    let color = if ok {
-        palette.success
-    } else {
-        palette.warning
-    };
+    let color = if ok { palette.success } else { palette.warning };
     egui::Frame::new()
         .fill(palette.panel_soft)
         .corner_radius(10)
@@ -106,7 +99,11 @@ pub(crate) fn labeled_edit(
     hint: &str,
 ) -> egui::Response {
     ui.label(StudioTheme::muted_for(mode, label));
-    let response = ui.add(egui::TextEdit::singleline(value).desired_width(120.0).hint_text(hint));
+    let response = ui.add(
+        egui::TextEdit::singleline(value)
+            .desired_width(120.0)
+            .hint_text(hint),
+    );
     ui.end_row();
     response
 }

@@ -1,8 +1,9 @@
 //! 原理图文档抽象层。封装 KiCad 原理图的加载、保存和编辑接口。
 //!
-use osl_kicad::{KicadEditSummary,
-    KicadCanvasScene, KicadSchematic, KicadSchematicCheckReport, KicadSimulationDirective,
-    read_kicad_schematic_with_libraries, write_kicad_schematic, new_empty_schematic,
+use osl_kicad::{
+    KicadCanvasScene, KicadEditSummary, KicadSchematic, KicadSchematicCheckReport,
+    KicadSimulationDirective, new_empty_schematic, read_kicad_schematic_with_libraries,
+    write_kicad_schematic,
 };
 use std::path::{Path, PathBuf};
 
@@ -36,7 +37,7 @@ impl KicadGuiDocument {
             .map_err(|error| error.to_string())
     }
 
-/// Create a new empty schematic document.
+    /// Create a new empty schematic document.
     ///
     /// The document is created in-memory with a default title block
     /// and must be saved to a path before persisting to disk.
@@ -95,10 +96,12 @@ impl KicadGuiDocument {
 
     /// Save the schematic to a new path and update the document path.
     pub(crate) fn save_as(&mut self, path: &std::path::Path) -> Result<(), String> {
-        write_kicad_schematic(path, &self.schematic).map(|_| {
-            self.path = path.to_path_buf();
-            self.dirty = false;
-        }).map_err(|error| error.to_string())
+        write_kicad_schematic(path, &self.schematic)
+            .map(|_| {
+                self.path = path.to_path_buf();
+                self.dirty = false;
+            })
+            .map_err(|error| error.to_string())
     }
 
     /// Return a deep copy of the current schematic for undo/redo storage.
@@ -114,7 +117,6 @@ impl KicadGuiDocument {
         self.dirty = true;
     }
 }
-
 
 #[cfg(test)]
 #[path = "document_tests/mod.rs"]

@@ -23,7 +23,11 @@ pub(crate) fn draw_preset_indicator(
         ui.horizontal(|ui| {
             let accent = palette.accent;
             ui.label(egui::RichText::new("●").color(accent).size(10.0));
-            ui.label(egui::RichText::new(preset.as_str()).strong().color(palette.text));
+            ui.label(
+                egui::RichText::new(preset.as_str())
+                    .strong()
+                    .color(palette.text),
+            );
         });
 
         let description = match preset.as_str() {

@@ -1,8 +1,8 @@
 //! Model browser — tree view of available SPICE models and subcircuits.
 
-use crate::app::NekoSpiceApp;
 use super::preview::{draw_spice_preview, draw_symbol_preview};
 use super::widgets::{library_metric_card, metadata_row, pin_mapping_row};
+use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
@@ -176,22 +176,50 @@ impl NekoSpiceApp {
 
     fn draw_library_model_status_card(&self, ui: &mut egui::Ui, index: usize) {
         let mode = self.theme_mode();
-        let (symbol_count, lib_count, diag_count) = self.library.as_ref().map(|l| {
-            let idx = l.index();
-            (idx.symbols.len(), idx.libraries.len(), idx.diagnostics.len())
-        }).unwrap_or((0, 0, 0));
+        let (symbol_count, lib_count, diag_count) = self
+            .library
+            .as_ref()
+            .map(|l| {
+                let idx = l.index();
+                (
+                    idx.symbols.len(),
+                    idx.libraries.len(),
+                    idx.diagnostics.len(),
+                )
+            })
+            .unwrap_or((0, 0, 0));
         match index {
-            0 => library_metric_card(ui, mode, self.text(UiText::ModelLibrary),
-                &symbol_count.to_string(), "symbols"),
-            1 => library_metric_card(ui, mode, self.text(UiText::Verified),
-                &lib_count.to_string(), "libraries"),
+            0 => library_metric_card(
+                ui,
+                mode,
+                self.text(UiText::ModelLibrary),
+                &symbol_count.to_string(),
+                "symbols",
+            ),
+            1 => library_metric_card(
+                ui,
+                mode,
+                self.text(UiText::Verified),
+                &lib_count.to_string(),
+                "libraries",
+            ),
             2 => {
                 let label = if diag_count == 0 { "Passed" } else { "Issues" };
-                library_metric_card(ui, mode, self.text(UiText::Validation),
-                    label, &format!("{} diagnostics", diag_count))
+                library_metric_card(
+                    ui,
+                    mode,
+                    self.text(UiText::Validation),
+                    label,
+                    &format!("{} diagnostics", diag_count),
+                )
             }
-            _ => library_metric_card(ui, mode, self.text(UiText::VendorUpdates),
-                &diag_count.to_string(), "diagnostics"),
+            _ => library_metric_card(
+                ui,
+                mode,
+                self.text(UiText::VendorUpdates),
+                &diag_count.to_string(),
+                "diagnostics",
+            ),
         }
     }
 }

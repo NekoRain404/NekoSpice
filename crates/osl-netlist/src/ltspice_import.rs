@@ -1,7 +1,6 @@
 // LTspice schematic types and data structures.
 include!("ltspice_types_impl.rs");
 
-
 impl LtspiceSymbolLibrary {
     fn new(base_dir: &Path) -> Self {
         let search_dirs = ltspice_symbol_search_dirs(base_dir);
@@ -604,7 +603,6 @@ fn symbol_value(
         Some(parts.join(" "))
     }
 }
-
 
 // LTspice built-in symbol table.
 include!("ltspice_builtins_impl.rs");

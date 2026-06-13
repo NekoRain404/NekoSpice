@@ -140,17 +140,28 @@ fn document_adds_basic_schematic_items_for_gui_tools() {
     assert_eq!(scene.sheets[0].name, "gain_stage");
     assert_eq!(scene.sheets[0].pins.len(), 2);
     assert!(
-        scene.labels.iter().any(|label| {
-            label.text == "sense" && label.kind == KicadLabelKind::Global
-        })
+        scene
+            .labels
+            .iter()
+            .any(|label| { label.text == "sense" && label.kind == KicadLabelKind::Global })
     );
     assert!(
         scene.labels.iter().any(|label| {
             label.text == "sheet_in" && label.kind == KicadLabelKind::Hierarchical
         })
     );
-    assert!(scene.text_items.iter().any(|text| text.text == ".save v(out)"));
-    assert!(scene.text_items.iter().any(|text| text.text == ".tran 2u 2m"));
+    assert!(
+        scene
+            .text_items
+            .iter()
+            .any(|text| text.text == ".save v(out)")
+    );
+    assert!(
+        scene
+            .text_items
+            .iter()
+            .any(|text| text.text == ".tran 2u 2m")
+    );
     assert!(scene.junctions.iter().any(|junction| {
         (junction.at.x - 101.6).abs() < 1e-6 && (junction.at.y - 50.8).abs() < 1e-6
     }));

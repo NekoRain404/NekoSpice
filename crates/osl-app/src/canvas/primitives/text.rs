@@ -14,10 +14,7 @@ pub(crate) fn draw_rotated_text(
     color: Color32,
 ) {
     let rotation = ((at.rotation % 360.0) + 360.0) % 360.0;
-    let screen_pos = viewport.world_to_screen(
-        rect,
-        osl_kicad::KicadPoint { x: at.x, y: at.y },
-    );
+    let screen_pos = viewport.world_to_screen(rect, osl_kicad::KicadPoint { x: at.x, y: at.y });
 
     // Near-zero rotation: direct native rendering
     if rotation.abs() < 0.1 || (rotation - 360.0).abs() < 0.1 {
@@ -67,4 +64,3 @@ pub(crate) fn draw_rotated_text(
 // ---------------------------------------------------------------------------
 // Selection bounds
 // ---------------------------------------------------------------------------
-

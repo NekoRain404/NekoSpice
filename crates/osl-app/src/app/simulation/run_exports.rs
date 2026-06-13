@@ -14,9 +14,10 @@ impl NekoSpiceApp {
             return;
         };
         let profile = self.build_simulation_profile();
-        let netlist = match document.spice_netlist_preview().map(|raw| {
-            osl_sim::inject_profile_directives(&raw, &profile)
-        }) {
+        let netlist = match document
+            .spice_netlist_preview()
+            .map(|raw| osl_sim::inject_profile_directives(&raw, &profile))
+        {
             Ok(n) => n,
             Err(error) => {
                 self.status_message = Some(error);
@@ -28,7 +29,9 @@ impl NekoSpiceApp {
             .set_file_name("schematic.cir");
         if let Some(path) = dialog.save_file() {
             match std::fs::write(&path, &netlist) {
-                Ok(()) => self.status_message = Some(format!("Netlist exported to {}", path.display())),
+                Ok(()) => {
+                    self.status_message = Some(format!("Netlist exported to {}", path.display()))
+                }
                 Err(error) => self.status_message = Some(format!("Export failed: {error}")),
             }
         }
@@ -55,11 +58,16 @@ impl NekoSpiceApp {
                         .set_file_name("waveform.csv");
                     if let Some(path) = dialog.save_file() {
                         match std::fs::write(&path, &csv) {
-                            Ok(()) => self.status_message = Some(format!(
-                                "CSV exported to {} ({} bytes)", path.display(), csv.len()
-                            )),
-                            Err(error) => self.status_message =
-                                Some(format!("CSV export failed: {error}")),
+                            Ok(()) => {
+                                self.status_message = Some(format!(
+                                    "CSV exported to {} ({} bytes)",
+                                    path.display(),
+                                    csv.len()
+                                ))
+                            }
+                            Err(error) => {
+                                self.status_message = Some(format!("CSV export failed: {error}"))
+                            }
                         }
                     }
                 }
@@ -92,12 +100,22 @@ impl NekoSpiceApp {
         };
         let dialog = rfd::FileDialog::new()
             .add_filter("Simulation Log", &["log", "txt"])
-            .set_file_name(source.file_name().and_then(|n| n.to_str()).unwrap_or("simulation.log").to_string());
+            .set_file_name(
+                source
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("simulation.log")
+                    .to_string(),
+            );
         if let Some(path) = dialog.save_file() {
             match std::fs::copy(&source, &path) {
-                Ok(bytes) => self.status_message = Some(format!(
-                    "Log exported to {} ({} bytes)", path.display(), bytes
-                )),
+                Ok(bytes) => {
+                    self.status_message = Some(format!(
+                        "Log exported to {} ({} bytes)",
+                        path.display(),
+                        bytes
+                    ))
+                }
                 Err(error) => self.status_message = Some(format!("Log export failed: {error}")),
             }
         }

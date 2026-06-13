@@ -2,21 +2,12 @@
 //!
 use osl_kicad::KicadSchematic;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct EditHistory {
     /// Snapshots to undo back to (most recent last).
     undo_stack: Vec<KicadSchematic>,
     /// Snapshots to redo forward to (most recent last).
     redo_stack: Vec<KicadSchematic>,
-}
-
-impl Default for EditHistory {
-    fn default() -> Self {
-        Self {
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
-        }
-    }
 }
 
 impl EditHistory {

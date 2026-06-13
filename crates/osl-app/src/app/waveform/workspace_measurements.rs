@@ -3,11 +3,11 @@
 //! Split from workspace_sections.rs to keep files under 300 lines.
 //! Provides measurement table and run statistics panel for the waveform workspace.
 
-use eframe::egui;
+use super::workspace_widgets::{MeasurementTableLabels, measurement_table, run_stat_row};
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
-use super::workspace_widgets::{MeasurementTableLabels, measurement_table, run_stat_row};
+use eframe::egui;
 
 /// Maximum number of measurement rows to display before collapsing.
 const MEASUREMENT_LIMIT: usize = 8;
@@ -58,12 +58,27 @@ impl NekoSpiceApp {
                 .current_waveform_summary()
                 .map(|summary| summary.variable_count.to_string())
                 .unwrap_or_else(|| "0".to_string());
-            run_stat_row(ui, mode, self.text(UiText::StatusConsole), run.metadata.status.as_str());
+            run_stat_row(
+                ui,
+                mode,
+                self.text(UiText::StatusConsole),
+                run.metadata.status.as_str(),
+            );
             run_stat_row(ui, mode, self.text(UiText::Backend), &run.metadata.backend);
-            run_stat_row(ui, mode, self.text(UiText::LastRun), &format!("{} ms", run.metadata.duration_ms));
+            run_stat_row(
+                ui,
+                mode,
+                self.text(UiText::LastRun),
+                &format!("{} ms", run.metadata.duration_ms),
+            );
             run_stat_row(ui, mode, self.text(UiText::Points), &point_count);
             run_stat_row(ui, mode, self.text(UiText::Signals), &variable_count);
-            run_stat_row(ui, mode, self.text(UiText::Artifacts), &run.metadata.artifacts.len().to_string());
+            run_stat_row(
+                ui,
+                mode,
+                self.text(UiText::Artifacts),
+                &run.metadata.artifacts.len().to_string(),
+            );
         });
     }
 }

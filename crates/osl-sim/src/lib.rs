@@ -1,14 +1,12 @@
 //! Simulation backend library - ngspice/Xyce profile building, netlist injection, and log parsing.
 
-
 mod artifacts;
 mod profile;
 
 pub use profile::{
-    simulation_preset, available_presets,
-    SimulationProfile, SpiceMethod, ProfileParamEntry,
-    inject_profile_directives, validate_netlist_for_simulation,
-    parse_ngspice_log, format_simulation_log_summary,
+    ProfileParamEntry, SimulationProfile, SpiceMethod, available_presets,
+    format_simulation_log_summary, inject_profile_directives, parse_ngspice_log, simulation_preset,
+    validate_netlist_for_simulation,
 };
 
 pub use artifacts::{
@@ -435,8 +433,7 @@ impl SimulatorBackend for XyceCliBackend {
         let working_netlist = output_abs.join("input.sp");
 
         let source = read_text(&source_abs)?;
-        let working_source =
-            apply_parameter_overrides(&prepare_xyce_netlist(&source), parameters);
+        let working_source = apply_parameter_overrides(&prepare_xyce_netlist(&source), parameters);
         write_text(&working_netlist, &working_source)?;
         copy_relative_dependencies(&source_abs, &source, &output_abs)?;
 
@@ -507,9 +504,7 @@ fn extract_netlist_nodes(source: &str, max_nodes: usize) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
 
     // SPICE component prefixes: R, C, L, V, I, D, Q, M, J, B, K, F, E, G, H, T, U, W, X
-    let component_re = regex::Regex::new(
-        r"(?i)^[rcdvijqbkegfhtuwx]\S+\s+(\S+)\s+(\S+)"
-    ).unwrap();
+    let component_re = regex::Regex::new(r"(?i)^[rcdvijqbkegfhtuwx]\S+\s+(\S+)\s+(\S+)").unwrap();
 
     for line in source.lines() {
         let trimmed = line.trim();
@@ -611,9 +606,18 @@ fn prepare_xyce_netlist(source: &str) -> String {
     output
 }
 
+/// 为 UI 预览生成 Xyce 格式的网表。
+/// 与 prepare_xyce_netlist 相同逻辑，但公开给 GUI 层使用。
+pub fn prepare_xyce_netlist_display(source: &str) -> String {
+    prepare_xyce_netlist(source)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{apply_parameter_overrides, ensure_ngspice_control_exports, extract_netlist_nodes, relative_dependencies, prepare_xyce_netlist};
+    use super::{
+        apply_parameter_overrides, ensure_ngspice_control_exports, extract_netlist_nodes,
+        prepare_xyce_netlist, relative_dependencies,
+    };
     use osl_core::ParameterOverride;
 
     #[test]
@@ -683,7 +687,8 @@ mod tests {
 
     #[test]
     fn prepare_xyce_netlist_strips_control_blocks() {
-        let source = ".tran 1n 1u\n.control\nrun\nwrite waveform.raw all\n.endc\nR1 in out 1k\n.end\n";
+        let source =
+            ".tran 1n 1u\n.control\nrun\nwrite waveform.raw all\n.endc\nR1 in out 1k\n.end\n";
         let output = prepare_xyce_netlist(source);
         assert!(!output.contains(".control"));
         assert!(!output.contains(".endc"));
@@ -733,10 +738,4 @@ mod tests {
         let nodes = extract_netlist_nodes(source, 3);
         assert!(nodes.len() <= 3);
     }
-}
-
-/// 为 UI 预览生成 Xyce 格式的网表。
-/// 与 prepare_xyce_netlist 相同逻辑，但公开给 GUI 层使用。
-pub fn prepare_xyce_netlist_display(source: &str) -> String {
-    prepare_xyce_netlist(source)
 }

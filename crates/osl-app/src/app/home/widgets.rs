@@ -59,7 +59,10 @@ pub(crate) fn section_header_clickable(
     ui.horizontal(|ui| {
         ui.label(StudioTheme::section_title_for(mode, title));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.selectable_label(false, StudioTheme::accent_for(mode, action)).clicked() {
+            if ui
+                .selectable_label(false, StudioTheme::accent_for(mode, action))
+                .clicked()
+            {
                 clicked = true;
             }
         });

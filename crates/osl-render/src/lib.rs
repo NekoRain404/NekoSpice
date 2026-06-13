@@ -33,6 +33,4 @@ pub fn render_kicad_scene_svg(scene: &KicadCanvasScene) -> String {
     render_kicad_scene_svg_with_options(scene, SvgRenderOptions::default())
 }
 
-
 include!("svg_render_impl.rs");
-

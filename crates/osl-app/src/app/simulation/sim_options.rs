@@ -5,7 +5,6 @@
 //!
 //! Also provides named presets that apply groups of settings at once.
 
-
 /// Editable simulation options shown in the profile editor.
 ///
 /// These map directly to SPICE `.options` directives. Organized into
@@ -86,7 +85,7 @@ impl Default for SimOptions {
 impl SimOptions {
     /// Apply a named preset's values, overwriting all current settings.
     pub(crate) fn apply_preset(&mut self, preset: &str) {
-        use osl_sim::{simulation_preset, SpiceMethod};
+        use osl_sim::{SpiceMethod, simulation_preset};
         let p = simulation_preset(preset);
         self.temperature = p.temperature;
         self.tnom = p.tnom;

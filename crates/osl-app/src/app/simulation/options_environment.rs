@@ -3,9 +3,9 @@
 //! Uses field validation to show colored borders when values are outside
 //! expected ranges (e.g. below absolute zero).
 
-use crate::app::NekoSpiceApp;
 use super::field_validation::{validate_temperature, validated_frame};
 use super::profile_editor_widgets::section_header;
+use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
@@ -29,22 +29,28 @@ pub(crate) fn draw_environment_section(
             .spacing([8.0, 6.0])
             .show(ui, |ui| {
                 // Temperature with validation
-                let temp_validity = validate_temperature(&app.simulation_profile_editor.options.temperature);
+                let temp_validity =
+                    validate_temperature(&app.simulation_profile_editor.options.temperature);
                 ui.label(StudioTheme::muted_for(mode, "Temperature (°C)"));
                 validated_frame(temp_validity, &palette).show(ui, |ui| {
                     let resp = ui.add(
-                        egui::TextEdit::singleline(&mut app.simulation_profile_editor.options.temperature)
-                            .desired_width(120.0)
-                            .hint_text("27"),
+                        egui::TextEdit::singleline(
+                            &mut app.simulation_profile_editor.options.temperature,
+                        )
+                        .desired_width(120.0)
+                        .hint_text("27"),
                     );
                     let tip = temp_validity.tooltip();
                     changed |= resp.changed();
-                    if !tip.is_empty() { resp.on_hover_text(tip); }
+                    if !tip.is_empty() {
+                        resp.on_hover_text(tip);
+                    }
                 });
                 ui.end_row();
 
                 // TNOM with validation
-                let tnom_validity = validate_temperature(&app.simulation_profile_editor.options.tnom);
+                let tnom_validity =
+                    validate_temperature(&app.simulation_profile_editor.options.tnom);
                 ui.label(StudioTheme::muted_for(mode, "TNOM (°C)"));
                 validated_frame(tnom_validity, &palette).show(ui, |ui| {
                     let resp = ui.add(
@@ -54,7 +60,9 @@ pub(crate) fn draw_environment_section(
                     );
                     let tip = tnom_validity.tooltip();
                     changed |= resp.changed();
-                    if !tip.is_empty() { resp.on_hover_text(tip); }
+                    if !tip.is_empty() {
+                        resp.on_hover_text(tip);
+                    }
                 });
                 ui.end_row();
             });

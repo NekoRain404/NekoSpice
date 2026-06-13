@@ -1,9 +1,9 @@
 //! 符号渲染图元。绘制引脚、轮廓和标号文本。
 //!
-use crate::viewport::CanvasViewport;
 use super::super::colors::SchematicColors;
-use super::{draw_polyline, draw_line, quadratic_bezier_sample};
 use super::draw_rotated_text;
+use super::{draw_line, draw_polyline, quadratic_bezier_sample};
+use crate::viewport::CanvasViewport;
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, StrokeKind};
 /// Resolve font size from KiCad text effects, with a minimum of 6pt.
 fn resolve_font_size(effects: &Option<osl_kicad::KicadTextEffects>) -> f32 {
@@ -44,9 +44,19 @@ pub(crate) fn draw_graphic(
     color: Color32,
 ) {
     match graphic {
-        KicadCanvasGraphic::Polyline { points, fill, stroke, .. } => {
+        KicadCanvasGraphic::Polyline {
+            points,
+            fill,
+            stroke,
+            ..
+        } => {
             // Draw fill if present and closed
-            if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) && points.len() > 2 {
+            if fill
+                .as_ref()
+                .and_then(|f| f.fill_type.as_deref())
+                .is_some_and(|ft| !ft.eq_ignore_ascii_case("none"))
+                && points.len() > 2
+            {
                 let screen_points: Vec<Pos2> = points
                     .iter()
                     .map(|p| viewport.world_to_screen(rect, *p))
@@ -60,10 +70,20 @@ pub(crate) fn draw_graphic(
             let width = resolve_stroke_width(stroke, viewport, 1.0);
             draw_polyline(painter, rect, viewport, points, false, color, width);
         }
-        KicadCanvasGraphic::Bezier { points, fill, stroke, .. } => {
+        KicadCanvasGraphic::Bezier {
+            points,
+            fill,
+            stroke,
+            ..
+        } => {
             if points.len() >= 3 {
                 let sampled = quadratic_bezier_sample(points, 24);
-                if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) && sampled.len() > 2 {
+                if fill
+                    .as_ref()
+                    .and_then(|f| f.fill_type.as_deref())
+                    .is_some_and(|ft| !ft.eq_ignore_ascii_case("none"))
+                    && sampled.len() > 2
+                {
                     let screen_points: Vec<Pos2> = sampled
                         .iter()
                         .map(|p| viewport.world_to_screen(rect, *p))
@@ -81,29 +101,57 @@ pub(crate) fn draw_graphic(
                 draw_polyline(painter, rect, viewport, points, false, color, width);
             }
         }
-        KicadCanvasGraphic::Rectangle { start, end, fill, stroke, .. } => {
+        KicadCanvasGraphic::Rectangle {
+            start,
+            end,
+            fill,
+            stroke,
+            ..
+        } => {
             let s = viewport.world_to_screen(rect, *start);
             let e = viewport.world_to_screen(rect, *end);
             let r = Rect::from_two_pos(s, e);
             // Draw fill if present
-            if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) {
+            if fill
+                .as_ref()
+                .and_then(|f| f.fill_type.as_deref())
+                .is_some_and(|ft| !ft.eq_ignore_ascii_case("none"))
+            {
                 painter.rect_filled(r, 0.0, Color32::from_rgba_premultiplied(200, 200, 200, 30));
             }
             let width = resolve_stroke_width(stroke, viewport, 1.0);
             painter.rect_stroke(r, 0.0, Stroke::new(width, color), StrokeKind::Inside);
         }
-        KicadCanvasGraphic::Circle { center, radius, fill, stroke, .. } => {
+        KicadCanvasGraphic::Circle {
+            center,
+            radius,
+            fill,
+            stroke,
+            ..
+        } => {
             let center_screen = viewport.world_to_screen(rect, *center);
             let radius_screen = (*radius as f32 * viewport.zoom).abs();
             // Draw fill if present
-            if fill.as_ref().and_then(|f| f.fill_type.as_deref()).is_some_and(|ft| !ft.eq_ignore_ascii_case("none")) {
-                painter.circle_filled(center_screen, radius_screen, Color32::from_rgba_premultiplied(200, 200, 200, 30));
+            if fill
+                .as_ref()
+                .and_then(|f| f.fill_type.as_deref())
+                .is_some_and(|ft| !ft.eq_ignore_ascii_case("none"))
+            {
+                painter.circle_filled(
+                    center_screen,
+                    radius_screen,
+                    Color32::from_rgba_premultiplied(200, 200, 200, 30),
+                );
             }
             let width = resolve_stroke_width(stroke, viewport, 1.0);
             painter.circle_stroke(center_screen, radius_screen, Stroke::new(width, color));
         }
         KicadCanvasGraphic::Arc {
-            start, mid, end, stroke, ..
+            start,
+            mid,
+            end,
+            stroke,
+            ..
         } => {
             let sampled = sample_kicad_arc_points(*start, *mid, *end);
             let width = resolve_stroke_width(stroke, viewport, 1.0);
@@ -119,8 +167,6 @@ pub(crate) fn draw_graphic(
         }
     }
 }
-
-
 
 /// draw pin。
 pub(crate) fn draw_pin(
@@ -162,10 +208,7 @@ pub(crate) fn draw_pin(
             let center = viewport.world_to_screen(rect, pin.start);
             let r = triangle_size as f32 * viewport.zoom;
             // Triangle vertices pointing in pin direction
-            let tip = Pos2::new(
-                center.x + nx as f32 * r,
-                center.y + ny as f32 * r,
-            );
+            let tip = Pos2::new(center.x + nx as f32 * r, center.y + ny as f32 * r);
             let base1 = Pos2::new(
                 center.x - ny as f32 * r * 0.5,
                 center.y + nx as f32 * r * 0.5,
@@ -182,10 +225,7 @@ pub(crate) fn draw_pin(
             // Triangle + circle
             let center = viewport.world_to_screen(rect, pin.start);
             let r = triangle_size as f32 * viewport.zoom;
-            let tip = Pos2::new(
-                center.x + nx as f32 * r,
-                center.y + ny as f32 * r,
-            );
+            let tip = Pos2::new(center.x + nx as f32 * r, center.y + ny as f32 * r);
             let base1 = Pos2::new(
                 center.x - ny as f32 * r * 0.5,
                 center.y + nx as f32 * r * 0.5,
@@ -205,24 +245,15 @@ pub(crate) fn draw_pin(
             // Bar at body end
             let center = viewport.world_to_screen(rect, pin.start);
             let r = radius as f32 * viewport.zoom;
-            let bar1 = Pos2::new(
-                center.x - ny as f32 * r,
-                center.y + nx as f32 * r,
-            );
-            let bar2 = Pos2::new(
-                center.x + ny as f32 * r,
-                center.y - nx as f32 * r,
-            );
+            let bar1 = Pos2::new(center.x - ny as f32 * r, center.y + nx as f32 * r);
+            let bar2 = Pos2::new(center.x + ny as f32 * r, center.y - nx as f32 * r);
             painter.line_segment([bar1, bar2], Stroke::new(width, color));
         }
         "clock_low" | "falling_edge_clock" => {
             // Triangle at body end
             let center = viewport.world_to_screen(rect, pin.start);
             let r = triangle_size as f32 * viewport.zoom;
-            let tip = Pos2::new(
-                center.x + nx as f32 * r,
-                center.y + ny as f32 * r,
-            );
+            let tip = Pos2::new(center.x + nx as f32 * r, center.y + ny as f32 * r);
             let base1 = Pos2::new(
                 center.x - ny as f32 * r * 0.5,
                 center.y + nx as f32 * r * 0.5,
@@ -239,22 +270,10 @@ pub(crate) fn draw_pin(
             // X at body end
             let center = viewport.world_to_screen(rect, pin.start);
             let r = radius as f32 * viewport.zoom;
-            let p1 = Pos2::new(
-                center.x - r,
-                center.y - r,
-            );
-            let p2 = Pos2::new(
-                center.x + r,
-                center.y + r,
-            );
-            let p3 = Pos2::new(
-                center.x + r,
-                center.y - r,
-            );
-            let p4 = Pos2::new(
-                center.x - r,
-                center.y + r,
-            );
+            let p1 = Pos2::new(center.x - r, center.y - r);
+            let p2 = Pos2::new(center.x + r, center.y + r);
+            let p3 = Pos2::new(center.x + r, center.y - r);
+            let p4 = Pos2::new(center.x - r, center.y + r);
             painter.line_segment([p1, p2], Stroke::new(width, color));
             painter.line_segment([p3, p4], Stroke::new(width, color));
         }
@@ -263,4 +282,3 @@ pub(crate) fn draw_pin(
         }
     }
 }
-

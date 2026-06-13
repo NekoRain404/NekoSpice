@@ -3,8 +3,8 @@
 //! Provides the template grid on the home dashboard. Each template
 //! represents a starting-point circuit (OpAmp, DC-DC, LDO, etc.).
 
-use crate::app::NekoSpiceApp;
 use super::widgets::{section_header_clickable, template_card};
+use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::navigation::StudioWorkspace;
 use eframe::egui::{self, Vec2};
@@ -19,11 +19,26 @@ pub(super) struct HomeTemplate {
 /// Available home templates.
 pub(super) fn home_templates() -> [HomeTemplate; 5] {
     [
-        HomeTemplate { name: UiText::TemplateOpAmp, caption: "Single / Dual OpAmp" },
-        HomeTemplate { name: UiText::TemplateDcDc, caption: "Buck / Boost" },
-        HomeTemplate { name: UiText::TemplateLdo, caption: "Low Dropout" },
-        HomeTemplate { name: UiText::TemplateDifferentialPair, caption: "Analog Front End" },
-        HomeTemplate { name: UiText::TemplatePowerSupply, caption: "SMPS / Flyback" },
+        HomeTemplate {
+            name: UiText::TemplateOpAmp,
+            caption: "Single / Dual OpAmp",
+        },
+        HomeTemplate {
+            name: UiText::TemplateDcDc,
+            caption: "Buck / Boost",
+        },
+        HomeTemplate {
+            name: UiText::TemplateLdo,
+            caption: "Low Dropout",
+        },
+        HomeTemplate {
+            name: UiText::TemplateDifferentialPair,
+            caption: "Analog Front End",
+        },
+        HomeTemplate {
+            name: UiText::TemplatePowerSupply,
+            caption: "SMPS / Flyback",
+        },
     ]
 }
 
@@ -43,12 +58,18 @@ impl NekoSpiceApp {
 
         let spacing = 10.0;
         let available_width = ui.available_width();
-        let columns: usize = if available_width >= 850.0 { 5 }
-            else if available_width >= 620.0 { 3 }
-            else if available_width >= 390.0 { 2 }
-            else { 1 };
+        let columns: usize = if available_width >= 850.0 {
+            5
+        } else if available_width >= 620.0 {
+            3
+        } else if available_width >= 390.0 {
+            2
+        } else {
+            1
+        };
         let card_width = ((available_width - spacing * (columns.saturating_sub(1) as f32))
-            / columns as f32).max(150.0);
+            / columns as f32)
+            .max(150.0);
 
         egui::Grid::new("home_template_grid")
             .num_columns(columns)
@@ -59,7 +80,13 @@ impl NekoSpiceApp {
                         Vec2::new(card_width, 126.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            template_card(ui, mode, self.text(template.name), template.caption, self.text(UiText::Use));
+                            template_card(
+                                ui,
+                                mode,
+                                self.text(template.name),
+                                template.caption,
+                                self.text(UiText::Use),
+                            );
                         },
                     );
                     if (index + 1) % columns == 0 {

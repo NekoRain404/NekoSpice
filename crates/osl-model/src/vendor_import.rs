@@ -4,8 +4,8 @@
 //! 提取子电路定义和模型参数，供仿真引擎使用。
 
 use osl_core::{OslError, OslResult};
-use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 /// 厂商类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +24,11 @@ impl VendorKind {
         let path_str = path.to_string_lossy().to_lowercase();
         if path_str.contains("ti/") || path_str.contains("texas") || path_str.contains("ti_") {
             VendorKind::Ti
-        } else if path_str.contains("adi/") || path_str.contains("analog") || path_str.contains("ltspice") || path_str.contains("lt_") {
+        } else if path_str.contains("adi/")
+            || path_str.contains("analog")
+            || path_str.contains("ltspice")
+            || path_str.contains("lt_")
+        {
             VendorKind::Adi
         } else {
             VendorKind::Generic
@@ -122,11 +126,10 @@ fn import_dir_recursive(path: &Path, results: &mut Vec<VendorImportResult>) -> O
         let entry_path = entry.path();
         if entry_path.is_dir() {
             import_dir_recursive(&entry_path, results)?;
-        } else if is_spice_model_file(&entry_path) {
-            match import_spice_model_file(&entry_path) {
-                Ok(result) => results.push(result),
-                Err(_) => {}
-            }
+        } else if is_spice_model_file(&entry_path)
+            && let Ok(result) = import_spice_model_file(&entry_path)
+        {
+            results.push(result)
         }
     }
     Ok(())
@@ -175,12 +178,11 @@ fn parse_spice_model_content(
         }
 
         // 处理续行（以 + 开头）
-        if trimmed.starts_with('+') {
+        if let Some(continuation) = trimmed.strip_prefix('+') {
             if let Some(ref mut builder) = open_subckt {
                 builder.body.push_str(line);
                 builder.body.push('\n');
                 // 解析续行中的引脚
-                let continuation = &trimmed[1..];
                 for token in continuation.split_whitespace() {
                     let token = token.trim_matches(',');
                     if !token.is_empty() && !token.contains('=') && !token.starts_with('.') {
@@ -204,10 +206,9 @@ fn parse_spice_model_content(
 
             let tokens: Vec<&str> = trimmed.split_whitespace().collect();
             if tokens.len() < 2 {
-                result.warnings.push(format!(
-                    ".subckt missing name at line {}",
-                    current_line
-                ));
+                result
+                    .warnings
+                    .push(format!(".subckt missing name at line {}", current_line));
                 continue;
             }
 
@@ -362,11 +363,15 @@ impl VendorModelCatalog {
 
     /// 按厂商筛选
     pub fn filter_by_vendor(&self, vendor: VendorKind) -> Self {
-        let subckts = self.subckts.iter()
+        let subckts = self
+            .subckts
+            .iter()
             .filter(|(_, entry)| entry.vendor == vendor)
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        let models = self.models.iter()
+        let models = self
+            .models
+            .iter()
             .filter(|(_, entry)| entry.vendor == vendor)
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
@@ -376,11 +381,15 @@ impl VendorModelCatalog {
     /// 按名称搜索
     pub fn search(&self, query: &str) -> Self {
         let query = query.to_lowercase();
-        let subckts = self.subckts.iter()
+        let subckts = self
+            .subckts
+            .iter()
             .filter(|(name, _)| name.to_lowercase().contains(&query))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        let models = self.models.iter()
+        let models = self
+            .models
+            .iter()
             .filter(|(name, _)| name.to_lowercase().contains(&query))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
@@ -438,28 +447,43 @@ E1 OUT 0 IN+ IN- 10
 
     #[test]
     fn vendor_detection() {
-        assert_eq!(VendorKind::detect(Path::new("/opt/ti/models/TLV733.lib")), VendorKind::Ti);
-        assert_eq!(VendorKind::detect(Path::new("/opt/adi/models/AD8065.lib")), VendorKind::Adi);
-        assert_eq!(VendorKind::detect(Path::new("/home/user/models/RC.lib")), VendorKind::Generic);
+        assert_eq!(
+            VendorKind::detect(Path::new("/opt/ti/models/TLV733.lib")),
+            VendorKind::Ti
+        );
+        assert_eq!(
+            VendorKind::detect(Path::new("/opt/adi/models/AD8065.lib")),
+            VendorKind::Adi
+        );
+        assert_eq!(
+            VendorKind::detect(Path::new("/home/user/models/RC.lib")),
+            VendorKind::Generic
+        );
     }
 
     #[test]
     fn model_catalog_search() {
         let mut catalog = VendorModelCatalog::default();
-        catalog.subckts.insert("TLV733P".to_string(), ModelCatalogEntry {
-            name: "TLV733P".to_string(),
-            pins: vec!["IN".into(), "OUT".into()],
-            source: "ti.lib".into(),
-            vendor: VendorKind::Ti,
-            body: String::new(),
-        });
-        catalog.subckts.insert("AD8065".to_string(), ModelCatalogEntry {
-            name: "AD8065".to_string(),
-            pins: vec!["IN+".into(), "IN-".into(), "OUT".into()],
-            source: "adi.lib".into(),
-            vendor: VendorKind::Adi,
-            body: String::new(),
-        });
+        catalog.subckts.insert(
+            "TLV733P".to_string(),
+            ModelCatalogEntry {
+                name: "TLV733P".to_string(),
+                pins: vec!["IN".into(), "OUT".into()],
+                source: "ti.lib".into(),
+                vendor: VendorKind::Ti,
+                body: String::new(),
+            },
+        );
+        catalog.subckts.insert(
+            "AD8065".to_string(),
+            ModelCatalogEntry {
+                name: "AD8065".to_string(),
+                pins: vec!["IN+".into(), "IN-".into(), "OUT".into()],
+                source: "adi.lib".into(),
+                vendor: VendorKind::Adi,
+                body: String::new(),
+            },
+        );
 
         let ti_only = catalog.filter_by_vendor(VendorKind::Ti);
         assert_eq!(ti_only.total_count(), 1);

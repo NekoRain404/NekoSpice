@@ -10,9 +10,9 @@
 //! - **Decade**: points per decade (`.step param R1 dec 10 1k 100k`)
 //! - **Octave**: points per octave (`.step param R1 oct 10 1k 100k`)
 
-use crate::app::NekoSpiceApp;
-use super::state::StepSweep;
 use super::profile_editor_widgets::section_header;
+use super::state::StepSweep;
+use crate::app::NekoSpiceApp;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
 
@@ -37,7 +37,10 @@ impl NekoSpiceApp {
             // Toggle sweep on/off
             let sweep_active = self.simulation_panel.step_sweep != StepSweep::None;
             let mut active = sweep_active;
-            if ui.checkbox(&mut active, "Enable .step parameter sweep").changed() {
+            if ui
+                .checkbox(&mut active, "Enable .step parameter sweep")
+                .changed()
+            {
                 if active && self.simulation_panel.step_sweep == StepSweep::None {
                     self.simulation_panel.step_sweep = StepSweep::Parametric {
                         param_name: DEFAULT_PARAM_NAME.to_string(),
@@ -58,13 +61,18 @@ impl NekoSpiceApp {
 
                 // Sweep type selector: Parametric vs Temperature
                 ui.label(StudioTheme::muted_for(mode, "Sweep Type"));
-                let is_temp = matches!(self.simulation_panel.step_sweep, StepSweep::Temperature { .. });
+                let is_temp = matches!(
+                    self.simulation_panel.step_sweep,
+                    StepSweep::Temperature { .. }
+                );
                 ui.horizontal(|ui| {
                     for (label, is_param) in [("Parametric", !is_temp), ("Temperature", is_temp)] {
                         let btn = if is_param {
-                            egui::Button::new(egui::RichText::new(label).strong().color(palette.text))
-                                .fill(palette.accent_soft)
-                                .stroke(egui::Stroke::new(1.0, palette.accent))
+                            egui::Button::new(
+                                egui::RichText::new(label).strong().color(palette.text),
+                            )
+                            .fill(palette.accent_soft)
+                            .stroke(egui::Stroke::new(1.0, palette.accent))
                         } else {
                             egui::Button::new(egui::RichText::new(label).color(palette.text_muted))
                                 .fill(palette.panel_soft)

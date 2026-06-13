@@ -19,12 +19,12 @@ mod labels;
 mod library_index;
 mod markers;
 mod metadata;
+mod new_schematic;
 mod pins;
 mod project;
 mod property;
 mod schematic_io;
 mod schematic_summary;
-mod new_schematic;
 mod sexpr;
 mod sheet;
 mod simulation;
@@ -198,12 +198,10 @@ pub struct KicadSchematic {
     pub embedded_fonts: Option<bool>,
 }
 
-
 include!("schematic_edit_impl.rs");
 include!("schematic_library_impl.rs");
 include!("schematic_check_impl.rs");
 include!("schematic_util_impl.rs");
-
 
 fn library_symbol_definitions_are_compatible(
     existing: &KicadSymbolDef,

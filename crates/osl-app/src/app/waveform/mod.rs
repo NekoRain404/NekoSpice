@@ -15,15 +15,15 @@
 //! - `freq_domain_preview.rs` — FFT/Bode/Noise frequency-domain plots
 //! - `helpers.rs` — shared helper functions (trace ordering, labels)
 
+pub(crate) mod freq_domain_preview;
+pub(crate) mod freq_domain_primitives;
 pub(crate) mod helpers;
+pub(crate) mod interactive;
 pub(crate) mod preview;
 pub(crate) mod preview_primitives;
-pub(crate) mod interactive;
-pub(crate) mod freq_domain_primitives;
-pub(crate) mod freq_domain_preview;
 pub(crate) mod workspace;
-pub(crate) mod workspace_sections;
 pub(crate) mod workspace_measurements;
+pub(crate) mod workspace_sections;
 pub(crate) mod workspace_sidepanels;
 pub(crate) mod workspace_widgets;
 

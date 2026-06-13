@@ -3,8 +3,8 @@
 //!
 //! `trace_chip` supports both single-select and multi-select modes.
 
-use crate::app::theme::{StudioTheme, StudioThemeMode};
 use super::preview::format_compact_f64;
+use crate::app::theme::{StudioTheme, StudioThemeMode};
 use crate::waveform_summary::GuiWaveformVariableSummary;
 use eframe::egui::{self, RichText};
 
@@ -19,10 +19,22 @@ pub(crate) fn waveform_mode_tab(
     ui.add_sized(
         [104.0, 30.0],
         egui::Button::new(label)
-            .fill(if selected { palette.accent_soft } else { palette.panel_soft })
-            .stroke(egui::Stroke::new(1.0, if selected { palette.accent } else { palette.border }))
+            .fill(if selected {
+                palette.accent_soft
+            } else {
+                palette.panel_soft
+            })
+            .stroke(egui::Stroke::new(
+                1.0,
+                if selected {
+                    palette.accent
+                } else {
+                    palette.border
+                },
+            ))
             .corner_radius(5),
-    ).clicked()
+    )
+    .clicked()
 }
 
 /// Single-select trace chip — highlights when active.
@@ -41,10 +53,22 @@ pub(crate) fn trace_chip(
     };
     ui.add(
         egui::Button::new(RichText::new(caption).monospace())
-            .fill(if selected { palette.accent_soft } else { palette.panel_soft })
-            .stroke(egui::Stroke::new(1.0, if selected { palette.accent } else { palette.border }))
+            .fill(if selected {
+                palette.accent_soft
+            } else {
+                palette.panel_soft
+            })
+            .stroke(egui::Stroke::new(
+                1.0,
+                if selected {
+                    palette.accent
+                } else {
+                    palette.border
+                },
+            ))
             .corner_radius(5),
-    ).clicked()
+    )
+    .clicked()
 }
 
 /// Multi-select trace chip — toggles visibility in overlay mode.
@@ -64,10 +88,22 @@ pub(crate) fn trace_chip_toggle(
     };
     ui.add(
         egui::Button::new(RichText::new(caption).monospace())
-            .fill(if visible { palette.accent_soft } else { palette.panel_soft })
-            .stroke(egui::Stroke::new(1.0, if visible { palette.accent } else { palette.border }))
+            .fill(if visible {
+                palette.accent_soft
+            } else {
+                palette.panel_soft
+            })
+            .stroke(egui::Stroke::new(
+                1.0,
+                if visible {
+                    palette.accent
+                } else {
+                    palette.border
+                },
+            ))
             .corner_radius(5),
-    ).clicked()
+    )
+    .clicked()
 }
 
 /// Empty state placeholder for waveform workspace.
@@ -116,7 +152,11 @@ pub(crate) fn measurement_table(
             }
         });
     if variables.len() > limit {
-        ui.label(format!("{} {}", variables.len() - limit, labels.more_variables));
+        ui.label(format!(
+            "{} {}",
+            variables.len() - limit,
+            labels.more_variables
+        ));
     }
 }
 

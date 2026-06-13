@@ -5,15 +5,15 @@ use super::localization::UiText;
 use super::navigation::StudioWorkspace;
 use super::theme::{StudioTheme, StudioThemeMode};
 use super::widgets::metric_row;
-use eframe::egui::{self, CornerRadius, Color32, RichText, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 
 /// Returns the Unicode icon character for each workspace.
 ///
 /// Uses distinct Unicode symbols that are visually clear at small sizes.
 fn workspace_icon(ws: StudioWorkspace) -> &'static str {
     match ws {
-        StudioWorkspace::Home => "\u{2302}",        // house
-        StudioWorkspace::Schematic => "\u{25CE}",   // target/crosshair
+        StudioWorkspace::Home => "\u{2302}",         // house
+        StudioWorkspace::Schematic => "\u{25CE}",    // target/crosshair
         StudioWorkspace::Library => "\u{2630}",      // trigram (three lines)
         StudioWorkspace::Simulation => "\u{25B6}",   // play button
         StudioWorkspace::Optimization => "\u{2699}", // gear/cog
@@ -53,7 +53,11 @@ fn draw_workspace_button(
             ui.add_space(12.0);
             ui.label(
                 RichText::new(icon)
-                    .color(if selected { palette.accent } else { palette.text })
+                    .color(if selected {
+                        palette.accent
+                    } else {
+                        palette.text
+                    })
                     .strong()
                     .size(18.0),
             );
@@ -74,10 +78,7 @@ fn draw_workspace_button(
 
     if selected {
         // Bright left bar indicator
-        let bar = eframe::egui::Rect::from_min_size(
-            rect.left_top(),
-            Vec2::new(3.0, rect.height()),
-        );
+        let bar = eframe::egui::Rect::from_min_size(rect.left_top(), Vec2::new(3.0, rect.height()));
         painter.rect_filled(bar, CornerRadius::same(0), palette.accent);
         // Subtle background tint for selected item
         painter.rect_filled(rect, corner, palette.accent_soft);
@@ -86,7 +87,14 @@ fn draw_workspace_button(
     painter.rect_stroke(
         rect,
         corner,
-        Stroke::new(1.0, if selected { palette.accent } else { Color32::TRANSPARENT }),
+        Stroke::new(
+            1.0,
+            if selected {
+                palette.accent
+            } else {
+                Color32::TRANSPARENT
+            },
+        ),
         eframe::egui::StrokeKind::Inside,
     );
 

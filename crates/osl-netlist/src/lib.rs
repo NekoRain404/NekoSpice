@@ -728,6 +728,4 @@ impl ImportSeverity {
     }
 }
 
-
 include!("netlist_parse_impl.rs");
-

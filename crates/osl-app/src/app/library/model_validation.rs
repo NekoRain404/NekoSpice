@@ -1,7 +1,7 @@
 //! Model validation — check SPICE model compatibility and pin mapping.
 
-use crate::app::NekoSpiceApp;
 use super::widgets::{metadata_row, validation_row};
+use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
@@ -15,18 +15,46 @@ impl NekoSpiceApp {
                 mode,
                 self.text(UiText::Validation),
             ));
-            let (sym_count, lib_count, diag_count) = self.library.as_ref().map(|l| {
-                let idx = l.index();
-                (idx.symbols.len(), idx.libraries.len(), idx.diagnostics.len())
-            }).unwrap_or((0, 0, 0));
-            let status = if diag_count == 0 { "Passed" } else { &format!("{} issues", diag_count) };
+            let (sym_count, lib_count, diag_count) = self
+                .library
+                .as_ref()
+                .map(|l| {
+                    let idx = l.index();
+                    (
+                        idx.symbols.len(),
+                        idx.libraries.len(),
+                        idx.diagnostics.len(),
+                    )
+                })
+                .unwrap_or((0, 0, 0));
+            let status = if diag_count == 0 {
+                "Passed"
+            } else {
+                &format!("{} issues", diag_count)
+            };
             metadata_row(ui, mode, self.text(UiText::LibraryStatus), status);
-            metadata_row(ui, mode, self.text(UiText::SymbolLibrary),
-                &format!("{} libraries, {} symbols", lib_count, sym_count));
+            metadata_row(
+                ui,
+                mode,
+                self.text(UiText::SymbolLibrary),
+                &format!("{} libraries, {} symbols", lib_count, sym_count),
+            );
             ui.separator();
-            validation_row(ui, mode, "Symbol Count", &sym_count.to_string(), diag_count == 0);
+            validation_row(
+                ui,
+                mode,
+                "Symbol Count",
+                &sym_count.to_string(),
+                diag_count == 0,
+            );
             validation_row(ui, mode, "Library Count", &lib_count.to_string(), true);
-            validation_row(ui, mode, "Diagnostics", &diag_count.to_string(), diag_count == 0);
+            validation_row(
+                ui,
+                mode,
+                "Diagnostics",
+                &diag_count.to_string(),
+                diag_count == 0,
+            );
             ui.add_space(6.0);
             if ui.button(self.text(UiText::Run)).clicked() {
                 self.status_message = Some("Library validation: running checks...".to_string());

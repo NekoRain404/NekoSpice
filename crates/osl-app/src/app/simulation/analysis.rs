@@ -56,9 +56,7 @@ pub(crate) enum AnalysisParams {
         maxharmonic: String,
     },
     /// `.sens output_variable`
-    Sens {
-        output: String,
-    },
+    Sens { output: String },
 }
 
 impl Default for AnalysisParams {
@@ -119,43 +117,117 @@ impl AnalysisParams {
     pub(crate) fn parse_body(&mut self, body: &str) {
         let parts: Vec<&str> = body.split_whitespace().collect();
         match self {
-            Self::Tran { tstep, tstop, tstart, tmax, uic } => {
-                if let Some(v) = parts.get(0) { *tstep = v.to_string(); }
-                if let Some(v) = parts.get(1) { *tstop = v.to_string(); }
-                if let Some(v) = parts.get(2) { *tstart = v.to_string(); }
-                if let Some(v) = parts.get(3) {
-                    if *v != "UIC" { *tmax = v.to_string(); }
+            Self::Tran {
+                tstep,
+                tstop,
+                tstart,
+                tmax,
+                uic,
+            } => {
+                if let Some(v) = parts.first() {
+                    *tstep = v.to_string();
                 }
-                *uic = parts.iter().any(|s| *s == "UIC");
+                if let Some(v) = parts.get(1) {
+                    *tstop = v.to_string();
+                }
+                if let Some(v) = parts.get(2) {
+                    *tstart = v.to_string();
+                }
+                if let Some(v) = parts.get(3)
+                    && *v != "UIC"
+                {
+                    *tmax = v.to_string();
+                }
+                *uic = parts.contains(&"UIC");
             }
-            Self::Ac { sweep_type, npoints, fstart, fstop } => {
-                if let Some(v) = parts.get(0) { *sweep_type = v.to_string(); }
-                if let Some(v) = parts.get(1) { *npoints = v.to_string(); }
-                if let Some(v) = parts.get(2) { *fstart = v.to_string(); }
-                if let Some(v) = parts.get(3) { *fstop = v.to_string(); }
+            Self::Ac {
+                sweep_type,
+                npoints,
+                fstart,
+                fstop,
+            } => {
+                if let Some(v) = parts.first() {
+                    *sweep_type = v.to_string();
+                }
+                if let Some(v) = parts.get(1) {
+                    *npoints = v.to_string();
+                }
+                if let Some(v) = parts.get(2) {
+                    *fstart = v.to_string();
+                }
+                if let Some(v) = parts.get(3) {
+                    *fstop = v.to_string();
+                }
             }
-            Self::Dc { source, vstart, vstop, vincr } => {
-                if let Some(v) = parts.get(0) { *source = v.to_string(); }
-                if let Some(v) = parts.get(1) { *vstart = v.to_string(); }
-                if let Some(v) = parts.get(2) { *vstop = v.to_string(); }
-                if let Some(v) = parts.get(3) { *vincr = v.to_string(); }
+            Self::Dc {
+                source,
+                vstart,
+                vstop,
+                vincr,
+            } => {
+                if let Some(v) = parts.first() {
+                    *source = v.to_string();
+                }
+                if let Some(v) = parts.get(1) {
+                    *vstart = v.to_string();
+                }
+                if let Some(v) = parts.get(2) {
+                    *vstop = v.to_string();
+                }
+                if let Some(v) = parts.get(3) {
+                    *vincr = v.to_string();
+                }
             }
-            Self::Noise { output, input_source, sweep_type, npoints, fstart, fstop } => {
-                if let Some(v) = parts.get(0) { *output = v.to_string(); }
-                if let Some(v) = parts.get(1) { *input_source = v.to_string(); }
-                if let Some(v) = parts.get(2) { *sweep_type = v.to_string(); }
-                if let Some(v) = parts.get(3) { *npoints = v.to_string(); }
-                if let Some(v) = parts.get(4) { *fstart = v.to_string(); }
-                if let Some(v) = parts.get(5) { *fstop = v.to_string(); }
+            Self::Noise {
+                output,
+                input_source,
+                sweep_type,
+                npoints,
+                fstart,
+                fstop,
+            } => {
+                if let Some(v) = parts.first() {
+                    *output = v.to_string();
+                }
+                if let Some(v) = parts.get(1) {
+                    *input_source = v.to_string();
+                }
+                if let Some(v) = parts.get(2) {
+                    *sweep_type = v.to_string();
+                }
+                if let Some(v) = parts.get(3) {
+                    *npoints = v.to_string();
+                }
+                if let Some(v) = parts.get(4) {
+                    *fstart = v.to_string();
+                }
+                if let Some(v) = parts.get(5) {
+                    *fstop = v.to_string();
+                }
             }
-            Self::Disto { fstart, fstop, fstep, maxharmonic } => {
-                if let Some(v) = parts.get(0) { *fstart = v.to_string(); }
-                if let Some(v) = parts.get(1) { *fstop = v.to_string(); }
-                if let Some(v) = parts.get(2) { *fstep = v.to_string(); }
-                if let Some(v) = parts.get(3) { *maxharmonic = v.to_string(); }
+            Self::Disto {
+                fstart,
+                fstop,
+                fstep,
+                maxharmonic,
+            } => {
+                if let Some(v) = parts.first() {
+                    *fstart = v.to_string();
+                }
+                if let Some(v) = parts.get(1) {
+                    *fstop = v.to_string();
+                }
+                if let Some(v) = parts.get(2) {
+                    *fstep = v.to_string();
+                }
+                if let Some(v) = parts.get(3) {
+                    *maxharmonic = v.to_string();
+                }
             }
             Self::Sens { output } => {
-                if !body.is_empty() { *output = body.to_string(); }
+                if !body.is_empty() {
+                    *output = body.to_string();
+                }
             }
             Self::Op => {}
         }
@@ -164,7 +236,13 @@ impl AnalysisParams {
     /// Build the SPICE directive body string from structured fields.
     pub(crate) fn to_body(&self) -> String {
         match self {
-            Self::Tran { tstep, tstop, tstart, tmax, uic } => {
+            Self::Tran {
+                tstep,
+                tstop,
+                tstart,
+                tmax,
+                uic,
+            } => {
                 let mut parts = vec![tstep.clone(), tstop.clone()];
                 if !tstart.trim().is_empty() && tstart != "0" {
                     parts.push(tstart.clone());
@@ -177,20 +255,47 @@ impl AnalysisParams {
                 }
                 parts.join(" ")
             }
-            Self::Ac { sweep_type, npoints, fstart, fstop } => {
+            Self::Ac {
+                sweep_type,
+                npoints,
+                fstart,
+                fstop,
+            } => {
                 format!("{} {} {} {}", sweep_type, npoints, fstart, fstop)
             }
-            Self::Dc { source, vstart, vstop, vincr } => {
+            Self::Dc {
+                source,
+                vstart,
+                vstop,
+                vincr,
+            } => {
                 format!("{} {} {} {}", source, vstart, vstop, vincr)
             }
             Self::Op => String::new(),
-            Self::Noise { output, input_source, sweep_type, npoints, fstart, fstop } => {
+            Self::Noise {
+                output,
+                input_source,
+                sweep_type,
+                npoints,
+                fstart,
+                fstop,
+            } => {
                 format!(
                     "{} {} {} {} {} {}",
-                    output.trim(), input_source.trim(), sweep_type, npoints, fstart, fstop
+                    output.trim(),
+                    input_source.trim(),
+                    sweep_type,
+                    npoints,
+                    fstart,
+                    fstop
                 )
             }
-            Self::Disto { fstart, fstop, fstep, maxharmonic } => {
+            Self::Disto {
+                fstart,
+                fstop,
+                fstep,
+                maxharmonic,
+            } => {
                 if fstep.trim().is_empty() || fstep == "0" {
                     format!("{} {}", fstart, fstop)
                 } else if maxharmonic.trim().is_empty() || maxharmonic == "3" {
@@ -203,6 +308,5 @@ impl AnalysisParams {
         }
     }
 }
-
 
 pub(crate) use super::step_sweep::StepSweep;

@@ -1,9 +1,7 @@
 //! Schematic inspector sections — detailed property groups.
 
+use super::widgets::{compact_action, property_row, section_caption, status_pill};
 use crate::app::localization::UiText;
-use super::widgets::{
-    compact_action, property_row, section_caption, status_pill,
-};
 use crate::app::theme::StudioTheme;
 use crate::app::widgets::metric_row;
 use crate::app::{EditNudgeDirection, NekoSpiceApp};

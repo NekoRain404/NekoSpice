@@ -3,9 +3,9 @@
 //! 包含导线（wires）和总线（buses）的绘制逻辑。
 //! 连接关系的可视化是原理图的核心，这些图层决定了电气连接的清晰度。
 
-use crate::viewport::{CanvasViewport, item_visible};
 use super::colors::SchematicColors;
 use super::primitives;
+use crate::viewport::{CanvasViewport, item_visible};
 use eframe::egui;
 use osl_kicad::{KicadBoundingBox, KicadCanvasScene};
 

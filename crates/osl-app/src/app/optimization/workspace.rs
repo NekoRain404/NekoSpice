@@ -1,8 +1,8 @@
 //! Optimization workspace — center panel for parametric optimization and yield analysis.
 
+use super::widgets::metric_card;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
-use super::widgets::metric_card;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
@@ -25,9 +25,13 @@ impl NekoSpiceApp {
                         });
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                             if ui.button(self.text(UiText::StartSweep)).clicked() {
-                        self.active_workspace = crate::app::navigation::StudioWorkspace::Simulation;
-                        self.status_message = Some("Parametric sweep: configure in Simulation workspace".to_string());
-                    }
+                                self.active_workspace =
+                                    crate::app::navigation::StudioWorkspace::Simulation;
+                                self.status_message = Some(
+                                    "Parametric sweep: configure in Simulation workspace"
+                                        .to_string(),
+                                );
+                            }
                         });
                     });
                     ui.add_space(10.0);
@@ -65,15 +69,31 @@ impl NekoSpiceApp {
             self.text(UiText::OptimizationCaption),
         ));
         ui.add_space(10.0);
-        let run_count = self.simulation_panel.last_run.as_ref()
+        let run_count = self
+            .simulation_panel
+            .last_run
+            .as_ref()
             .map(|r| r.metadata.parameters.len().max(1).to_string())
             .unwrap_or_else(|| "0".to_string());
-        let status = self.simulation_panel.last_run.as_ref()
+        let status = self
+            .simulation_panel
+            .last_run
+            .as_ref()
             .map(|r| r.metadata.status.as_str().to_string())
             .unwrap_or_else(|| self.text(UiText::Queued).to_string());
-        metric_card(ui, mode, self.text(UiText::Yield),
-            &format!("{} runs", run_count), self.text(UiText::MonteCarlo));
-        metric_card(ui, mode, self.text(UiText::Constraints),
-            &status, self.text(UiText::Ready));
+        metric_card(
+            ui,
+            mode,
+            self.text(UiText::Yield),
+            &format!("{} runs", run_count),
+            self.text(UiText::MonteCarlo),
+        );
+        metric_card(
+            ui,
+            mode,
+            self.text(UiText::Constraints),
+            &status,
+            self.text(UiText::Ready),
+        );
     }
 }

@@ -3,12 +3,12 @@
 //! - `sweep` — 参数扫描面板
 //! - `monte_carlo` — 蒙特卡洛分析面板
 
-mod targets;
-mod sweep;
 mod monte_carlo;
+mod sweep;
+mod targets;
 
-use crate::app::localization::UiText;
 use crate::app::NekoSpiceApp;
+use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
@@ -38,10 +38,17 @@ impl NekoSpiceApp {
         let ws = &self.optimization_workspace;
         let total = ws.mc_completed;
         let passed = ws.mc_passed;
-        let yield_ratio = if total > 0 { passed as f32 / total as f32 } else { 0.0 };
+        let yield_ratio = if total > 0 {
+            passed as f32 / total as f32
+        } else {
+            0.0
+        };
 
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(mode, self.text(UiText::StatisticalSummary)));
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::StatisticalSummary),
+            ));
 
             if total > 0 {
                 ui.horizontal(|ui| {
@@ -49,14 +56,27 @@ impl NekoSpiceApp {
                     ui.vertical(|ui| {
                         let yield_pct = format!("{:.1}%", yield_ratio * 100.0);
                         super::widgets::status_chip(ui, "PASS", StudioTheme::palette(mode).success);
-                        super::widgets::parameter_row(ui, mode, self.text(UiText::Yield),
-                            &format!("{} / {}", passed, total), &yield_pct);
-                        super::widgets::parameter_row(ui, mode, self.text(UiText::Completed),
-                            &total.to_string(), &format!("{}%", 100));
+                        super::widgets::parameter_row(
+                            ui,
+                            mode,
+                            self.text(UiText::Yield),
+                            &format!("{} / {}", passed, total),
+                            &yield_pct,
+                        );
+                        super::widgets::parameter_row(
+                            ui,
+                            mode,
+                            self.text(UiText::Completed),
+                            &total.to_string(),
+                            &format!("{}%", 100),
+                        );
                     });
                 });
             } else {
-                ui.label(StudioTheme::muted_for(mode, "Run Monte Carlo analysis to see results"));
+                ui.label(StudioTheme::muted_for(
+                    mode,
+                    "Run Monte Carlo analysis to see results",
+                ));
             }
         });
     }

@@ -1,8 +1,8 @@
 //! Report measurements — aggregated measurement data from simulation runs.
 
+use super::widgets::report_status_card;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
-use super::widgets::report_status_card;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 

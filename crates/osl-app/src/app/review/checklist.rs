@@ -1,9 +1,9 @@
 //! Design review checklist — categorized pass/fail items with progress tracking.
 
+use super::state::ReviewChecklistTab;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::{StudioLocale, UiText};
 use crate::app::navigation::StudioWorkspace;
-use super::state::ReviewChecklistTab;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self, Color32, RichText};
 

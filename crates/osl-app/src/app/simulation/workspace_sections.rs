@@ -8,10 +8,10 @@
 //! The overview provides a high-level view of the simulation configuration
 //! and results, while the Profile Editor provides detailed editing.
 
-use crate::app::NekoSpiceApp;
-use crate::app::localization::UiText;
 use super::state::AnalysisParams;
 use super::workspace_widgets::{analysis_mode_button, analysis_modes, code_preview_line};
+use crate::app::NekoSpiceApp;
+use crate::app::localization::UiText;
 use crate::app::status_strip::severity_color;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
@@ -34,7 +34,8 @@ impl NekoSpiceApp {
                         if analysis_mode_button(&mut columns[column], mode, title, caption, active)
                         {
                             if self.simulation_panel.directive_kind != *kind {
-                                self.simulation_panel.analysis_params = AnalysisParams::for_kind(*kind);
+                                self.simulation_panel.analysis_params =
+                                    AnalysisParams::for_kind(*kind);
                             }
                             self.simulation_panel.directive_kind = *kind;
                         }
@@ -57,7 +58,11 @@ impl NekoSpiceApp {
                     mode,
                     self.text(UiText::NetlistPreview),
                 ));
-                if ui.small_button("Export .cir").on_hover_text("Save netlist to file").clicked() {
+                if ui
+                    .small_button("Export .cir")
+                    .on_hover_text("Save netlist to file")
+                    .clicked()
+                {
                     self.export_netlist_dialog();
                 }
             });
@@ -82,7 +87,11 @@ impl NekoSpiceApp {
                     let line_count = netlist.lines().count();
                     ui.label(StudioTheme::muted_for(
                         mode,
-                        format!("{} lines, {} backend", line_count, self.simulation_panel.backend.label()),
+                        format!(
+                            "{} lines, {} backend",
+                            line_count,
+                            self.simulation_panel.backend.label()
+                        ),
                     ));
                     egui::ScrollArea::both()
                         .id_salt("simulation_center_netlist_preview")

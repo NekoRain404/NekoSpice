@@ -47,19 +47,19 @@ impl NekoSpiceApp {
         }
 
         // --- Left-click for selection / placement / tool actions ---
-        if response.clicked() && !is_right_dragging {
-            if let Some(pointer) = response.interact_pointer_pos() {
-                let is_left_click = ui.input(|input| input.pointer.primary_released());
-                if is_left_click {
-                    let schematic_point = self.viewport.screen_to_world(rect, pointer);
-                    if self.placement.is_some() {
-                        self.place_selected_symbol_at_point(schematic_point);
-                    } else if self.handle_schematic_tool_click(schematic_point) {
-                    } else if let Some(scene) = &self.scene {
-                        self.selected_hit =
-                            scene.hit_test(schematic_point).hits.into_iter().next();
-                        self.sync_property_editor_from_selection();
-                    }
+        if response.clicked()
+            && !is_right_dragging
+            && let Some(pointer) = response.interact_pointer_pos()
+        {
+            let is_left_click = ui.input(|input| input.pointer.primary_released());
+            if is_left_click {
+                let schematic_point = self.viewport.screen_to_world(rect, pointer);
+                if self.placement.is_some() {
+                    self.place_selected_symbol_at_point(schematic_point);
+                } else if self.handle_schematic_tool_click(schematic_point) {
+                } else if let Some(scene) = &self.scene {
+                    self.selected_hit = scene.hit_test(schematic_point).hits.into_iter().next();
+                    self.sync_property_editor_from_selection();
                 }
             }
         }
@@ -151,7 +151,11 @@ impl NekoSpiceApp {
         let Some(library) = &self.library else {
             return;
         };
-        let at = osl_kicad::KicadAt { x: point.x, y: point.y, rotation: 0.0 };
+        let at = osl_kicad::KicadAt {
+            x: point.x,
+            y: point.y,
+            rotation: 0.0,
+        };
         let Ok(preview) = library.symbol_placement_preview(
             &placement.symbol_id,
             at,

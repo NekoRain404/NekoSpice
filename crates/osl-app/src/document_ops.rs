@@ -2,11 +2,11 @@
 //! schematic: delete, move, rotate, place symbols, wire, bus, label, etc.
 
 use crate::document::{KicadGuiDocument, KicadSymbolPlacementResult};
+use crate::placement_config::SymbolPlacementConfig;
 use osl_kicad::{
     KicadAt, KicadEditSummary, KicadLabelKind, KicadPoint, KicadSchematicEdit, KicadSheetPin,
     KicadSimulationDirectiveKind, KicadSize, KicadSymbolDef,
 };
-use crate::placement_config::SymbolPlacementConfig;
 
 impl KicadGuiDocument {
     pub(crate) fn delete_item(&mut self, uuid: &str) -> Result<KicadEditSummary, String> {

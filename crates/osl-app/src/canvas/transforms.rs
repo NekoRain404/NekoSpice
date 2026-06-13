@@ -34,17 +34,33 @@ pub(crate) fn pin_text_offsets(
     if is_name {
         // 名称置于主体端，沿垂直方向偏移
         let align = if perp_x.abs() > perp_y.abs() {
-            if perp_x > 0.0 { Align2::LEFT_CENTER } else { Align2::RIGHT_CENTER }
+            if perp_x > 0.0 {
+                Align2::LEFT_CENTER
+            } else {
+                Align2::RIGHT_CENTER
+            }
         } else {
-            if perp_y > 0.0 { Align2::CENTER_TOP } else { Align2::CENTER_BOTTOM }
+            if perp_y > 0.0 {
+                Align2::CENTER_TOP
+            } else {
+                Align2::CENTER_BOTTOM
+            }
         };
         (perp_x * offset, perp_y * offset, align)
     } else {
         // 编号置于外部端，沿垂直方向反向偏移
         let align = if perp_x.abs() > perp_y.abs() {
-            if perp_x > 0.0 { Align2::RIGHT_CENTER } else { Align2::LEFT_CENTER }
+            if perp_x > 0.0 {
+                Align2::RIGHT_CENTER
+            } else {
+                Align2::LEFT_CENTER
+            }
         } else {
-            if perp_y > 0.0 { Align2::CENTER_BOTTOM } else { Align2::CENTER_TOP }
+            if perp_y > 0.0 {
+                Align2::CENTER_BOTTOM
+            } else {
+                Align2::CENTER_TOP
+            }
         };
         (-perp_x * offset, -perp_y * offset, align)
     }
@@ -71,12 +87,25 @@ pub(crate) fn transform_property_point(
 
     // 2. 应用旋转（归一化到 0-360°）
     let rotation = symbol_at.rotation % 360.0;
-    let normalized = if rotation < 0.0 { rotation + 360.0 } else { rotation };
+    let normalized = if rotation < 0.0 {
+        rotation + 360.0
+    } else {
+        rotation
+    };
     let rotated = match normalized.round() as i32 {
         0 => mirrored,
-        90 => KicadPoint { x: -mirrored.y, y: mirrored.x },
-        180 => KicadPoint { x: -mirrored.x, y: -mirrored.y },
-        270 => KicadPoint { x: mirrored.y, y: -mirrored.x },
+        90 => KicadPoint {
+            x: -mirrored.y,
+            y: mirrored.x,
+        },
+        180 => KicadPoint {
+            x: -mirrored.x,
+            y: -mirrored.y,
+        },
+        270 => KicadPoint {
+            x: mirrored.y,
+            y: -mirrored.x,
+        },
         _ => {
             let radians = rotation.to_radians();
             KicadPoint {

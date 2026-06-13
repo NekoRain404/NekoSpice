@@ -289,12 +289,17 @@ mod tests {
         let bins = compute_fft_bins(&samples, dt, WindowFunction::Hanning);
 
         // Find the bin with maximum magnitude (should be near 1 kHz)
-        let peak = bins.iter().max_by(|a, b| a.magnitude.partial_cmp(&b.magnitude).unwrap()).unwrap();
+        let peak = bins
+            .iter()
+            .max_by(|a, b| a.magnitude.partial_cmp(&b.magnitude).unwrap())
+            .unwrap();
         let freq_error = (peak.frequency - freq).abs();
         assert!(
             freq_error < 100.0,
             "Peak frequency {} is too far from expected {} (error: {} Hz)",
-            peak.frequency, freq, freq_error
+            peak.frequency,
+            freq,
+            freq_error
         );
     }
 
@@ -303,7 +308,7 @@ mod tests {
         let samples = sine_wave(440.0, 1.0 / 44100.0, 1024);
         let (freqs, mags) = fft_magnitude_db(&samples, 1.0 / 44100.0);
         assert_eq!(freqs.len(), mags.len());
-        assert!(freqs.len() > 0);
+        assert!(!freqs.is_empty());
         // DC should be near silence
         assert!(mags[0] < -50.0);
     }
@@ -339,8 +344,20 @@ mod tests {
     #[test]
     fn fft_to_csv_output() {
         let bins = vec![
-            FftBin { frequency: 0.0, magnitude: 1.0, phase: 0.0, magnitude_db: 0.0, phase_deg: 0.0 },
-            FftBin { frequency: 1000.0, magnitude: 0.5, phase: 0.785, magnitude_db: -6.0, phase_deg: 45.0 },
+            FftBin {
+                frequency: 0.0,
+                magnitude: 1.0,
+                phase: 0.0,
+                magnitude_db: 0.0,
+                phase_deg: 0.0,
+            },
+            FftBin {
+                frequency: 1000.0,
+                magnitude: 0.5,
+                phase: 0.785,
+                magnitude_db: -6.0,
+                phase_deg: 45.0,
+            },
         ];
         let csv = fft_to_csv(&bins);
         assert!(csv.contains("frequency_hz"));
@@ -363,8 +380,18 @@ mod tests {
         let current: Vec<f64> = voltage.iter().map(|v| v / 1000.0).collect(); // 1k resistor
         let (freqs, mags, _phases) = compute_bode(&voltage, Some(&current), dt);
         // Impedance of 1k resistor should be ~60 dB
-        if let Some(&peak_mag) = freqs.iter().zip(mags.iter()).filter(|(f, _)| **f > 50.0 && **f < 200.0).map(|(_, m)| m).max_by(|a, b| a.partial_cmp(b).unwrap()) {
-            assert!((peak_mag - 60.0).abs() < 10.0, "Expected ~60 dB, got {}", peak_mag);
+        if let Some(&peak_mag) = freqs
+            .iter()
+            .zip(mags.iter())
+            .filter(|(f, _)| **f > 50.0 && **f < 200.0)
+            .map(|(_, m)| m)
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+        {
+            assert!(
+                (peak_mag - 60.0).abs() < 10.0,
+                "Expected ~60 dB, got {}",
+                peak_mag
+            );
         }
     }
 

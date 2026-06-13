@@ -2,11 +2,11 @@
 //! and export controls. Extracted from workspace_sections.rs to keep
 //! each file under 300 lines.
 
+use super::preview::format_compact_f64;
+use super::workspace_widgets::{cursor_row, waveform_summary_card};
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
-use super::preview::format_compact_f64;
-use super::workspace_widgets::{cursor_row, waveform_summary_card};
 use eframe::egui;
 
 impl NekoSpiceApp {
@@ -14,7 +14,10 @@ impl NekoSpiceApp {
     pub(crate) fn draw_waveform_cursor_panel(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(mode, self.text(UiText::Cursors)));
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::Cursors),
+            ));
             let Some(summary) = self.current_waveform_summary() else {
                 ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoWaveform)));
                 return;
@@ -22,9 +25,27 @@ impl NekoSpiceApp {
             let selected = self.simulation_panel.selected_waveform_signal.as_deref();
             let variable = selected.and_then(|signal| summary.variable_summary_for_signal(signal));
             if let Some(variable) = variable {
-                cursor_row(ui, mode, "A", &variable.name, &format_compact_f64(variable.first));
-                cursor_row(ui, mode, "B", &variable.name, &format_compact_f64(variable.last));
-                cursor_row(ui, mode, "Delta", &variable.name, &format_compact_f64(variable.peak_to_peak));
+                cursor_row(
+                    ui,
+                    mode,
+                    "A",
+                    &variable.name,
+                    &format_compact_f64(variable.first),
+                );
+                cursor_row(
+                    ui,
+                    mode,
+                    "B",
+                    &variable.name,
+                    &format_compact_f64(variable.last),
+                );
+                cursor_row(
+                    ui,
+                    mode,
+                    "Delta",
+                    &variable.name,
+                    &format_compact_f64(variable.peak_to_peak),
+                );
             } else {
                 ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoSelection)));
             }
@@ -35,13 +56,17 @@ impl NekoSpiceApp {
     pub(crate) fn draw_waveform_compare_panel(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(mode, self.text(UiText::ComparisonManager)));
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::ComparisonManager),
+            ));
             let Some(run) = &self.simulation_panel.last_run else {
                 ui.label(StudioTheme::muted_for(mode, self.text(UiText::NoRecentRun)));
                 return;
             };
             waveform_summary_card(
-                ui, mode,
+                ui,
+                mode,
                 self.text(UiText::BaselineRun),
                 run.metadata.status.as_str(),
                 &run.output_dir.display().to_string(),
@@ -53,12 +78,16 @@ impl NekoSpiceApp {
     pub(crate) fn draw_waveform_export_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(mode, self.text(UiText::ExportShare)));
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::ExportShare),
+            ));
             ui.vertical(|ui| {
                 if ui.button(self.text(UiText::ExportWaveforms)).clicked() {
                     if let Some(run) = &self.simulation_panel.last_run {
                         self.status_message = Some(format!(
-                            "Waveforms exported to: {}", run.output_dir.display()
+                            "Waveforms exported to: {}",
+                            run.output_dir.display()
                         ));
                     } else {
                         self.status_message = Some("No simulation data to export".to_string());
@@ -104,12 +133,14 @@ impl NekoSpiceApp {
             .set_file_name("waveform.csv");
         if let Some(path) = dialog.save_file() {
             match std::fs::write(&path, &csv_content) {
-                Ok(()) => self.status_message = Some(format!(
-                    "CSV exported: {} ({} signals, {} points)",
-                    path.display(),
-                    waveform.variables().len(),
-                    waveform.point_count(),
-                )),
+                Ok(()) => {
+                    self.status_message = Some(format!(
+                        "CSV exported: {} ({} signals, {} points)",
+                        path.display(),
+                        waveform.variables().len(),
+                        waveform.point_count(),
+                    ))
+                }
                 Err(e) => self.status_message = Some(format!("Export failed: {e}")),
             }
         }

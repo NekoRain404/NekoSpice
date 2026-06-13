@@ -15,11 +15,23 @@ const ACTIONS: [(&str, UiText, Option<StudioWorkspace>); 9] = [
     ("[]", UiText::OpenProject, Some(StudioWorkspace::Schematic)),
     ("Ki", UiText::ImportKiCad, Some(StudioWorkspace::Schematic)),
     ("SC", UiText::NewSchematic, Some(StudioWorkspace::Schematic)),
-    (">", UiText::RunSimulation, Some(StudioWorkspace::Simulation)),
+    (
+        ">",
+        UiText::RunSimulation,
+        Some(StudioWorkspace::Simulation),
+    ),
     ("~", UiText::WaveformViewer, Some(StudioWorkspace::Reports)),
-    ("SW", UiText::ParametricSweep, Some(StudioWorkspace::Simulation)),
+    (
+        "SW",
+        UiText::ParametricSweep,
+        Some(StudioWorkspace::Simulation),
+    ),
     ("MC", UiText::MonteCarlo, Some(StudioWorkspace::Simulation)),
-    ("OP", UiText::Optimization, Some(StudioWorkspace::Simulation)),
+    (
+        "OP",
+        UiText::Optimization,
+        Some(StudioWorkspace::Simulation),
+    ),
 ];
 
 impl NekoSpiceApp {
@@ -27,7 +39,10 @@ impl NekoSpiceApp {
     pub(crate) fn draw_quick_actions_panel(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(mode, self.text(UiText::QuickActions)));
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::QuickActions),
+            ));
             ui.add_space(4.0);
             self.draw_quick_action_grid(ui);
         });
@@ -37,11 +52,16 @@ impl NekoSpiceApp {
     fn draw_quick_action_grid(&mut self, ui: &mut egui::Ui) {
         let spacing = 8.0;
         let available_width = ui.available_width();
-        let columns: usize = if available_width >= 620.0 { 3 }
-            else if available_width >= 360.0 { 2 }
-            else { 1 };
+        let columns: usize = if available_width >= 620.0 {
+            3
+        } else if available_width >= 360.0 {
+            2
+        } else {
+            1
+        };
         let button_width = ((available_width - spacing * (columns.saturating_sub(1) as f32))
-            / columns as f32).max(120.0);
+            / columns as f32)
+            .max(120.0);
 
         egui::Grid::new("home_quick_actions")
             .num_columns(columns)
@@ -86,7 +106,8 @@ impl NekoSpiceApp {
                     if self.simulation_panel.last_run.is_some() {
                         self.active_workspace = StudioWorkspace::Waveforms;
                     } else {
-                        self.status_message = Some("Run a simulation first to view waveforms".to_string());
+                        self.status_message =
+                            Some("Run a simulation first to view waveforms".to_string());
                     }
                 }
                 _ => {

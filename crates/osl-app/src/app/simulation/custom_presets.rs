@@ -4,8 +4,8 @@
 //! Each preset stores the solver options (temperature, tolerances, method, etc.)
 //! so users can quickly switch between their common configurations.
 
-use crate::app::NekoSpiceApp;
 use super::sim_options::SimOptions;
+use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 use std::path::PathBuf;
@@ -13,7 +13,10 @@ use std::path::PathBuf;
 /// Get the presets directory path.
 fn presets_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let base = PathBuf::from(home).join(".config").join("nekospice").join("presets");
+    let base = PathBuf::from(home)
+        .join(".config")
+        .join("nekospice")
+        .join("presets");
     std::fs::create_dir_all(&base).ok();
     base
 }
@@ -82,10 +85,10 @@ fn list_custom_presets() -> Vec<String> {
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().is_some_and(|e| e == "preset") {
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    names.push(stem.to_string());
-                }
+            if path.extension().is_some_and(|e| e == "preset")
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            {
+                names.push(stem.to_string());
             }
         }
     }
@@ -110,9 +113,7 @@ impl NekoSpiceApp {
             ui.horizontal(|ui| {
                 ui.label(StudioTheme::muted_for(mode, "Save current as:"));
                 ui.text_edit_singleline(&mut self.custom_preset_name);
-                if ui.button("Save").clicked()
-                    && !self.custom_preset_name.trim().is_empty()
-                {
+                if ui.button("Save").clicked() && !self.custom_preset_name.trim().is_empty() {
                     let name = self.custom_preset_name.trim().to_string();
                     let opts = &self.simulation_profile_editor.options;
                     let content = serialize_preset(opts, &name);
@@ -136,7 +137,9 @@ impl NekoSpiceApp {
                     ui.horizontal(|ui| {
                         let btn = if active {
                             egui::Button::new(
-                                egui::RichText::new(name.as_str()).strong().color(palette.text),
+                                egui::RichText::new(name.as_str())
+                                    .strong()
+                                    .color(palette.text),
                             )
                             .fill(palette.accent_soft)
                             .stroke(egui::Stroke::new(1.0, palette.accent))
@@ -158,7 +161,11 @@ impl NekoSpiceApp {
                             }
                         }
                         // Delete button
-                        if ui.small_button("x").on_hover_text("Delete preset").clicked() {
+                        if ui
+                            .small_button("x")
+                            .on_hover_text("Delete preset")
+                            .clicked()
+                        {
                             let path = presets_dir().join(format!("{}.preset", name));
                             let _ = std::fs::remove_file(&path);
                             self.status_message = Some(format!("Preset '{}' deleted", name));

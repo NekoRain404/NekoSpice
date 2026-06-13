@@ -20,11 +20,16 @@ impl NekoSpiceApp {
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
                     ui.label(StudioTheme::muted_for(mode, "Backend"));
-                    ui.label(egui::RichText::new(self.simulation_panel.backend.label()).monospace());
+                    ui.label(
+                        egui::RichText::new(self.simulation_panel.backend.label()).monospace(),
+                    );
                     ui.end_row();
 
                     ui.label(StudioTheme::muted_for(mode, "Analysis"));
-                    ui.label(egui::RichText::new(format!(".{}", self.simulation_panel.directive_kind)).monospace());
+                    ui.label(
+                        egui::RichText::new(format!(".{}", self.simulation_panel.directive_kind))
+                            .monospace(),
+                    );
                     ui.end_row();
 
                     ui.label(StudioTheme::muted_for(mode, "Temp"));
@@ -50,7 +55,11 @@ impl NekoSpiceApp {
                     }
 
                     match &self.simulation_panel.step_sweep {
-                        super::state::StepSweep::Parametric { param_name, sweep_mode, .. } => {
+                        super::state::StepSweep::Parametric {
+                            param_name,
+                            sweep_mode,
+                            ..
+                        } => {
                             ui.label(StudioTheme::muted_for(mode, "Step"));
                             ui.label(
                                 egui::RichText::new(format!(".step {} {}", param_name, sweep_mode))
@@ -59,12 +68,20 @@ impl NekoSpiceApp {
                             );
                             ui.end_row();
                         }
-                        super::state::StepSweep::Temperature { sweep_mode, start, stop, .. } => {
+                        super::state::StepSweep::Temperature {
+                            sweep_mode,
+                            start,
+                            stop,
+                            ..
+                        } => {
                             ui.label(StudioTheme::muted_for(mode, "Step"));
                             ui.label(
-                                egui::RichText::new(format!(".step TEMP {} {}–{}", sweep_mode, start, stop))
-                                    .monospace()
-                                    .color(self.theme_palette().accent),
+                                egui::RichText::new(format!(
+                                    ".step TEMP {} {}–{}",
+                                    sweep_mode, start, stop
+                                ))
+                                .monospace()
+                                .color(self.theme_palette().accent),
                             );
                             ui.end_row();
                         }
@@ -74,8 +91,11 @@ impl NekoSpiceApp {
                     if !self.simulation_measurements.is_empty() {
                         ui.label(StudioTheme::muted_for(mode, "Measures"));
                         ui.label(
-                            egui::RichText::new(format!("{} directive(s)", self.simulation_measurements.len()))
-                                .monospace(),
+                            egui::RichText::new(format!(
+                                "{} directive(s)",
+                                self.simulation_measurements.len()
+                            ))
+                            .monospace(),
                         );
                         ui.end_row();
                     }
@@ -85,8 +105,7 @@ impl NekoSpiceApp {
                     if ic_count > 0 {
                         ui.label(StudioTheme::muted_for(mode, ".ic/.ns"));
                         ui.label(
-                            egui::RichText::new(format!("{} entry(ies)", ic_count))
-                                .monospace(),
+                            egui::RichText::new(format!("{} entry(ies)", ic_count)).monospace(),
                         );
                         ui.end_row();
                     }
@@ -95,8 +114,7 @@ impl NekoSpiceApp {
                     if comp_count > 0 {
                         ui.label(StudioTheme::muted_for(mode, "Components"));
                         ui.label(
-                            egui::RichText::new(format!("{} defined", comp_count))
-                                .monospace(),
+                            egui::RichText::new(format!("{} defined", comp_count)).monospace(),
                         );
                         ui.end_row();
                     }
@@ -105,8 +123,7 @@ impl NekoSpiceApp {
                     if model_count > 0 {
                         ui.label(StudioTheme::muted_for(mode, "Models"));
                         ui.label(
-                            egui::RichText::new(format!("{} defined", model_count))
-                                .monospace(),
+                            egui::RichText::new(format!("{} defined", model_count)).monospace(),
                         );
                         ui.end_row();
                     }
@@ -126,7 +143,11 @@ impl NekoSpiceApp {
 
             if self.document.is_none() {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("●").color(palette.text_muted).size(10.0));
+                    ui.label(
+                        egui::RichText::new("●")
+                            .color(palette.text_muted)
+                            .size(10.0),
+                    );
                     ui.label(StudioTheme::muted_for(mode, "No schematic loaded"));
                 });
                 return;
@@ -135,9 +156,8 @@ impl NekoSpiceApp {
             // Check netlist validity
             let profile = self.build_simulation_profile();
             let netlist_ok = self.document.as_ref().map(|doc| {
-                doc.spice_netlist_preview().map(|raw| {
-                    osl_sim::inject_profile_directives(&raw, &profile)
-                })
+                doc.spice_netlist_preview()
+                    .map(|raw| osl_sim::inject_profile_directives(&raw, &profile))
             });
 
             match netlist_ok {
@@ -151,7 +171,9 @@ impl NekoSpiceApp {
                     } else {
                         for w in &warnings {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("●").color(palette.warning).size(10.0));
+                                ui.label(
+                                    egui::RichText::new("●").color(palette.warning).size(10.0),
+                                );
                                 ui.label(StudioTheme::muted_for(mode, w));
                             });
                         }
@@ -166,7 +188,7 @@ impl NekoSpiceApp {
                         ui.label(egui::RichText::new("●").color(backend_color).size(10.0));
                         ui.label(StudioTheme::muted_for(
                             mode,
-                            &format!("{} backend ready", self.simulation_panel.backend.label()),
+                            format!("{} backend ready", self.simulation_panel.backend.label()),
                         ));
                     });
                 }
@@ -178,7 +200,11 @@ impl NekoSpiceApp {
                 }
                 None => {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("●").color(palette.text_muted).size(10.0));
+                        ui.label(
+                            egui::RichText::new("●")
+                                .color(palette.text_muted)
+                                .size(10.0),
+                        );
                         ui.label(StudioTheme::muted_for(mode, "No document"));
                     });
                 }
@@ -196,9 +222,15 @@ impl NekoSpiceApp {
             ui.add_space(4.0);
 
             let has_doc = self.document.is_some();
-            let has_analysis = !self.simulation_panel.analysis_params.to_body().trim().is_empty();
+            let has_analysis = !self
+                .simulation_panel
+                .analysis_params
+                .to_body()
+                .trim()
+                .is_empty();
             let running = self.simulation_panel.active_task.is_some();
-            let _has_netlist = self.simulation_panel.last_error.is_none() || self.simulation_panel.last_run.is_some();
+            let _has_netlist = self.simulation_panel.last_error.is_none()
+                || self.simulation_panel.last_run.is_some();
 
             let items = [
                 ("Schematic loaded", has_doc),
@@ -208,10 +240,18 @@ impl NekoSpiceApp {
 
             for (label, ok) in items {
                 ui.horizontal(|ui| {
-                    let color = if ok { palette.success } else { palette.text_muted };
+                    let color = if ok {
+                        palette.success
+                    } else {
+                        palette.text_muted
+                    };
                     let icon = if ok { "✓" } else { "○" };
                     ui.label(egui::RichText::new(icon).color(color).size(12.0).strong());
-                    ui.label(egui::RichText::new(label).color(if ok { palette.text } else { palette.text_muted }));
+                    ui.label(egui::RichText::new(label).color(if ok {
+                        palette.text
+                    } else {
+                        palette.text_muted
+                    }));
                 });
             }
 
@@ -219,18 +259,28 @@ impl NekoSpiceApp {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("▶").color(palette.accent).size(12.0));
-                    ui.label(egui::RichText::new("Simulation running...").color(palette.accent).strong());
+                    ui.label(
+                        egui::RichText::new("Simulation running...")
+                            .color(palette.accent)
+                            .strong(),
+                    );
                 });
             }
 
             let all_ready = has_doc && has_analysis && !running;
             ui.add_space(4.0);
             if all_ready {
-                ui.label(StudioTheme::muted_for(mode, "Ready to simulate — press F5 or click Run"));
+                ui.label(StudioTheme::muted_for(
+                    mode,
+                    "Ready to simulate — press F5 or click Run",
+                ));
             } else if !has_doc {
                 ui.label(StudioTheme::muted_for(mode, "Load a schematic to begin"));
             } else if !has_analysis {
-                ui.label(StudioTheme::muted_for(mode, "Configure analysis parameters"));
+                ui.label(StudioTheme::muted_for(
+                    mode,
+                    "Configure analysis parameters",
+                ));
             }
         });
     }
@@ -239,47 +289,54 @@ impl NekoSpiceApp {
     pub(crate) fn draw_panel_netlist_preview(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = StudioTheme::palette(mode);
-        egui::CollapsingHeader::new(
-            egui::RichText::new("Netlist Preview").color(palette.text),
-        )
-        .id_salt("panel_netlist_preview")
-        .default_open(false)
-        .show(ui, |ui| {
-            let Some(document) = &self.document else {
-                ui.label(StudioTheme::muted_for(mode, "No schematic loaded"));
-                return;
-            };
-            let profile = self.build_simulation_profile();
-            match document.spice_netlist_preview().map(|raw| {
-                osl_sim::inject_profile_directives(&raw, &profile)
-            }) {
-                Ok(netlist) => {
-                    let line_count = netlist.lines().count();
-                    ui.label(StudioTheme::muted_for(
-                        mode,
-                        format!("{} lines — {} backend", line_count, self.simulation_panel.backend.label()),
-                    ));
-                    ui.add_space(2.0);
-                    egui::ScrollArea::vertical()
-                        .id_salt("panel_netlist_scroll")
-                        .max_height(120.0)
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            for line in netlist.lines().take(30) {
-                                ui.monospace(egui::RichText::new(line).size(10.0).color(palette.text_muted));
-                            }
-                            if line_count > 30 {
-                                ui.label(StudioTheme::muted_for(
-                                    mode,
-                                    format!("... {} more lines", line_count - 30),
-                                ));
-                            }
-                        });
+        egui::CollapsingHeader::new(egui::RichText::new("Netlist Preview").color(palette.text))
+            .id_salt("panel_netlist_preview")
+            .default_open(false)
+            .show(ui, |ui| {
+                let Some(document) = &self.document else {
+                    ui.label(StudioTheme::muted_for(mode, "No schematic loaded"));
+                    return;
+                };
+                let profile = self.build_simulation_profile();
+                match document
+                    .spice_netlist_preview()
+                    .map(|raw| osl_sim::inject_profile_directives(&raw, &profile))
+                {
+                    Ok(netlist) => {
+                        let line_count = netlist.lines().count();
+                        ui.label(StudioTheme::muted_for(
+                            mode,
+                            format!(
+                                "{} lines — {} backend",
+                                line_count,
+                                self.simulation_panel.backend.label()
+                            ),
+                        ));
+                        ui.add_space(2.0);
+                        egui::ScrollArea::vertical()
+                            .id_salt("panel_netlist_scroll")
+                            .max_height(120.0)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                for line in netlist.lines().take(30) {
+                                    ui.monospace(
+                                        egui::RichText::new(line)
+                                            .size(10.0)
+                                            .color(palette.text_muted),
+                                    );
+                                }
+                                if line_count > 30 {
+                                    ui.label(StudioTheme::muted_for(
+                                        mode,
+                                        format!("... {} more lines", line_count - 30),
+                                    ));
+                                }
+                            });
+                    }
+                    Err(error) => {
+                        ui.colored_label(palette.danger, format!("Netlist error: {}", error));
+                    }
                 }
-                Err(error) => {
-                    ui.colored_label(palette.danger, format!("Netlist error: {}", error));
-                }
-            }
-        });
+            });
     }
 }

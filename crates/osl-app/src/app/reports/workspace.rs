@@ -1,9 +1,9 @@
 //! Reports workspace — center panel for simulation report generation and preview.
 
-use crate::app::NekoSpiceApp;
-use crate::app::localization::UiText;
 use super::state::ReportsTab;
 use super::widgets::report_metric_card;
+use crate::app::NekoSpiceApp;
+use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 

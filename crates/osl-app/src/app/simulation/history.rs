@@ -54,7 +54,7 @@ impl SimulationHistoryEntry {
             analysis_type: analysis_type.to_string(),
             analysis_body: analysis_body.to_string(),
             backend: backend.to_string(),
-            duration_ms: run.metadata.duration_ms as u128,
+            duration_ms: run.metadata.duration_ms,
             status_str: run.metadata.status.as_str().to_string(),
             output_dir: run.output_dir.display().to_string(),
             settings_summary,
@@ -178,7 +178,6 @@ impl SimulationHistory {
         Self { entries }
     }
 }
-
 
 /// Path to the history JSON file.
 fn history_path() -> PathBuf {

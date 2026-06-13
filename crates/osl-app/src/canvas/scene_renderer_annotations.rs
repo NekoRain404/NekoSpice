@@ -3,9 +3,9 @@
 //! 包含仿真指令标签、网络标签、自由文本、文本框、连接点和无连接标记。
 //! 这些图层提供了原理图的文本信息和电气连接状态可视化。
 
-use crate::viewport::{CanvasViewport, item_visible};
 use super::colors::SchematicColors;
 use super::primitives;
+use crate::viewport::{CanvasViewport, item_visible};
 use eframe::egui::{self, Pos2, Stroke};
 use osl_kicad::{KicadBoundingBox, KicadCanvasScene};
 
@@ -25,10 +25,25 @@ pub(crate) fn draw_directive_labels(
             continue;
         }
         if let Some(bounds) = label.bounds {
-            primitives::draw_bounds(painter, rect, viewport, bounds, colors.label_directive_bounds, 1.0);
+            primitives::draw_bounds(
+                painter,
+                rect,
+                viewport,
+                bounds,
+                colors.label_directive_bounds,
+                1.0,
+            );
         }
         if let Some(at) = label.at {
-            primitives::draw_rotated_text(painter, rect, viewport, at, &label.text, 12.0, colors.label_directive);
+            primitives::draw_rotated_text(
+                painter,
+                rect,
+                viewport,
+                at,
+                &label.text,
+                12.0,
+                colors.label_directive,
+            );
         }
     }
 }
@@ -54,9 +69,22 @@ pub(crate) fn draw_net_labels(
                 osl_kicad::KicadLabelKind::Global => colors.label_global,
                 osl_kicad::KicadLabelKind::Hierarchical => colors.label_hierarchical,
             };
-            let fs = label.effects.as_ref().and_then(|e| e.font_size)
-                .map(|s| s.width as f32).unwrap_or(12.0).max(6.0);
-            primitives::draw_rotated_text(painter, rect, viewport, at, &label.text, fs, label_color);
+            let fs = label
+                .effects
+                .as_ref()
+                .and_then(|e| e.font_size)
+                .map(|s| s.width as f32)
+                .unwrap_or(12.0)
+                .max(6.0);
+            primitives::draw_rotated_text(
+                painter,
+                rect,
+                viewport,
+                at,
+                &label.text,
+                fs,
+                label_color,
+            );
         }
     }
 }
@@ -82,8 +110,13 @@ pub(crate) fn draw_text_items(
             } else {
                 colors.text
             };
-            let fs = text.effects.as_ref().and_then(|e| e.font_size)
-                .map(|s| s.width as f32).unwrap_or(12.0).max(6.0);
+            let fs = text
+                .effects
+                .as_ref()
+                .and_then(|e| e.font_size)
+                .map(|s| s.width as f32)
+                .unwrap_or(12.0)
+                .max(6.0);
             primitives::draw_rotated_text(painter, rect, viewport, at, &text.text, fs, color);
         }
     }
@@ -149,7 +182,13 @@ pub(crate) fn draw_no_connects(
         let c = viewport.world_to_screen(rect, m.at);
         let s = (SIZE_MM as f32 * viewport.zoom * 0.5).max(3.0);
         let stroke = Stroke::new(1.5, colors.no_connect);
-        painter.line_segment([Pos2::new(c.x - s, c.y - s), Pos2::new(c.x + s, c.y + s)], stroke);
-        painter.line_segment([Pos2::new(c.x - s, c.y + s), Pos2::new(c.x + s, c.y - s)], stroke);
+        painter.line_segment(
+            [Pos2::new(c.x - s, c.y - s), Pos2::new(c.x + s, c.y + s)],
+            stroke,
+        );
+        painter.line_segment(
+            [Pos2::new(c.x - s, c.y + s), Pos2::new(c.x + s, c.y - s)],
+            stroke,
+        );
     }
 }

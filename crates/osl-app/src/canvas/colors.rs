@@ -192,9 +192,9 @@ impl SchematicColors {
             canvas_bg: Color32::from_rgb(14, 20, 32),
             grid_minor: Color32::from_rgb(24, 32, 48),
             grid_major: Color32::from_rgb(32, 42, 60),
-            wire: Color32::from_rgb(50, 210, 120),        // Brighter green wires
+            wire: Color32::from_rgb(50, 210, 120), // Brighter green wires
             junction: Color32::from_rgb(50, 210, 120),
-            bus: Color32::from_rgb(110, 155, 255),         // Brighter blue buses
+            bus: Color32::from_rgb(110, 155, 255), // Brighter blue buses
             bus_entry: Color32::from_rgb(110, 155, 255),
             symbol_body: Color32::from_rgb(200, 212, 228), // Brighter symbol bodies
             symbol_pin: Color32::from_rgb(190, 205, 225),
@@ -202,7 +202,7 @@ impl SchematicColors {
             symbol_pin_number: Color32::from_rgb(130, 152, 180),
             symbol_reference: Color32::from_rgb(200, 212, 228),
             symbol_value: Color32::from_rgb(160, 178, 202),
-            label_local: Color32::from_rgb(90, 170, 255),  // Brighter labels
+            label_local: Color32::from_rgb(90, 170, 255), // Brighter labels
             label_global: Color32::from_rgb(70, 150, 245),
             label_hierarchical: Color32::from_rgb(190, 130, 230),
             label_directive: Color32::from_rgb(220, 170, 70),

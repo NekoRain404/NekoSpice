@@ -4,8 +4,8 @@
 //! Each grid renders labeled TextEdit fields for sweep start/stop/step
 //! values and returns whether any field changed.
 
-use crate::app::NekoSpiceApp;
 use super::state::StepSweep;
+use crate::app::NekoSpiceApp;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui;
 
@@ -18,11 +18,8 @@ pub(crate) const SWEEP_MODES: [(&str, &str); 4] = [
 ];
 
 /// Temperature sweep mode options (no list mode).
-pub(crate) const TEMP_SWEEP_MODES: [(&str, &str); 3] = [
-    ("lin", "Linear"),
-    ("dec", "Decade"),
-    ("oct", "Octave"),
-];
+pub(crate) const TEMP_SWEEP_MODES: [(&str, &str); 3] =
+    [("lin", "Linear"), ("dec", "Decade"), ("oct", "Octave")];
 
 impl NekoSpiceApp {
     /// Draw the parametric sweep input grid.
@@ -54,7 +51,11 @@ impl NekoSpiceApp {
                         .stroke(egui::Stroke::new(1.0, palette.border))
                 };
                 if ui.add(btn).clicked() {
-                    if let StepSweep::Parametric { sweep_mode: ref mut sm, .. } = self.simulation_panel.step_sweep {
+                    if let StepSweep::Parametric {
+                        sweep_mode: ref mut sm,
+                        ..
+                    } = self.simulation_panel.step_sweep
+                    {
                         *sm = mid.to_string();
                     }
                     changed = true;
@@ -66,34 +67,60 @@ impl NekoSpiceApp {
         ui.add_space(4.0);
 
         // Input grid
-        if let StepSweep::Parametric { param_name, sweep_mode, start, stop, step } = &mut self.simulation_panel.step_sweep {
-            egui::Grid::new("param_sweep_grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-                ui.label(StudioTheme::muted_for(mode, "Parameter"));
-                let r = ui.add(egui::TextEdit::singleline(param_name).desired_width(100.0).hint_text("R1"));
-                changed |= r.changed();
-                ui.end_row();
+        if let StepSweep::Parametric {
+            param_name,
+            sweep_mode,
+            start,
+            stop,
+            step,
+        } = &mut self.simulation_panel.step_sweep
+        {
+            egui::Grid::new("param_sweep_grid")
+                .num_columns(2)
+                .spacing([8.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label(StudioTheme::muted_for(mode, "Parameter"));
+                    let r = ui.add(
+                        egui::TextEdit::singleline(param_name)
+                            .desired_width(100.0)
+                            .hint_text("R1"),
+                    );
+                    changed |= r.changed();
+                    ui.end_row();
 
-                ui.label(StudioTheme::muted_for(mode, "Start"));
-                let r = ui.add(egui::TextEdit::singleline(start).desired_width(100.0).hint_text("1k"));
-                changed |= r.changed();
-                ui.end_row();
+                    ui.label(StudioTheme::muted_for(mode, "Start"));
+                    let r = ui.add(
+                        egui::TextEdit::singleline(start)
+                            .desired_width(100.0)
+                            .hint_text("1k"),
+                    );
+                    changed |= r.changed();
+                    ui.end_row();
 
-                ui.label(StudioTheme::muted_for(mode, "Stop"));
-                let r = ui.add(egui::TextEdit::singleline(stop).desired_width(100.0).hint_text("100k"));
-                changed |= r.changed();
-                ui.end_row();
+                    ui.label(StudioTheme::muted_for(mode, "Stop"));
+                    let r = ui.add(
+                        egui::TextEdit::singleline(stop)
+                            .desired_width(100.0)
+                            .hint_text("100k"),
+                    );
+                    changed |= r.changed();
+                    ui.end_row();
 
-                let step_label = match sweep_mode.as_str() {
-                    "lin" => "Step",
-                    "dec" => "Pts/dec",
-                    "oct" => "Pts/oct",
-                    _ => "Step",
-                };
-                ui.label(StudioTheme::muted_for(mode, step_label));
-                let r = ui.add(egui::TextEdit::singleline(step).desired_width(100.0).hint_text("1k"));
-                changed |= r.changed();
-                ui.end_row();
-            });
+                    let step_label = match sweep_mode.as_str() {
+                        "lin" => "Step",
+                        "dec" => "Pts/dec",
+                        "oct" => "Pts/oct",
+                        _ => "Step",
+                    };
+                    ui.label(StudioTheme::muted_for(mode, step_label));
+                    let r = ui.add(
+                        egui::TextEdit::singleline(step)
+                            .desired_width(100.0)
+                            .hint_text("1k"),
+                    );
+                    changed |= r.changed();
+                    ui.end_row();
+                });
         }
 
         changed
@@ -128,7 +155,11 @@ impl NekoSpiceApp {
                         .stroke(egui::Stroke::new(1.0, palette.border))
                 };
                 if ui.add(btn).clicked() {
-                    if let StepSweep::Temperature { sweep_mode: ref mut sm, .. } = self.simulation_panel.step_sweep {
+                    if let StepSweep::Temperature {
+                        sweep_mode: ref mut sm,
+                        ..
+                    } = self.simulation_panel.step_sweep
+                    {
                         *sm = mid.to_string();
                     }
                     changed = true;
@@ -139,29 +170,50 @@ impl NekoSpiceApp {
 
         ui.add_space(4.0);
 
-        if let StepSweep::Temperature { sweep_mode, start, stop, step } = &mut self.simulation_panel.step_sweep {
-            egui::Grid::new("temp_sweep_grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-                ui.label(StudioTheme::muted_for(mode, "Start (°C)"));
-                let r = ui.add(egui::TextEdit::singleline(start).desired_width(100.0).hint_text("-40"));
-                changed |= r.changed();
-                ui.end_row();
+        if let StepSweep::Temperature {
+            sweep_mode,
+            start,
+            stop,
+            step,
+        } = &mut self.simulation_panel.step_sweep
+        {
+            egui::Grid::new("temp_sweep_grid")
+                .num_columns(2)
+                .spacing([8.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label(StudioTheme::muted_for(mode, "Start (°C)"));
+                    let r = ui.add(
+                        egui::TextEdit::singleline(start)
+                            .desired_width(100.0)
+                            .hint_text("-40"),
+                    );
+                    changed |= r.changed();
+                    ui.end_row();
 
-                ui.label(StudioTheme::muted_for(mode, "Stop (°C)"));
-                let r = ui.add(egui::TextEdit::singleline(stop).desired_width(100.0).hint_text("125"));
-                changed |= r.changed();
-                ui.end_row();
+                    ui.label(StudioTheme::muted_for(mode, "Stop (°C)"));
+                    let r = ui.add(
+                        egui::TextEdit::singleline(stop)
+                            .desired_width(100.0)
+                            .hint_text("125"),
+                    );
+                    changed |= r.changed();
+                    ui.end_row();
 
-                let step_label = match sweep_mode.as_str() {
-                    "lin" => "Step (°C)",
-                    "dec" => "Pts/dec",
-                    "oct" => "Pts/oct",
-                    _ => "Step",
-                };
-                ui.label(StudioTheme::muted_for(mode, step_label));
-                let r = ui.add(egui::TextEdit::singleline(step).desired_width(100.0).hint_text("10"));
-                changed |= r.changed();
-                ui.end_row();
-            });
+                    let step_label = match sweep_mode.as_str() {
+                        "lin" => "Step (°C)",
+                        "dec" => "Pts/dec",
+                        "oct" => "Pts/oct",
+                        _ => "Step",
+                    };
+                    ui.label(StudioTheme::muted_for(mode, step_label));
+                    let r = ui.add(
+                        egui::TextEdit::singleline(step)
+                            .desired_width(100.0)
+                            .hint_text("10"),
+                    );
+                    changed |= r.changed();
+                    ui.end_row();
+                });
         }
 
         changed

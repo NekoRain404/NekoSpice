@@ -1,7 +1,7 @@
 use super::*;
 use crate::document::KicadGuiDocument;
 use osl_core::{OslError, OslResult};
-use osl_sim::{SimulatorBackend, SimulationProfile};
+use osl_sim::{SimulationProfile, SimulatorBackend};
 use std::path::Path;
 
 #[cfg(test)]
@@ -10,18 +10,13 @@ pub(crate) fn run_document_with_backend(
     runs_root: &Path,
     backend: &dyn SimulatorBackend,
 ) -> OslResult<GuiSimulationRun> {
-    let job = GuiSimulationJob::from_document(
-        document,
-        runs_root,
-        &SimulationProfile::default(),
-    )
-    .map_err(OslError::InvalidInput)?;
+    let job = GuiSimulationJob::from_document(document, runs_root, &SimulationProfile::default())
+        .map_err(OslError::InvalidInput)?;
     run_job_with_backend(&job, backend)
 }
 
-
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
     use osl_core::{Artifact, ParameterOverride, RunStatus};
     use std::fs;
@@ -149,7 +144,9 @@ Values:
         let document = KicadGuiDocument::load(temp.path().to_path_buf()).unwrap();
         let runs_root =
             std::env::temp_dir().join(format!("nekospice_gui_task_{}", osl_core::now_unix_ms()));
-        let job = GuiSimulationJob::from_document(&document, &runs_root, &SimulationProfile::default()).unwrap();
+        let job =
+            GuiSimulationJob::from_document(&document, &runs_root, &SimulationProfile::default())
+                .unwrap();
         let task = GuiSimulationTask::spawn(job, || Box::new(RecordingBackend));
 
         let started = Instant::now();

@@ -3,9 +3,9 @@
 //! 偏好设置持久化到 `~/.config/nekospice/settings.json`。
 //! 持久化结构定义见 [`preferences_persistence`]。
 
-use super::preferences_persistence::{SettingsFile, SimulationSettingsFile, settings_path};
 use super::NekoSpiceApp;
 use super::localization::{StudioLocale, UiText};
+use super::preferences_persistence::{SettingsFile, SimulationSettingsFile, settings_path};
 use super::theme::{StudioPalette, StudioTheme, StudioThemeMode};
 use std::fs;
 
@@ -125,23 +125,27 @@ impl StudioPreferences {
         let path = settings_path();
         let data = match fs::read_to_string(&path) {
             Ok(d) => d,
-            Err(_) => return (
-                super::simulation::sim_options::SimOptions::default(),
-                "default".to_string(),
-                "ngspice".to_string(),
-                "tran".to_string(),
-                super::simulation::section_toggles::SimSectionToggles::default(),
-            ),
+            Err(_) => {
+                return (
+                    super::simulation::sim_options::SimOptions::default(),
+                    "default".to_string(),
+                    "ngspice".to_string(),
+                    "tran".to_string(),
+                    super::simulation::section_toggles::SimSectionToggles::default(),
+                );
+            }
         };
         let file: SettingsFile = match serde_json::from_str(&data) {
             Ok(f) => f,
-            Err(_) => return (
-                super::simulation::sim_options::SimOptions::default(),
-                "default".to_string(),
-                "ngspice".to_string(),
-                "tran".to_string(),
-                super::simulation::section_toggles::SimSectionToggles::default(),
-            ),
+            Err(_) => {
+                return (
+                    super::simulation::sim_options::SimOptions::default(),
+                    "default".to_string(),
+                    "ngspice".to_string(),
+                    "tran".to_string(),
+                    super::simulation::section_toggles::SimSectionToggles::default(),
+                );
+            }
         };
         let s = file.simulation;
         let opts = super::simulation::sim_options::SimOptions {

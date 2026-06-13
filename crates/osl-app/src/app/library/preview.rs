@@ -9,7 +9,12 @@ use osl_kicad::{KicadCanvasScene, KicadIndexedSymbol};
 const SPICE_PREVIEW_LINES: usize = 16;
 
 /// draw symbol preview。
-pub(crate) fn draw_symbol_preview(ui: &mut egui::Ui, scene: &KicadCanvasScene, fill: Color32, mode: crate::app::theme::StudioThemeMode) {
+pub(crate) fn draw_symbol_preview(
+    ui: &mut egui::Ui,
+    scene: &KicadCanvasScene,
+    fill: Color32,
+    mode: crate::app::theme::StudioThemeMode,
+) {
     let available_width = ui.available_width().clamp(220.0, 520.0);
     let desired_size = Vec2::new(available_width, 260.0);
     let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());

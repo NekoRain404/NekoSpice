@@ -1,11 +1,11 @@
 //! Schematic inspector simulator info — simulation-related component details.
 
+use super::widgets::{compact_action, property_row, status_pill};
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
-use super::widgets::{compact_action, property_row, status_pill};
+use crate::app::simulation::state::StepSweep;
 use crate::app::status_strip::severity_color;
 use crate::app::theme::StudioTheme;
-use crate::app::simulation::state::StepSweep;
 use eframe::egui;
 use osl_kicad::KicadDiagnosticSeverity;
 
@@ -21,7 +21,12 @@ impl NekoSpiceApp {
                 self.text(UiText::Simulator),
             ));
             ui.horizontal_wrapped(|ui| {
-                status_pill(ui, mode, self.simulation_panel.backend.label(), palette.success);
+                status_pill(
+                    ui,
+                    mode,
+                    self.simulation_panel.backend.label(),
+                    palette.success,
+                );
                 let status = if self.simulation_panel.active_task.is_some() {
                     self.text(UiText::Running)
                 } else {
@@ -36,11 +41,20 @@ impl NekoSpiceApp {
                 "{} {}",
                 self.simulation_panel.directive_kind,
                 self.simulation_panel.analysis_params.to_body().trim()
-            ).trim().to_string();
+            )
+            .trim()
+            .to_string();
             property_row(ui, mode, "Directive", &directive);
 
             // Step sweep summary (if active)
-            if let StepSweep::Parametric { param_name, sweep_mode, start, stop, step } = &self.simulation_panel.step_sweep {
+            if let StepSweep::Parametric {
+                param_name,
+                sweep_mode,
+                start,
+                stop,
+                step,
+            } = &self.simulation_panel.step_sweep
+            {
                 let sweep_desc = match sweep_mode.as_str() {
                     "list" => format!("{} list {}", param_name, start),
                     "lin" => format!("{} {} to {} step {}", param_name, start, stop, step),
@@ -111,7 +125,13 @@ fn draw_measurement_rows(app: &NekoSpiceApp, ui: &mut egui::Ui) {
         if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) = &run.waveform {
             for var in summary.variables.iter().take(6) {
                 let value_str = if !var.unit.is_empty() {
-                    format!("{} {}", super::super::super::waveform::preview_primitives::format_compact_f64(var.last), var.unit)
+                    format!(
+                        "{} {}",
+                        super::super::super::waveform::preview_primitives::format_compact_f64(
+                            var.last
+                        ),
+                        var.unit
+                    )
                 } else {
                     super::super::super::waveform::preview_primitives::format_compact_f64(var.last)
                 };
@@ -121,7 +141,12 @@ fn draw_measurement_rows(app: &NekoSpiceApp, ui: &mut egui::Ui) {
                 property_row(ui, mode, app.text(UiText::LiveMeasurements), "No signals");
             }
         } else {
-            property_row(ui, mode, app.text(UiText::LiveMeasurements), "Processing...");
+            property_row(
+                ui,
+                mode,
+                app.text(UiText::LiveMeasurements),
+                "Processing...",
+            );
         }
     } else {
         ui.label(StudioTheme::muted_for(

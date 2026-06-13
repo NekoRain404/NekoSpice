@@ -86,7 +86,10 @@ impl NekoSpiceApp {
     fn draw_settings_runtime_section(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(mode, self.text(UiText::System)));
+            ui.label(StudioTheme::section_title_for(
+                mode,
+                self.text(UiText::System),
+            ));
             ui.add_space(4.0);
 
             // ngspice path with validation indicator
@@ -119,7 +122,11 @@ impl NekoSpiceApp {
             if preset != "default" {
                 ui.horizontal(|ui| {
                     ui.label(StudioTheme::muted_for(mode, "Active Preset"));
-                    ui.label(egui::RichText::new(&preset).strong().color(self.theme_palette().accent));
+                    ui.label(
+                        egui::RichText::new(&preset)
+                            .strong()
+                            .color(self.theme_palette().accent),
+                    );
                 });
             }
 
@@ -130,7 +137,14 @@ impl NekoSpiceApp {
                     .selected_text(self.simulation_panel.backend.label())
                     .show_ui(ui, |ui| {
                         for &kind in &super::super::simulation::state::SimulationBackendKind::ALL {
-                            if ui.selectable_value(&mut self.simulation_panel.backend, kind, kind.label()).changed() {
+                            if ui
+                                .selectable_value(
+                                    &mut self.simulation_panel.backend,
+                                    kind,
+                                    kind.label(),
+                                )
+                                .changed()
+                            {
                                 changed = true;
                             }
                         }
@@ -150,16 +164,24 @@ impl NekoSpiceApp {
                 ] {
                     let active = self.simulation_panel.directive_kind == kind;
                     let btn = if active {
-                        egui::Button::new(egui::RichText::new(kind.to_string()).strong().color(self.theme_palette().text))
-                            .fill(self.theme_palette().accent_soft)
-                            .stroke(egui::Stroke::new(1.0, self.theme_palette().accent))
+                        egui::Button::new(
+                            egui::RichText::new(kind.to_string())
+                                .strong()
+                                .color(self.theme_palette().text),
+                        )
+                        .fill(self.theme_palette().accent_soft)
+                        .stroke(egui::Stroke::new(1.0, self.theme_palette().accent))
                     } else {
-                        egui::Button::new(egui::RichText::new(kind.to_string()).color(self.theme_palette().text_muted))
-                            .fill(self.theme_palette().panel_soft)
+                        egui::Button::new(
+                            egui::RichText::new(kind.to_string())
+                                .color(self.theme_palette().text_muted),
+                        )
+                        .fill(self.theme_palette().panel_soft)
                     };
                     if ui.add(btn).clicked() && !active {
                         self.simulation_panel.directive_kind = kind;
-                        self.simulation_panel.analysis_params = super::super::simulation::state::AnalysisParams::for_kind(kind);
+                        self.simulation_panel.analysis_params =
+                            super::super::simulation::state::AnalysisParams::for_kind(kind);
                         changed = true;
                     }
                 }
@@ -171,14 +193,54 @@ impl NekoSpiceApp {
                 .num_columns(2)
                 .spacing([12.0, 4.0])
                 .show(ui, |ui| {
-                    changed |= settings_edit_row(ui, mode, "Temperature (°C)", &mut self.simulation_profile_editor.options.temperature);
-                    changed |= settings_edit_row(ui, mode, "Method", &mut self.simulation_profile_editor.options.method);
-                    changed |= settings_edit_row(ui, mode, "RELTOL", &mut self.simulation_profile_editor.options.reltol);
-                    changed |= settings_edit_row(ui, mode, "ABSTOL", &mut self.simulation_profile_editor.options.abstol);
-                    changed |= settings_edit_row(ui, mode, "VNTOL", &mut self.simulation_profile_editor.options.vntol);
-                    changed |= settings_edit_row(ui, mode, "GMIN", &mut self.simulation_profile_editor.options.gmin);
-                    changed |= settings_edit_row(ui, mode, "ITL1", &mut self.simulation_profile_editor.options.itl1);
-                    changed |= settings_edit_row(ui, mode, "ITL4", &mut self.simulation_profile_editor.options.itl4);
+                    changed |= settings_edit_row(
+                        ui,
+                        mode,
+                        "Temperature (°C)",
+                        &mut self.simulation_profile_editor.options.temperature,
+                    );
+                    changed |= settings_edit_row(
+                        ui,
+                        mode,
+                        "Method",
+                        &mut self.simulation_profile_editor.options.method,
+                    );
+                    changed |= settings_edit_row(
+                        ui,
+                        mode,
+                        "RELTOL",
+                        &mut self.simulation_profile_editor.options.reltol,
+                    );
+                    changed |= settings_edit_row(
+                        ui,
+                        mode,
+                        "ABSTOL",
+                        &mut self.simulation_profile_editor.options.abstol,
+                    );
+                    changed |= settings_edit_row(
+                        ui,
+                        mode,
+                        "VNTOL",
+                        &mut self.simulation_profile_editor.options.vntol,
+                    );
+                    changed |= settings_edit_row(
+                        ui,
+                        mode,
+                        "GMIN",
+                        &mut self.simulation_profile_editor.options.gmin,
+                    );
+                    changed |= settings_edit_row(
+                        ui,
+                        mode,
+                        "ITL1",
+                        &mut self.simulation_profile_editor.options.itl1,
+                    );
+                    changed |= settings_edit_row(
+                        ui,
+                        mode,
+                        "ITL4",
+                        &mut self.simulation_profile_editor.options.itl4,
+                    );
                 });
         });
 
@@ -234,9 +296,13 @@ fn settings_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &s
     });
 }
 
-
 /// Editable settings row that returns whether the value was changed.
-fn settings_edit_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &mut String) -> bool {
+fn settings_edit_row(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    label: &str,
+    value: &mut String,
+) -> bool {
     ui.label(StudioTheme::muted_for(mode, label));
     let resp = ui.add(
         egui::TextEdit::singleline(value)
@@ -249,12 +315,7 @@ fn settings_edit_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, valu
 }
 
 /// Draw a solver path row with a validation indicator (green check or red X).
-fn solver_path_row(
-    ui: &mut egui::Ui,
-    mode: StudioThemeMode,
-    path: &mut String,
-    name: &str,
-) {
+fn solver_path_row(ui: &mut egui::Ui, mode: StudioThemeMode, path: &mut String, name: &str) {
     let palette = StudioTheme::palette(mode);
     // Check if the solver is available
     let available = std::process::Command::new("which")
@@ -288,7 +349,11 @@ fn solver_path_row(
         if available {
             ui.label(StudioTheme::muted_for(mode, "found"));
         } else {
-            ui.label(egui::RichText::new("not found").color(palette.danger).size(11.0));
+            ui.label(
+                egui::RichText::new("not found")
+                    .color(palette.danger)
+                    .size(11.0),
+            );
         }
     });
 }

@@ -9,11 +9,11 @@
 //! - Distortion Analysis: harmonic distortion measurement
 //! - Sensitivity Analysis: parameter sensitivity sweep
 
+use super::state::AnalysisParams;
 use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 use osl_kicad::KicadSimulationDirectiveKind;
-use super::state::AnalysisParams;
 
 /// A quick-start template with analysis kind and parameter factory.
 struct QuickTemplate {
@@ -27,29 +27,39 @@ struct QuickTemplate {
 
 fn rc_lowpass_params() -> AnalysisParams {
     AnalysisParams::Tran {
-        tstep: "10u".into(), tstop: "5m".into(),
-        tstart: "0".into(), tmax: "0".into(), uic: false,
+        tstep: "10u".into(),
+        tstop: "5m".into(),
+        tstart: "0".into(),
+        tmax: "0".into(),
+        uic: false,
     }
 }
 
 fn opamp_ac_params() -> AnalysisParams {
     AnalysisParams::Ac {
-        sweep_type: "dec".into(), npoints: "100".into(),
-        fstart: "1".into(), fstop: "100Meg".into(),
+        sweep_type: "dec".into(),
+        npoints: "100".into(),
+        fstart: "1".into(),
+        fstop: "100Meg".into(),
     }
 }
 
 fn dc_transfer_params() -> AnalysisParams {
     AnalysisParams::Dc {
-        source: "V1".into(), vstart: "0".into(),
-        vstop: "5".into(), vincr: "0.01".into(),
+        source: "V1".into(),
+        vstart: "0".into(),
+        vstop: "5".into(),
+        vincr: "0.01".into(),
     }
 }
 
 fn power_startup_params() -> AnalysisParams {
     AnalysisParams::Tran {
-        tstep: "1u".into(), tstop: "10m".into(),
-        tstart: "0".into(), tmax: "0".into(), uic: true,
+        tstep: "1u".into(),
+        tstop: "10m".into(),
+        tstart: "0".into(),
+        tmax: "0".into(),
+        uic: true,
     }
 }
 
@@ -59,16 +69,21 @@ fn op_point_params() -> AnalysisParams {
 
 fn noise_floor_params() -> AnalysisParams {
     AnalysisParams::Noise {
-        output: "V(out)".into(), input_source: "V(src)".into(),
-        sweep_type: "dec".into(), npoints: "50".into(),
-        fstart: "1".into(), fstop: "10Meg".into(),
+        output: "V(out)".into(),
+        input_source: "V(src)".into(),
+        sweep_type: "dec".into(),
+        npoints: "50".into(),
+        fstart: "1".into(),
+        fstop: "10Meg".into(),
     }
 }
 
 fn distortion_params() -> AnalysisParams {
     AnalysisParams::Disto {
-        fstart: "1".into(), fstop: "100k".into(),
-        fstep: "0".into(), maxharmonic: "3".into(),
+        fstart: "1".into(),
+        fstop: "100k".into(),
+        fstep: "0".into(),
+        maxharmonic: "3".into(),
     }
 }
 
@@ -80,15 +95,20 @@ fn sensitivity_params() -> AnalysisParams {
 
 fn broadband_ac_params() -> AnalysisParams {
     AnalysisParams::Ac {
-        sweep_type: "dec".into(), npoints: "200".into(),
-        fstart: "10".into(), fstop: "1G".into(),
+        sweep_type: "dec".into(),
+        npoints: "200".into(),
+        fstart: "10".into(),
+        fstop: "1G".into(),
     }
 }
 
 fn step_response_params() -> AnalysisParams {
     AnalysisParams::Tran {
-        tstep: "1n".into(), tstop: "100u".into(),
-        tstart: "0".into(), tmax: "1n".into(), uic: true,
+        tstep: "1n".into(),
+        tstop: "100u".into(),
+        tstart: "0".into(),
+        tmax: "1n".into(),
+        uic: true,
     }
 }
 
@@ -182,7 +202,9 @@ pub(crate) fn draw_quick_start_panel(
 
         for template in templates() {
             let btn = egui::Button::new(
-                egui::RichText::new(template.name).color(palette.text).size(12.0),
+                egui::RichText::new(template.name)
+                    .color(palette.text)
+                    .size(12.0),
             )
             .fill(palette.panel_soft)
             .stroke(egui::Stroke::new(1.0, palette.border))

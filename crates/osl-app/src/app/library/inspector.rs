@@ -1,7 +1,7 @@
 //! Library inspector — detailed symbol property display and pin listing.
 
-use crate::app::NekoSpiceApp;
 use super::widgets::metadata_row;
+use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;

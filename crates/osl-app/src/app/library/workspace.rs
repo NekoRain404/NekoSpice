@@ -1,7 +1,7 @@
 //! Library workspace — center panel for symbol browsing, preview, and placement.
 
-use crate::app::NekoSpiceApp;
 use super::widgets::library_filter_tab;
+use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
@@ -23,7 +23,10 @@ impl NekoSpiceApp {
 
                     // Vendor models toggle
                     ui.horizontal(|ui| {
-                        if ui.selectable_label(self.show_vendor_panel, "Vendor Models (TI/ADI)").clicked() {
+                        if ui
+                            .selectable_label(self.show_vendor_panel, "Vendor Models (TI/ADI)")
+                            .clicked()
+                        {
                             self.show_vendor_panel = !self.show_vendor_panel;
                         }
                     });

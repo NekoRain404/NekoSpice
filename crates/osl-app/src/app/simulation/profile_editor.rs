@@ -9,15 +9,14 @@
 //! The `SimOptions` struct mirrors all fields in `SimulationProfile` so that
 //! the GUI can edit them independently before committing to a profile build.
 
-use crate::app::NekoSpiceApp;
-use crate::app::localization::UiText;
 use super::profile_editor_options::draw_profile_options;
 use super::profile_editor_sections::{
-    draw_analysis_setup_panel, draw_component_params, draw_model_params,
-    draw_parameter_definitions,
+    draw_analysis_setup_panel, draw_component_params, draw_model_params, draw_parameter_definitions,
 };
-use crate::app::theme::StudioTheme;
 use super::sim_options::SimOptions;
+use crate::app::NekoSpiceApp;
+use crate::app::localization::UiText;
+use crate::app::theme::StudioTheme;
 use eframe::egui;
 
 /// Sub-views available within the simulation workspace.
@@ -82,7 +81,8 @@ pub(crate) struct SimulationProfileEditorState {
 impl SimulationProfileEditorState {
     /// Load simulation settings from disk. Falls back to defaults if unavailable.
     pub(crate) fn from_disk() -> Self {
-        let (opts, preset, backend, directive_kind, toggles) = crate::app::preferences::StudioPreferences::load_simulation_settings();
+        let (opts, preset, backend, directive_kind, toggles) =
+            crate::app::preferences::StudioPreferences::load_simulation_settings();
         Self {
             sub_view: SimulationSubView::default(),
             component_params: Vec::new(),
@@ -193,7 +193,9 @@ impl NekoSpiceApp {
                 let active = self.simulation_profile_editor.active_preset == *name;
                 let btn = if active {
                     egui::Button::new(
-                        egui::RichText::new(*label).strong().color(self.theme_palette().text),
+                        egui::RichText::new(*label)
+                            .strong()
+                            .color(self.theme_palette().text),
                     )
                     .fill(self.theme_palette().accent_soft)
                     .stroke(egui::Stroke::new(1.0, self.theme_palette().accent))

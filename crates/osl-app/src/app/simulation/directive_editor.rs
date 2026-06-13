@@ -9,13 +9,13 @@
 //! The structured fields are converted to SPICE directive body text when
 //! the user clicks "Set Directive" or runs the simulation.
 
+use super::field_validation::{FieldValidity, validate_spice_value};
+use super::profile_editor_widgets::labeled_edit;
+use super::state::AnalysisParams;
 use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
-use osl_kicad::KicadSimulationDirectiveKind;
 use eframe::egui;
-use super::state::AnalysisParams;
-use super::profile_editor_widgets::labeled_edit;
-use super::field_validation::{validate_spice_value, FieldValidity};
+use osl_kicad::KicadSimulationDirectiveKind;
 
 impl NekoSpiceApp {
     /// Draw the structured directive editor in the panel sidebar.
@@ -50,11 +50,9 @@ impl NekoSpiceApp {
                             .fill(palette.panel_soft)
                             .stroke(egui::Stroke::new(1.0, palette.border))
                     };
-                    if ui.add(btn).clicked() {
-                        if self.simulation_panel.directive_kind != kind {
-                            self.simulation_panel.directive_kind = kind;
-                            self.simulation_panel.analysis_params = AnalysisParams::for_kind(kind);
-                        }
+                    if ui.add(btn).clicked() && self.simulation_panel.directive_kind != kind {
+                        self.simulation_panel.directive_kind = kind;
+                        self.simulation_panel.analysis_params = AnalysisParams::for_kind(kind);
                     }
                 }
             });
@@ -71,8 +69,7 @@ impl NekoSpiceApp {
                 if ui
                     .add_enabled(
                         self.document.is_some(),
-                        egui::Button::new("Set Directive")
-                            .fill(palette.accent_soft),
+                        egui::Button::new("Set Directive").fill(palette.accent_soft),
                     )
                     .clicked()
                 {
@@ -90,9 +87,15 @@ impl NekoSpiceApp {
     fn draw_analysis_params_fields(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
-        
+
         match &mut self.simulation_panel.analysis_params {
-            AnalysisParams::Tran { tstep, tstop, tstart, tmax, uic } => {
+            AnalysisParams::Tran {
+                tstep,
+                tstop,
+                tstart,
+                tmax,
+                uic,
+            } => {
                 egui::Grid::new("tran_params_grid")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
@@ -109,31 +112,42 @@ impl NekoSpiceApp {
                         ui.label(StudioTheme::muted_for(mode, "UIC"));
                         ui.checkbox(uic, "Use Initial Conditions")
                     });
-                    // Validation indicators
-                    ui.add_space(4.0);
-                    let tstep_valid = validate_spice_value(tstep);
-                    let tstop_valid = validate_spice_value(tstop);
-                    if tstep_valid != FieldValidity::Ok || tstop_valid != FieldValidity::Ok {
-                        ui.horizontal(|ui| {
-                            if tstep_valid != FieldValidity::Ok {
-                                ui.colored_label(tstep_valid.color(&palette), format!("Tstep: {}", tstep_valid.tooltip()));
-                            }
-                            if tstop_valid != FieldValidity::Ok {
-                                ui.colored_label(tstop_valid.color(&palette), format!("Tstop: {}", tstop_valid.tooltip()));
-                            }
-                        });
-                    }
-                    egui::Grid::new("tran_params_grid_extra")
-                        .num_columns(2)
-                        .spacing([8.0, 6.0])
-                        .show(ui, |ui| {
+                // Validation indicators
+                ui.add_space(4.0);
+                let tstep_valid = validate_spice_value(tstep);
+                let tstop_valid = validate_spice_value(tstop);
+                if tstep_valid != FieldValidity::Ok || tstop_valid != FieldValidity::Ok {
+                    ui.horizontal(|ui| {
+                        if tstep_valid != FieldValidity::Ok {
+                            ui.colored_label(
+                                tstep_valid.color(&palette),
+                                format!("Tstep: {}", tstep_valid.tooltip()),
+                            );
+                        }
+                        if tstop_valid != FieldValidity::Ok {
+                            ui.colored_label(
+                                tstop_valid.color(&palette),
+                                format!("Tstop: {}", tstop_valid.tooltip()),
+                            );
+                        }
+                    });
+                }
+                egui::Grid::new("tran_params_grid_extra")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
                         ui.label(StudioTheme::muted_for(mode, "UIC"));
                         ui.checkbox(uic, "Use Initial Conditions")
                             .on_hover_text("Skip initial operating point calculation");
                         ui.end_row();
                     });
             }
-            AnalysisParams::Ac { sweep_type, npoints, fstart, fstop } => {
+            AnalysisParams::Ac {
+                sweep_type,
+                npoints,
+                fstart,
+                fstop,
+            } => {
                 // Sweep type selector
                 ui.label(StudioTheme::muted_for(mode, "Sweep Type"));
                 ui.horizontal(|ui| {
@@ -167,17 +181,20 @@ impl NekoSpiceApp {
                             .on_hover_text("Stop frequency (Hz)");
                     });
             }
-            AnalysisParams::Dc { source, vstart, vstop, vincr } => {
+            AnalysisParams::Dc {
+                source,
+                vstart,
+                vstop,
+                vincr,
+            } => {
                 egui::Grid::new("dc_params_grid")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
                         labeled_edit(ui, mode, "Source", source, "V1")
                             .on_hover_text("Independent source to sweep");
-                        labeled_edit(ui, mode, "Vstart", vstart, "0")
-                            .on_hover_text("Start value");
-                        labeled_edit(ui, mode, "Vstop", vstop, "5")
-                            .on_hover_text("Stop value");
+                        labeled_edit(ui, mode, "Vstart", vstart, "0").on_hover_text("Start value");
+                        labeled_edit(ui, mode, "Vstop", vstop, "5").on_hover_text("Stop value");
                         labeled_edit(ui, mode, "Vincr", vincr, "0.1")
                             .on_hover_text("Increment step");
                     });
@@ -188,7 +205,12 @@ impl NekoSpiceApp {
                     "Operating point analysis — calculates DC bias conditions.",
                 ));
             }
-            AnalysisParams::Disto { fstart, fstop, fstep, maxharmonic } => {
+            AnalysisParams::Disto {
+                fstart,
+                fstop,
+                fstep,
+                maxharmonic,
+            } => {
                 egui::Grid::new("disto_params_grid")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
@@ -212,7 +234,14 @@ impl NekoSpiceApp {
                             .on_hover_text("Output variable for sensitivity analysis");
                     });
             }
-            AnalysisParams::Noise { output, input_source, sweep_type, npoints, fstart, fstop } => {
+            AnalysisParams::Noise {
+                output,
+                input_source,
+                sweep_type,
+                npoints,
+                fstart,
+                fstop,
+            } => {
                 egui::Grid::new("noise_params_grid")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
@@ -225,7 +254,11 @@ impl NekoSpiceApp {
                 // Sweep type selector
                 ui.label(StudioTheme::muted_for(mode, "Sweep Type"));
                 ui.horizontal(|ui| {
-                    for (st, tip) in [("dec", "Points per decade"), ("lin", "Total linear points"), ("oct", "Points per octave")] {
+                    for (st, tip) in [
+                        ("dec", "Points per decade"),
+                        ("lin", "Total linear points"),
+                        ("oct", "Points per octave"),
+                    ] {
                         let active = sweep_type.as_str() == st;
                         let btn = if active {
                             egui::Button::new(egui::RichText::new(st).strong())
@@ -250,19 +283,25 @@ impl NekoSpiceApp {
                         labeled_edit(ui, mode, "Fstop", fstop, "100Meg")
                             .on_hover_text("Stop frequency (Hz)");
                     });
-                    // AC validation
-                    let fstart_valid = validate_spice_value(fstart);
-                    let fstop_valid = validate_spice_value(fstop);
-                    if fstart_valid != FieldValidity::Ok || fstop_valid != FieldValidity::Ok {
-                        ui.horizontal(|ui| {
-                            if fstart_valid != FieldValidity::Ok {
-                                ui.colored_label(fstart_valid.color(&palette), format!("Fstart: {}", fstart_valid.tooltip()));
-                            }
-                            if fstop_valid != FieldValidity::Ok {
-                                ui.colored_label(fstop_valid.color(&palette), format!("Fstop: {}", fstop_valid.tooltip()));
-                            }
-                        });
-                    }
+                // AC validation
+                let fstart_valid = validate_spice_value(fstart);
+                let fstop_valid = validate_spice_value(fstop);
+                if fstart_valid != FieldValidity::Ok || fstop_valid != FieldValidity::Ok {
+                    ui.horizontal(|ui| {
+                        if fstart_valid != FieldValidity::Ok {
+                            ui.colored_label(
+                                fstart_valid.color(&palette),
+                                format!("Fstart: {}", fstart_valid.tooltip()),
+                            );
+                        }
+                        if fstop_valid != FieldValidity::Ok {
+                            ui.colored_label(
+                                fstop_valid.color(&palette),
+                                format!("Fstop: {}", fstop_valid.tooltip()),
+                            );
+                        }
+                    });
+                }
             }
         }
 

@@ -1,6 +1,5 @@
 //! KiCad simulation directive parsing - .tran, .ac, .dc, .op, .noise, .disto, .sens.
 
-
 use crate::edit::validate_at;
 use crate::{KicadAt, KicadEditSummary, KicadSchematic, KicadTextItem};
 use osl_core::{OslError, OslResult};
@@ -82,7 +81,10 @@ impl KicadSimulationDirectiveKind {
 
     /// is analysis。
     pub fn is_analysis(self) -> bool {
-        matches!(self, Self::Tran | Self::Ac | Self::Dc | Self::Op | Self::Noise | Self::Disto | Self::Sens)
+        matches!(
+            self,
+            Self::Tran | Self::Ac | Self::Dc | Self::Op | Self::Noise | Self::Disto | Self::Sens
+        )
     }
 }
 

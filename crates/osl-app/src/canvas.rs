@@ -10,13 +10,13 @@
 //! - [`hover`] — 悬停高亮绘制
 
 pub(crate) mod colors;
+pub(crate) mod hover;
 mod primitives;
 pub(crate) mod scene_renderer;
-pub(crate) mod scene_renderer_wires;
 pub(crate) mod scene_renderer_annotations;
+pub(crate) mod scene_renderer_wires;
 pub(crate) mod transforms;
-pub(crate) mod hover;
 
+pub(crate) use hover::draw_hover_highlight;
 pub(crate) use primitives::{draw_bounds, draw_grid, draw_line};
 pub(crate) use scene_renderer::draw_scene;
-pub(crate) use hover::draw_hover_highlight;

@@ -337,14 +337,14 @@ impl SimulationProfile {
 
         // ── Analysis directive ─────────────────────────────────────────
         // .step directive (before analysis)
-        if let Some(ref step) = self.step_directive {
-            if !step.trim().is_empty() {
-                lines.push(step.trim().to_string());
-            }
+        if let Some(ref step) = self.step_directive
+            && !step.trim().is_empty()
+        {
+            lines.push(step.trim().to_string());
         }
         // Analysis directive
         let analysis_line = if self.analysis_body.trim().is_empty() {
-            format!("{}", self.analysis_kind)
+            self.analysis_kind.to_string()
         } else {
             format!("{} {}", self.analysis_kind, self.analysis_body.trim())
         };
@@ -465,14 +465,22 @@ impl SimulationProfile {
         // ── Component parameter overrides ──────────────────────────────
         for param in &self.component_params {
             if param.is_valid() {
-                lines.push(format!(".param {}={}", param.name.trim(), param.value.trim()));
+                lines.push(format!(
+                    ".param {}={}",
+                    param.name.trim(),
+                    param.value.trim()
+                ));
             }
         }
 
         // ── Model parameter overrides ──────────────────────────────────
         for param in &self.model_params {
             if param.is_valid() {
-                lines.push(format!(".param {}={}", param.name.trim(), param.value.trim()));
+                lines.push(format!(
+                    ".param {}={}",
+                    param.name.trim(),
+                    param.value.trim()
+                ));
             }
         }
 
@@ -507,13 +515,15 @@ impl SimulationProfile {
             || self.has_non_default_solver_options()
             || !self.initial_conditions.is_empty()
             || !self.nodesets.is_empty()
-            || self.component_params.iter().any(ProfileParamEntry::is_valid)
+            || self
+                .component_params
+                .iter()
+                .any(ProfileParamEntry::is_valid)
             || self.model_params.iter().any(ProfileParamEntry::is_valid)
             || self.step_directive.is_some()
             || !self.measure_directives.is_empty()
     }
 }
-
 
 /// Inject profile directives into a SPICE netlist.
 ///
@@ -554,15 +564,13 @@ pub fn inject_profile_directives(netlist: &str, profile: &SimulationProfile) -> 
         }
 
         // Insert remaining profile directives before `.end`
-        if trimmed.eq_ignore_ascii_case(".end") {
-            if !inserted_analysis {
-                // No analysis directive was found — insert all profile directives
-                output.push("* --- NekoSpice simulation profile ---".to_string());
-                for directive in &directives {
-                    output.push(directive.clone());
-                }
-                inserted_analysis = true;
+        if trimmed.eq_ignore_ascii_case(".end") && !inserted_analysis {
+            // No analysis directive was found — insert all profile directives
+            output.push("* --- NekoSpice simulation profile ---".to_string());
+            for directive in &directives {
+                output.push(directive.clone());
             }
+            inserted_analysis = true;
         }
 
         output.push(line.to_string());
@@ -594,7 +602,6 @@ pub fn inject_profile_directives(netlist: &str, profile: &SimulationProfile) -> 
 
     output.join("\n")
 }
-
 
 /// Validate that a netlist is runnable by ngspice/Xyce.
 ///
@@ -628,9 +635,7 @@ pub fn validate_netlist_for_simulation(netlist: &str) -> Vec<String> {
             || lower == ".op"
     });
     if !has_analysis {
-        issues.push(
-            "No analysis directive found (.tran, .ac, .dc, .op)".to_string(),
-        );
+        issues.push("No analysis directive found (.tran, .ac, .dc, .op)".to_string());
     }
 
     issues
@@ -706,6 +711,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn inject_directives_before_end() {
         let netlist = "* RC filter\nR1 in out 1k\nC1 out 0 100n\n.end\n";
         let mut profile = SimulationProfile::default();
@@ -713,7 +719,10 @@ mod tests {
         let result = inject_profile_directives(netlist, &profile);
         assert!(result.contains(".temp 125"));
         assert!(result.contains(".end"), "netlist should end with .end");
-        assert!(result.trim_end().ends_with(".end"), "netlist should end with .end directive");
+        assert!(
+            result.trim_end().ends_with(".end"),
+            "netlist should end with .end directive"
+        );
         let temp_pos = result.find(".temp 125").unwrap();
         let end_pos = result.find(".end").unwrap();
         assert!(temp_pos < end_pos);
@@ -773,19 +782,24 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn generate_directives_includes_new_options() {
         let mut profile = SimulationProfile::default();
         profile.gmin = "1e-10".to_string();
         profile.itl4 = "50".to_string();
         profile.numdgt = "8".to_string();
         let directives = profile.generate_directives();
-        let options_line = directives.iter().find(|l| l.starts_with(".options")).unwrap();
+        let options_line = directives
+            .iter()
+            .find(|l| l.starts_with(".options"))
+            .unwrap();
         assert!(options_line.contains("gmin=1e-10"));
         assert!(options_line.contains("itl4=50"));
         assert!(options_line.contains("numdgt=8"));
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn generate_directives_with_ic_and_nodeset() {
         let mut profile = SimulationProfile::default();
         profile.initial_conditions = vec![("V(out)".to_string(), "2.5".to_string())];

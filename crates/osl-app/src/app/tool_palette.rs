@@ -17,7 +17,11 @@ fn tool_palette_items() -> Vec<ToolDef> {
         ToolDef("\u{2570}", "Bus Entry (E)", SchematicTool::BusEntry),
         ToolDef("\u{1F517}", "Net Label (L)", SchematicTool::Label),
         ToolDef("\u{1F3F0}", "Global Label (G)", SchematicTool::GlobalLabel),
-        ToolDef("\u{1F3E0}", "Hierarchical Label (H)", SchematicTool::HierarchicalLabel),
+        ToolDef(
+            "\u{1F3E0}",
+            "Hierarchical Label (H)",
+            SchematicTool::HierarchicalLabel,
+        ),
         ToolDef("\u{25A3}", "Sheet Symbol (S)", SchematicTool::Sheet),
         ToolDef("\u{1F4DD}", "Text (T)", SchematicTool::Text),
         ToolDef("\u{2B24}", "Junction (J)", SchematicTool::Junction),
@@ -50,16 +54,14 @@ impl NekoSpiceApp {
                         (Color32::TRANSPARENT, palette.text_muted)
                     };
 
-                    let btn = egui::Button::new(
-                        RichText::new(item.0).size(14.0).color(icon_color),
-                    )
-                    .fill(bg)
-                    .stroke(if selected {
-                        Stroke::new(1.0, palette.accent)
-                    } else {
-                        Stroke::NONE
-                    })
-                    .corner_radius(CornerRadius::same(4));
+                    let btn = egui::Button::new(RichText::new(item.0).size(14.0).color(icon_color))
+                        .fill(bg)
+                        .stroke(if selected {
+                            Stroke::new(1.0, palette.accent)
+                        } else {
+                            Stroke::NONE
+                        })
+                        .corner_radius(CornerRadius::same(4));
 
                     let response = ui
                         .add_sized([panel_width - 4.0, button_size], btn)
@@ -89,11 +91,7 @@ impl NekoSpiceApp {
                             response.rect.left_top(),
                             egui::Vec2::new(2.0, response.rect.height()),
                         );
-                        painter.rect_filled(
-                            bar,
-                            CornerRadius::same(1),
-                            palette.accent,
-                        );
+                        painter.rect_filled(bar, CornerRadius::same(1), palette.accent);
                     }
 
                     if response.clicked() {

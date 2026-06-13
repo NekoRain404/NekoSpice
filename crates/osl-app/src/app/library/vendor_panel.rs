@@ -30,15 +30,17 @@ impl NekoSpiceApp {
                 "Vendor Models (TI / ADI)",
             ));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Browse...").on_hover_text("Select model directory").clicked() {
-                    if let Some(dir) = rfd::FileDialog::new()
+                if ui
+                    .button("Browse...")
+                    .on_hover_text("Select model directory")
+                    .clicked()
+                    && let Some(dir) = rfd::FileDialog::new()
                         .set_title("Select SPICE Model Directory")
                         .pick_folder()
-                    {
-                        let dir_str = dir.display().to_string();
-                        self.vendor_model_path = dir_str;
-                        self.import_vendor_models(&self.vendor_model_path.clone());
-                    }
+                {
+                    let dir_str = dir.display().to_string();
+                    self.vendor_model_path = dir_str;
+                    self.import_vendor_models(&self.vendor_model_path.clone());
                 }
             });
         });
@@ -48,10 +50,8 @@ impl NekoSpiceApp {
         ui.horizontal(|ui| {
             ui.label(StudioTheme::muted_for(mode, "Path:"));
             ui.text_edit_singleline(&mut self.vendor_model_path);
-            if ui.small_button("Import").clicked() {
-                if !self.vendor_model_path.is_empty() {
-                    self.import_vendor_models(&self.vendor_model_path.clone());
-                }
+            if ui.small_button("Import").clicked() && !self.vendor_model_path.is_empty() {
+                self.import_vendor_models(&self.vendor_model_path.clone());
             }
         });
         ui.add_space(4.0);
@@ -73,7 +73,10 @@ impl NekoSpiceApp {
 
         // ── Build display rows from catalog (collect data to avoid borrow conflicts) ──
         let search = self.vendor_search.trim().to_lowercase();
-        let subckt_rows: Vec<VendorRow> = self.vendor_catalog.subckts.iter()
+        let subckt_rows: Vec<VendorRow> = self
+            .vendor_catalog
+            .subckts
+            .iter()
             .filter(|(name, _)| search.is_empty() || name.to_lowercase().contains(&search))
             .map(|(name, entry)| {
                 let badge_color = match entry.vendor {
@@ -89,7 +92,10 @@ impl NekoSpiceApp {
                 }
             })
             .collect();
-        let model_rows: Vec<VendorRow> = self.vendor_catalog.models.iter()
+        let model_rows: Vec<VendorRow> = self
+            .vendor_catalog
+            .models
+            .iter()
             .filter(|(name, _)| search.is_empty() || name.to_lowercase().contains(&search))
             .map(|(name, entry)| {
                 let badge_color = match entry.vendor {
@@ -123,7 +129,11 @@ impl NekoSpiceApp {
                             if !row.detail.is_empty() {
                                 ui.label(StudioTheme::muted_for(mode, &row.detail));
                             }
-                            if ui.small_button("+").on_hover_text("Add .subckt to simulation").clicked() {
+                            if ui
+                                .small_button("+")
+                                .on_hover_text("Add .subckt to simulation")
+                                .clicked()
+                            {
                                 clicked_subckt = Some(row.name.clone());
                             }
                         });
@@ -149,7 +159,11 @@ impl NekoSpiceApp {
                         ui.horizontal(|ui| {
                             ui.colored_label(row.badge_color, format!("[{}]", row.badge));
                             ui.label(StudioTheme::muted_for(mode, &row.name));
-                            if ui.small_button("+").on_hover_text("Add to simulation profile").clicked() {
+                            if ui
+                                .small_button("+")
+                                .on_hover_text("Add to simulation profile")
+                                .clicked()
+                            {
                                 clicked_model = Some(row.name.clone());
                             }
                         });
@@ -181,17 +195,21 @@ impl NekoSpiceApp {
 
     /// Add a vendor subcircuit to the simulation profile's model parameters.
     fn add_vendor_subckt_to_simulation(&mut self, name: &str) {
-        self.simulation_profile_editor
-            .model_params
-            .push((name.to_string(), "subckt".to_string(), "vendor".to_string()));
+        self.simulation_profile_editor.model_params.push((
+            name.to_string(),
+            "subckt".to_string(),
+            "vendor".to_string(),
+        ));
         self.status_message = Some(format!("Added subcircuit '{}' to simulation", name));
     }
 
     /// Add a vendor .model statement to the simulation profile.
     fn add_vendor_model_to_simulation(&mut self, name: &str) {
-        self.simulation_profile_editor
-            .model_params
-            .push((name.to_string(), "model".to_string(), "vendor".to_string()));
+        self.simulation_profile_editor.model_params.push((
+            name.to_string(),
+            "model".to_string(),
+            "vendor".to_string(),
+        ));
         self.status_message = Some(format!("Added model '{}' to simulation", name));
     }
 }

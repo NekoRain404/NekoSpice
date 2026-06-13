@@ -41,28 +41,41 @@ fn draw_ready_waveform_summary(
     let palette = crate::app::theme::StudioTheme::palette(mode);
 
     // Waveform metadata header
-    ui.label(crate::app::theme::StudioTheme::section_title_for(mode, "Waveform Data"));
+    ui.label(crate::app::theme::StudioTheme::section_title_for(
+        mode,
+        "Waveform Data",
+    ));
     ui.add_space(2.0);
     ui.horizontal_wrapped(|ui| {
         ui.label(
             egui::RichText::new(format!("{} points", summary.point_count))
-                .monospace().size(11.0).color(palette.text_muted),
+                .monospace()
+                .size(11.0)
+                .color(palette.text_muted),
         );
         ui.separator();
         ui.label(
             egui::RichText::new(format!("{} variables", summary.variable_count))
-                .monospace().size(11.0).color(palette.text_muted),
+                .monospace()
+                .size(11.0)
+                .color(palette.text_muted),
         );
         if summary.omitted_variable_count > 0 {
             ui.separator();
             ui.label(
                 egui::RichText::new(format!("+{} omitted", summary.omitted_variable_count))
-                    .monospace().size(11.0).color(palette.warning),
+                    .monospace()
+                    .size(11.0)
+                    .color(palette.warning),
             );
         }
     });
     if !summary.title.is_empty() {
-        ui.label(egui::RichText::new(&summary.title).size(11.0).color(palette.text));
+        ui.label(
+            egui::RichText::new(&summary.title)
+                .size(11.0)
+                .color(palette.text),
+        );
     }
 
     draw_waveform_preview_selector(ui, summary, selected_signal);

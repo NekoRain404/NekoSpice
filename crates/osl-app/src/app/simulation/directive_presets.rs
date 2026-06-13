@@ -4,8 +4,8 @@
 //! Each preset fills in the corresponding fields with values commonly
 //! used for specific circuit types (audio, RF, logic, etc.).
 
-use crate::app::NekoSpiceApp;
 use super::state::AnalysisParams;
+use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
@@ -35,15 +35,28 @@ const TRAN_PRESETS: [(&str, &str, &str); 4] = [
 
 impl NekoSpiceApp {
     /// Draw AC frequency range presets below the AC parameter grid.
-    pub(crate) fn draw_ac_range_presets(&mut self, ui: &mut egui::Ui, mode: crate::app::theme::StudioThemeMode) {
-        let AnalysisParams::Ac { ref mut fstart, ref mut fstop, .. } = self.simulation_panel.analysis_params else {
+    pub(crate) fn draw_ac_range_presets(
+        &mut self,
+        ui: &mut egui::Ui,
+        mode: crate::app::theme::StudioThemeMode,
+    ) {
+        let AnalysisParams::Ac {
+            ref mut fstart,
+            ref mut fstop,
+            ..
+        } = self.simulation_panel.analysis_params
+        else {
             return;
         };
         ui.add_space(4.0);
         ui.label(StudioTheme::muted_for(mode, "Range presets:"));
         ui.horizontal_wrapped(|ui| {
             for &(label, fs, fe) in &AC_PRESETS {
-                if ui.small_button(label).on_hover_text(format!("{} Hz to {} Hz", fs, fe)).clicked() {
+                if ui
+                    .small_button(label)
+                    .on_hover_text(format!("{} Hz to {} Hz", fs, fe))
+                    .clicked()
+                {
                     *fstart = fs.to_string();
                     *fstop = fe.to_string();
                 }
@@ -52,8 +65,18 @@ impl NekoSpiceApp {
     }
 
     /// Draw DC voltage range presets below the DC parameter grid.
-    pub(crate) fn draw_dc_range_presets(&mut self, ui: &mut egui::Ui, mode: crate::app::theme::StudioThemeMode) {
-        let AnalysisParams::Dc { ref mut vstart, ref mut vstop, ref mut vincr, .. } = self.simulation_panel.analysis_params else {
+    pub(crate) fn draw_dc_range_presets(
+        &mut self,
+        ui: &mut egui::Ui,
+        mode: crate::app::theme::StudioThemeMode,
+    ) {
+        let AnalysisParams::Dc {
+            ref mut vstart,
+            ref mut vstop,
+            ref mut vincr,
+            ..
+        } = self.simulation_panel.analysis_params
+        else {
             return;
         };
         ui.add_space(4.0);
@@ -70,8 +93,17 @@ impl NekoSpiceApp {
     }
 
     /// Draw transient time range presets below the Tran parameter grid.
-    pub(crate) fn draw_tran_range_presets(&mut self, ui: &mut egui::Ui, mode: crate::app::theme::StudioThemeMode) {
-        let AnalysisParams::Tran { ref mut tstep, ref mut tstop, .. } = self.simulation_panel.analysis_params else {
+    pub(crate) fn draw_tran_range_presets(
+        &mut self,
+        ui: &mut egui::Ui,
+        mode: crate::app::theme::StudioThemeMode,
+    ) {
+        let AnalysisParams::Tran {
+            ref mut tstep,
+            ref mut tstop,
+            ..
+        } = self.simulation_panel.analysis_params
+        else {
             return;
         };
         ui.add_space(4.0);

@@ -109,7 +109,10 @@ impl NekoSpiceApp {
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(mode, "Customize View"));
             ui.add_space(4.0);
-            ui.label(StudioTheme::muted_for(mode, "Toggle optional sections on/off"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Toggle optional sections on/off",
+            ));
             ui.add_space(4.0);
 
             egui::Grid::new("customize_view_grid")

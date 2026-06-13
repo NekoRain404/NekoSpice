@@ -5,8 +5,8 @@ mod sheet;
 mod symbol;
 mod text;
 
-use crate::viewport::CanvasViewport;
 use super::colors::SchematicColors;
+use crate::viewport::CanvasViewport;
 use eframe::egui::{self, Color32, Rect, Stroke, StrokeKind};
 use osl_kicad::{KicadBoundingBox, KicadCanvasBusEntry, KicadPoint};
 
@@ -30,9 +30,14 @@ pub(crate) fn draw_polyline(
     width: f32,
 ) {
     for segment in points.windows(2) {
-        draw_line(painter, rect, viewport, segment[0], segment[1], color, width);
+        draw_line(
+            painter, rect, viewport, segment[0], segment[1], color, width,
+        );
     }
-    if closed && points.len() > 2 && let Some(last) = points.last() {
+    if closed
+        && points.len() > 2
+        && let Some(last) = points.last()
+    {
         draw_line(painter, rect, viewport, *last, points[0], color, width);
     }
 }

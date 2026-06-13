@@ -20,28 +20,12 @@ pub(crate) fn draw_schematic_tool_preview(
     match tools.active {
         SchematicTool::Wire => {
             if let Some(start) = tools.pending_wire_start {
-                canvas::draw_line(
-                    painter,
-                    rect,
-                    viewport,
-                    start,
-                    point,
-                    colors.wire,
-                    1.5,
-                );
+                canvas::draw_line(painter, rect, viewport, start, point, colors.wire, 1.5);
             }
         }
         SchematicTool::Bus => {
             if let Some(start) = tools.pending_bus_start {
-                canvas::draw_line(
-                    painter,
-                    rect,
-                    viewport,
-                    start,
-                    point,
-                    colors.bus,
-                    2.5,
-                );
+                canvas::draw_line(painter, rect, viewport, start, point, colors.bus, 2.5);
             }
         }
         SchematicTool::BusEntry => {
@@ -49,15 +33,7 @@ pub(crate) fn draw_schematic_tool_preview(
                 x: point.x + tools.bus_entry_size.width,
                 y: point.y + tools.bus_entry_size.height,
             };
-            canvas::draw_line(
-                painter,
-                rect,
-                viewport,
-                point,
-                end,
-                colors.bus,
-                2.0,
-            );
+            canvas::draw_line(painter, rect, viewport, point, end, colors.bus, 2.0);
         }
         SchematicTool::Label | SchematicTool::GlobalLabel | SchematicTool::HierarchicalLabel => {
             painter.text(
@@ -102,11 +78,7 @@ pub(crate) fn draw_schematic_tool_preview(
             );
         }
         SchematicTool::Junction => {
-            painter.circle_filled(
-                viewport.world_to_screen(rect, point),
-                3.0,
-                colors.junction,
-            );
+            painter.circle_filled(viewport.world_to_screen(rect, point), 3.0, colors.junction);
         }
         SchematicTool::NoConnect => {
             draw_no_connect_preview(painter, rect, viewport.world_to_screen(rect, point), colors);
@@ -115,7 +87,12 @@ pub(crate) fn draw_schematic_tool_preview(
     }
 }
 
-fn draw_no_connect_preview(painter: &egui::Painter, rect: Rect, center: Pos2, colors: SchematicColors) {
+fn draw_no_connect_preview(
+    painter: &egui::Painter,
+    rect: Rect,
+    center: Pos2,
+    colors: SchematicColors,
+) {
     if !rect.contains(center) {
         return;
     }

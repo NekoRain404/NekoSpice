@@ -8,11 +8,11 @@
 //! - `status_display` — run results, log viewer, waveform summary
 //! - `panel_sections` — config summary, netlist preview
 
+use super::state::SimulationBackendKind;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
-use super::state::SimulationBackendKind;
 
 impl NekoSpiceApp {
     /// Draw the full simulation right panel.
@@ -35,7 +35,9 @@ impl NekoSpiceApp {
                     .show_ui(ui, |ui| {
                         for &kind in &SimulationBackendKind::ALL {
                             let label = match self.locale() {
-                                crate::app::localization::StudioLocale::SimplifiedChinese => kind.label_zh(),
+                                crate::app::localization::StudioLocale::SimplifiedChinese => {
+                                    kind.label_zh()
+                                }
                                 _ => kind.label(),
                             };
                             ui.selectable_value(&mut self.simulation_panel.backend, kind, label);
@@ -54,7 +56,9 @@ impl NekoSpiceApp {
             if running {
                 ui.horizontal(|ui| {
                     ui.label(StudioTheme::status_dot(palette.warning));
-                    let elapsed = self.simulation_panel.run_start_time
+                    let elapsed = self
+                        .simulation_panel
+                        .run_start_time
                         .map(|t| t.elapsed().as_secs())
                         .unwrap_or(0);
                     ui.label(
@@ -63,7 +67,11 @@ impl NekoSpiceApp {
                             .strong(),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Stop").on_hover_text("Cancel running simulation").clicked() {
+                        if ui
+                            .button("Stop")
+                            .on_hover_text("Cancel running simulation")
+                            .clicked()
+                        {
                             self.simulation_panel.active_task = None;
                             self.simulation_panel.run_start_time = None;
                             self.status_message = Some("Simulation cancelled".to_string());
@@ -112,12 +120,16 @@ impl NekoSpiceApp {
             ui.horizontal_wrapped(|ui| {
                 ui.label(
                     egui::RichText::new(format!("{} {}", kind, body.trim()))
-                        .monospace().size(11.0).color(palette.accent),
+                        .monospace()
+                        .size(11.0)
+                        .color(palette.accent),
                 );
                 ui.separator();
                 ui.label(
                     egui::RichText::new(format!("{} | {}°C", backend, temp))
-                        .monospace().size(11.0).color(palette.text_muted),
+                        .monospace()
+                        .size(11.0)
+                        .color(palette.text_muted),
                 );
             });
         });
@@ -150,26 +162,22 @@ impl NekoSpiceApp {
         ui.add_space(8.0);
 
         // Parameter sweep (collapsible)
-        egui::CollapsingHeader::new(
-            egui::RichText::new("Parameter Sweep").color(palette.text),
-        )
-        .id_salt("panel_step_sweep")
-        .default_open(false)
-        .show(ui, |ui| {
-            self.draw_step_sweep_editor(ui, mode);
-        });
+        egui::CollapsingHeader::new(egui::RichText::new("Parameter Sweep").color(palette.text))
+            .id_salt("panel_step_sweep")
+            .default_open(false)
+            .show(ui, |ui| {
+                self.draw_step_sweep_editor(ui, mode);
+            });
 
         ui.add_space(4.0);
 
         // Measurements (collapsible)
-        egui::CollapsingHeader::new(
-            egui::RichText::new("Measurements").color(palette.text),
-        )
-        .id_salt("panel_measurements")
-        .default_open(false)
-        .show(ui, |ui| {
-            self.draw_measure_editor(ui, mode);
-        });
+        egui::CollapsingHeader::new(egui::RichText::new("Measurements").color(palette.text))
+            .id_salt("panel_measurements")
+            .default_open(false)
+            .show(ui, |ui| {
+                self.draw_measure_editor(ui, mode);
+            });
 
         ui.add_space(8.0);
 
@@ -185,12 +193,10 @@ impl NekoSpiceApp {
             ui.add_space(4.0);
             let rerun_btn = ui.add_enabled(
                 self.document.is_some(),
-                egui::Button::new(
-                    egui::RichText::new("Re-Run Simulation").color(palette.text),
-                )
-                .fill(palette.panel_soft)
-                .stroke(egui::Stroke::new(1.0, palette.border))
-                .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
+                egui::Button::new(egui::RichText::new("Re-Run Simulation").color(palette.text))
+                    .fill(palette.panel_soft)
+                    .stroke(egui::Stroke::new(1.0, palette.border))
+                    .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
             );
             if rerun_btn.clicked() {
                 self.run_simulation_from_panel();
@@ -204,12 +210,20 @@ impl NekoSpiceApp {
             ui.horizontal(|ui| {
                 ui.label(StudioTheme::muted_for(mode, "Auto-run on schematic change"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Checkbox::without_text(&mut self.simulation_panel.auto_run_enabled)).changed() {
+                    if ui
+                        .add(egui::Checkbox::without_text(
+                            &mut self.simulation_panel.auto_run_enabled,
+                        ))
+                        .changed()
+                    {
                         self.save_simulation_settings();
                     }
                 });
             });
-            ui.label(StudioTheme::muted_for(mode, "Re-run simulation when schematic parameters change"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Re-run simulation when schematic parameters change",
+            ));
         });
     }
 }
@@ -235,7 +249,11 @@ fn workflow_step(
         ui.label(egui::RichText::new(num).strong().color(color).size(12.0));
         ui.label(
             egui::RichText::new(label)
-                .color(if active || completed { palette.text } else { palette.text_muted })
+                .color(if active || completed {
+                    palette.text
+                } else {
+                    palette.text_muted
+                })
                 .size(11.0),
         );
     });

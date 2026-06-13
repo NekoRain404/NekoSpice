@@ -1,10 +1,10 @@
 //! 审查工作空间侧边面板。提供快速操作入口和风险概览。
 
+use super::state::ReviewSeverityFilter;
+use super::widgets::{review_filter_row, review_stat_row};
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::navigation::StudioWorkspace;
-use super::state::ReviewSeverityFilter;
-use super::widgets::{review_filter_row, review_stat_row};
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
@@ -40,12 +40,15 @@ impl NekoSpiceApp {
                     let ms = run.metadata.duration_ms;
                     let backend = &run.metadata.backend;
                     let signals = match &run.waveform {
-                        crate::waveform_summary::GuiWaveformSummaryState::Ready(s) => s.variable_count,
+                        crate::waveform_summary::GuiWaveformSummaryState::Ready(s) => {
+                            s.variable_count
+                        }
                         _ => 0,
                     };
-                    self.status_message = Some(
-                        format!("Run: {} ({}ms, {}) — {} signals", status, ms, backend, signals)
-                    );
+                    self.status_message = Some(format!(
+                        "Run: {} ({}ms, {}) — {} signals",
+                        status, ms, backend, signals
+                    ));
                 } else {
                     self.status_message = Some("No simulation data yet".to_string());
                 }
@@ -57,25 +60,31 @@ impl NekoSpiceApp {
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
             ui.label(StudioTheme::section_title_for(mode, "Risk Snapshot"));
             review_filter_row(
-                ui, mode,
+                ui,
+                mode,
                 &mut self.review_workspace.severity_filter,
                 ReviewSeverityFilter::Critical,
                 ReviewSeverityFilter::Critical.label(locale),
-                "3", palette.danger,
+                "3",
+                palette.danger,
             );
             review_filter_row(
-                ui, mode,
+                ui,
+                mode,
                 &mut self.review_workspace.severity_filter,
                 ReviewSeverityFilter::Major,
                 ReviewSeverityFilter::Major.label(locale),
-                "5", palette.warning,
+                "5",
+                palette.warning,
             );
             review_filter_row(
-                ui, mode,
+                ui,
+                mode,
                 &mut self.review_workspace.severity_filter,
                 ReviewSeverityFilter::Minor,
                 ReviewSeverityFilter::Minor.label(locale),
-                "8", palette.accent,
+                "8",
+                palette.accent,
             );
         });
 

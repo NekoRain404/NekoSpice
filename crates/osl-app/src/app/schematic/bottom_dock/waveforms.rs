@@ -11,13 +11,17 @@ use eframe::egui::{self, Vec2};
 
 /// Helper: reconstruct time-domain samples from waveform bucket data.
 fn samples_from_preview(preview: &crate::waveform_summary::GuiWaveformPreview) -> Vec<f64> {
-    preview.buckets.iter()
-        .flat_map(|b| std::iter::repeat((b.min + b.max) * 0.5).take(b.samples))
+    preview
+        .buckets
+        .iter()
+        .flat_map(|b| std::iter::repeat_n((b.min + b.max) * 0.5, b.samples))
         .collect()
 }
 
 /// Helper: compute FFT bins from a waveform preview, returning None if data is insufficient.
-fn compute_preview_fft(preview: &crate::waveform_summary::GuiWaveformPreview) -> Option<Vec<osl_waveform::fft::FftBin>> {
+fn compute_preview_fft(
+    preview: &crate::waveform_summary::GuiWaveformPreview,
+) -> Option<Vec<osl_waveform::fft::FftBin>> {
     let time_range = preview.time_max - preview.time_min;
     if time_range <= 0.0 || preview.source_points < 4 {
         return None;
@@ -27,7 +31,11 @@ fn compute_preview_fft(preview: &crate::waveform_summary::GuiWaveformPreview) ->
     if samples.len() < 4 {
         return None;
     }
-    Some(osl_waveform::fft::compute_fft_bins(&samples, dt, osl_waveform::fft::WindowFunction::Hanning))
+    Some(osl_waveform::fft::compute_fft_bins(
+        &samples,
+        dt,
+        osl_waveform::fft::WindowFunction::Hanning,
+    ))
 }
 
 /// Helper: draw a trace line from FFT bins into a plot rect.
@@ -41,14 +49,21 @@ fn draw_fft_trace(
     if bins.is_empty() {
         return;
     }
-    let vals: Vec<f64> = bins.iter().map(|b| get_value(b)).collect();
+    let vals: Vec<f64> = bins.iter().map(get_value).collect();
     let max_val = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_val = vals.iter().cloned().filter(|v| v.abs() < 299.0).fold(f64::INFINITY, f64::min);
+    let min_val = vals
+        .iter()
+        .cloned()
+        .filter(|v| v.abs() < 299.0)
+        .fold(f64::INFINITY, f64::min);
     let range = (max_val - min_val).max(1.0);
     let stroke = egui::Stroke::new(1.5, color);
     let mut prev: Option<eframe::egui::Pos2> = None;
     for (i, &val) in vals.iter().enumerate() {
-        if val.abs() > 299.0 { prev = None; continue; }
+        if val.abs() > 299.0 {
+            prev = None;
+            continue;
+        }
         let x_norm = i as f32 / (vals.len() - 1).max(1) as f32;
         let x = plot_rect.left() + x_norm * plot_rect.width();
         let y_norm = ((val - min_val) / range).clamp(0.0, 1.0) as f32;
@@ -67,7 +82,10 @@ impl NekoSpiceApp {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
         let Some(run) = &self.simulation_panel.last_run else {
-            ui.label(StudioTheme::muted_for(mode, "Run a simulation to view waveforms"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Run a simulation to view waveforms",
+            ));
             return;
         };
         match &run.waveform {
@@ -83,14 +101,20 @@ impl NekoSpiceApp {
                 ui.add_space(4.0);
                 for variable in &summary.variables {
                     super::super::workspace_widgets::signal_row(
-                        ui, mode, &variable.name,
-                        &format!("{}: min={:.3} max={:.3}", variable.unit, variable.min, variable.max),
+                        ui,
+                        mode,
+                        &variable.name,
+                        &format!(
+                            "{}: min={:.3} max={:.3}",
+                            variable.unit, variable.min, variable.max
+                        ),
                         palette.accent,
                     );
                 }
                 if summary.omitted_variable_count > 0 {
                     ui.label(StudioTheme::muted_for(
-                        mode, format!("+{} more variables", summary.omitted_variable_count),
+                        mode,
+                        format!("+{} more variables", summary.omitted_variable_count),
                     ));
                 }
             }
@@ -99,7 +123,10 @@ impl NekoSpiceApp {
             }
             GuiWaveformSummaryState::Error { message, .. } => {
                 super::super::workspace_widgets::bottom_console_line(
-                    ui, mode, &format!("Waveform error: {message}"), palette.danger,
+                    ui,
+                    mode,
+                    &format!("Waveform error: {message}"),
+                    palette.danger,
                 );
             }
         }
@@ -110,30 +137,48 @@ impl NekoSpiceApp {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
         let Some(run) = &self.simulation_panel.last_run else {
-            ui.label(StudioTheme::muted_for(mode, "Run a simulation to enable FFT"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Run a simulation to enable FFT",
+            ));
             return;
         };
         let GuiWaveformSummaryState::Ready(summary) = &run.waveform else {
-            ui.label(StudioTheme::muted_for(mode, "Run a transient simulation for FFT analysis"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Run a transient simulation for FFT analysis",
+            ));
             return;
         };
-        ui.label(StudioTheme::section_title_for(mode, format!("FFT ({})", summary.plot_name)));
+        ui.label(StudioTheme::section_title_for(
+            mode,
+            format!("FFT ({})", summary.plot_name),
+        ));
         ui.add_space(2.0);
         // Signal list
-        let freq_vars: Vec<_> = summary.variables.iter()
+        let freq_vars: Vec<_> = summary
+            .variables
+            .iter()
             .filter(|v| {
                 let name = v.name.to_lowercase();
-                name.starts_with("v(") || name.starts_with("i(")
-                    || name.contains("freq") || v.unit.to_lowercase().contains("hz")
+                name.starts_with("v(")
+                    || name.starts_with("i(")
+                    || name.contains("freq")
+                    || v.unit.to_lowercase().contains("hz")
             })
             .collect();
         if freq_vars.is_empty() {
-            ui.label(StudioTheme::muted_for(mode, "Select voltage/current signals for FFT analysis"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Select voltage/current signals for FFT analysis",
+            ));
             return;
         }
         for variable in freq_vars.iter().take(4) {
             super::super::workspace_widgets::signal_row(
-                ui, mode, &variable.name,
+                ui,
+                mode,
+                &variable.name,
                 &format!("{}: {} pts", variable.unit, summary.point_count),
                 palette.warning,
             );
@@ -143,17 +188,50 @@ impl NekoSpiceApp {
         let desired_size = Vec2::new(ui.available_width().max(120.0), 80.0);
         let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 2.0, crate::app::waveform::preview_primitives::plot_fill(mode));
-        painter.rect_stroke(rect, 2.0, egui::Stroke::new(1.0, palette.border), egui::StrokeKind::Inside);
+        painter.rect_filled(
+            rect,
+            2.0,
+            crate::app::waveform::preview_primitives::plot_fill(mode),
+        );
+        painter.rect_stroke(
+            rect,
+            2.0,
+            egui::Stroke::new(1.0, palette.border),
+            egui::StrokeKind::Inside,
+        );
         let plot_rect = rect.shrink(8.0);
-        if let Some(first_preview) = summary.previews.first() {
-            if let Some(bins) = compute_preview_fft(first_preview) {
-                draw_fft_trace(&painter, plot_rect, &bins, |b| b.magnitude_db, palette.accent);
-            }
+        if let Some(first_preview) = summary.previews.first()
+            && let Some(bins) = compute_preview_fft(first_preview)
+        {
+            draw_fft_trace(
+                &painter,
+                plot_rect,
+                &bins,
+                |b| b.magnitude_db,
+                palette.accent,
+            );
         }
-        painter.text(plot_rect.left_bottom() + Vec2::new(2.0, 2.0), egui::Align2::LEFT_TOP, "0 Hz", egui::FontId::monospace(8.0), palette.text_muted);
-        painter.text(plot_rect.right_bottom() + Vec2::new(-2.0, 2.0), egui::Align2::RIGHT_TOP, "Fs/2", egui::FontId::monospace(8.0), palette.text_muted);
-        painter.text(plot_rect.left_center() + Vec2::new(-2.0, 0.0), egui::Align2::RIGHT_CENTER, "dB", egui::FontId::monospace(8.0), palette.text_muted);
+        painter.text(
+            plot_rect.left_bottom() + Vec2::new(2.0, 2.0),
+            egui::Align2::LEFT_TOP,
+            "0 Hz",
+            egui::FontId::monospace(8.0),
+            palette.text_muted,
+        );
+        painter.text(
+            plot_rect.right_bottom() + Vec2::new(-2.0, 2.0),
+            egui::Align2::RIGHT_TOP,
+            "Fs/2",
+            egui::FontId::monospace(8.0),
+            palette.text_muted,
+        );
+        painter.text(
+            plot_rect.left_center() + Vec2::new(-2.0, 0.0),
+            egui::Align2::RIGHT_CENTER,
+            "dB",
+            egui::FontId::monospace(8.0),
+            palette.text_muted,
+        );
     }
 
     /// Bode tab: real magnitude/phase frequency-domain plots.
@@ -161,25 +239,41 @@ impl NekoSpiceApp {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
         let Some(run) = &self.simulation_panel.last_run else {
-            ui.label(StudioTheme::muted_for(mode, "Run a simulation to enable Bode plot"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Run a simulation to enable Bode plot",
+            ));
             return;
         };
         let GuiWaveformSummaryState::Ready(summary) = &run.waveform else {
-            ui.label(StudioTheme::muted_for(mode, "Run an AC analysis for Bode plot"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Run an AC analysis for Bode plot",
+            ));
             return;
         };
-        ui.label(StudioTheme::section_title_for(mode, format!("Bode ({})", summary.plot_name)));
+        ui.label(StudioTheme::section_title_for(
+            mode,
+            format!("Bode ({})", summary.plot_name),
+        ));
         ui.add_space(2.0);
-        let ac_vars: Vec<_> = summary.variables.iter()
+        let ac_vars: Vec<_> = summary
+            .variables
+            .iter()
             .filter(|v| v.name.starts_with("v(") || v.name.starts_with("i("))
             .collect();
         if ac_vars.is_empty() {
-            ui.label(StudioTheme::muted_for(mode, "Run an AC analysis to generate Bode data"));
+            ui.label(StudioTheme::muted_for(
+                mode,
+                "Run an AC analysis to generate Bode data",
+            ));
             return;
         }
         for variable in ac_vars.iter().take(4) {
             super::super::workspace_widgets::signal_row(
-                ui, mode, &variable.name,
+                ui,
+                mode,
+                &variable.name,
                 &format!("{}: {} pts", variable.unit, summary.point_count),
                 palette.warning,
             );
@@ -195,28 +289,76 @@ impl NekoSpiceApp {
             let desired_size = Vec2::new(ui.available_width().max(120.0), half);
             let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
             let painter = ui.painter_at(rect);
-            painter.rect_filled(rect, 2.0, crate::app::waveform::preview_primitives::plot_fill(mode));
-            painter.rect_stroke(rect, 2.0, egui::Stroke::new(1.0, palette.border), egui::StrokeKind::Inside);
+            painter.rect_filled(
+                rect,
+                2.0,
+                crate::app::waveform::preview_primitives::plot_fill(mode),
+            );
+            painter.rect_stroke(
+                rect,
+                2.0,
+                egui::Stroke::new(1.0, palette.border),
+                egui::StrokeKind::Inside,
+            );
             let plot_rect = rect.shrink(4.0);
             if let Some(bins) = bins_ref {
-                draw_fft_trace(&painter, plot_rect, bins, |b| b.magnitude_db, palette.accent);
+                draw_fft_trace(
+                    &painter,
+                    plot_rect,
+                    bins,
+                    |b| b.magnitude_db,
+                    palette.accent,
+                );
             }
-            painter.text(plot_rect.left_center() + Vec2::new(2.0, 0.0), egui::Align2::LEFT_CENTER, "0 dB", egui::FontId::monospace(8.0), palette.text_muted);
-            painter.text(plot_rect.center(), egui::Align2::CENTER_CENTER, "Magnitude (dB)", egui::FontId::proportional(9.0), palette.text_muted);
+            painter.text(
+                plot_rect.left_center() + Vec2::new(2.0, 0.0),
+                egui::Align2::LEFT_CENTER,
+                "0 dB",
+                egui::FontId::monospace(8.0),
+                palette.text_muted,
+            );
+            painter.text(
+                plot_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "Magnitude (dB)",
+                egui::FontId::proportional(9.0),
+                palette.text_muted,
+            );
         }
         // Phase panel
         {
             let desired_size = Vec2::new(ui.available_width().max(120.0), half);
             let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
             let painter = ui.painter_at(rect);
-            painter.rect_filled(rect, 2.0, crate::app::waveform::preview_primitives::plot_fill(mode));
-            painter.rect_stroke(rect, 2.0, egui::Stroke::new(1.0, palette.border), egui::StrokeKind::Inside);
+            painter.rect_filled(
+                rect,
+                2.0,
+                crate::app::waveform::preview_primitives::plot_fill(mode),
+            );
+            painter.rect_stroke(
+                rect,
+                2.0,
+                egui::Stroke::new(1.0, palette.border),
+                egui::StrokeKind::Inside,
+            );
             let plot_rect = rect.shrink(4.0);
             if let Some(bins) = bins_ref {
                 draw_fft_trace(&painter, plot_rect, bins, |b| b.phase_deg, palette.warning);
             }
-            painter.text(plot_rect.left_center() + Vec2::new(2.0, 0.0), egui::Align2::LEFT_CENTER, "0 deg", egui::FontId::monospace(8.0), palette.text_muted);
-            painter.text(plot_rect.center(), egui::Align2::CENTER_CENTER, "Phase (deg)", egui::FontId::proportional(9.0), palette.text_muted);
+            painter.text(
+                plot_rect.left_center() + Vec2::new(2.0, 0.0),
+                egui::Align2::LEFT_CENTER,
+                "0 deg",
+                egui::FontId::monospace(8.0),
+                palette.text_muted,
+            );
+            painter.text(
+                plot_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "Phase (deg)",
+                egui::FontId::proportional(9.0),
+                palette.text_muted,
+            );
         }
     }
 }

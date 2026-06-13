@@ -1,8 +1,8 @@
 //! Schematic review panel — design rule check results and recommendations.
 
+use super::inspector::widgets::{property_row, status_pill};
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
-use super::inspector::widgets::{property_row, status_pill};
 use crate::app::theme::StudioTheme;
 use eframe::egui::{self, RichText};
 
@@ -35,12 +35,28 @@ impl NekoSpiceApp {
             ));
             ui.horizontal(|ui| {
                 let report = self.document.as_ref().map(|d| d.check_report());
-                let (err, warn, info) = report.as_ref().map(|r| (r.error_count(), r.warning_count(), r.info_count())).unwrap_or((0, 0, 0));
+                let (err, warn, info) = report
+                    .as_ref()
+                    .map(|r| (r.error_count(), r.warning_count(), r.info_count()))
+                    .unwrap_or((0, 0, 0));
                 let total_issues = err + warn + info;
                 // Score: 100 minus weighted penalties (errors=-8, warnings=-3, info=-1), clamped to [0, 100]
-                let score = (100_i32 - err as i32 * 8 - warn as i32 * 3 - info as i32).max(0).min(100);
-                let score_label = if score >= 80 { "Good" } else if score >= 50 { "Fair" } else { "Needs Work" };
-                let score_color = if score >= 80 { palette.success } else if score >= 50 { palette.warning } else { palette.danger };
+                let score =
+                    (100_i32 - err as i32 * 8 - warn as i32 * 3 - info as i32).clamp(0, 100);
+                let score_label = if score >= 80 {
+                    "Good"
+                } else if score >= 50 {
+                    "Fair"
+                } else {
+                    "Needs Work"
+                };
+                let score_color = if score >= 80 {
+                    palette.success
+                } else if score >= 50 {
+                    palette.warning
+                } else {
+                    palette.danger
+                };
                 let (rect, _) =
                     ui.allocate_exact_size(egui::vec2(74.0, 74.0), egui::Sense::hover());
                 let painter = ui.painter_at(rect);
@@ -49,7 +65,7 @@ impl NekoSpiceApp {
                 painter.text(
                     rect.center(),
                     egui::Align2::CENTER_CENTER,
-                    &score.to_string(),
+                    score.to_string(),
                     egui::FontId::proportional(20.0),
                     palette.text,
                 );
@@ -203,9 +219,8 @@ impl NekoSpiceApp {
                     let status = run.metadata.status.as_str();
                     let ms = run.metadata.duration_ms;
                     let backend = &run.metadata.backend;
-                    self.status_message = Some(
-                        format!("Last run: {} ({}ms, {})", status, ms, backend)
-                    );
+                    self.status_message =
+                        Some(format!("Last run: {} ({}ms, {})", status, ms, backend));
                 } else {
                     self.status_message = Some("No simulation run available".to_string());
                 }

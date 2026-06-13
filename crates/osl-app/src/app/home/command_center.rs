@@ -1,7 +1,7 @@
 //! Home command center — metric cards showing project stats and recommended next steps.
 
-use crate::app::NekoSpiceApp;
 use super::dashboard::SECTION_GAP;
+use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::navigation::StudioWorkspace;
 use crate::app::theme::{StudioTheme, StudioThemeMode};
@@ -93,7 +93,7 @@ impl NekoSpiceApp {
     fn home_command_metric_cards(&self) -> [HomeMetricCard; 4] {
         let palette = StudioTheme::palette(self.theme_mode());
         let symbol_coverage = self.symbol_coverage_text();
-        
+
         // Real ERC/DRC error count from schematic
         let (error_count, warning_count) = self
             .document
@@ -121,14 +121,12 @@ impl NekoSpiceApp {
             (self.text(UiText::Running).to_string(), palette.warning)
         } else if let Some(run) = &self.simulation_panel.last_run {
             match run.metadata.status {
-                osl_core::RunStatus::Passed => (
-                    format!("{}ms", run.metadata.duration_ms),
-                    palette.success,
-                ),
-                osl_core::RunStatus::Failed => (
-                    self.text(UiText::WaveformError).to_string(),
-                    palette.danger,
-                ),
+                osl_core::RunStatus::Passed => {
+                    (format!("{}ms", run.metadata.duration_ms), palette.success)
+                }
+                osl_core::RunStatus::Failed => {
+                    (self.text(UiText::WaveformError).to_string(), palette.danger)
+                }
             }
         } else {
             (self.text(UiText::Queued).to_string(), palette.text_muted)
@@ -138,14 +136,17 @@ impl NekoSpiceApp {
         let backend = self.simulation_panel.backend.label();
 
         // Waveform signal count
-        let waveform_info = self.simulation_panel.last_run.as_ref().map(|run| {
-            match &run.waveform {
+        let waveform_info = self
+            .simulation_panel
+            .last_run
+            .as_ref()
+            .map(|run| match &run.waveform {
                 crate::waveform_summary::GuiWaveformSummaryState::Ready(s) => {
                     format!("{} signals", s.variable_count)
                 }
                 _ => self.text(UiText::Missing).to_string(),
-            }
-        }).unwrap_or_else(|| self.text(UiText::NoWaveform).to_string());
+            })
+            .unwrap_or_else(|| self.text(UiText::NoWaveform).to_string());
 
         [
             HomeMetricCard {

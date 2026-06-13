@@ -4,11 +4,11 @@
 //! - Model parameters table
 //! - Parameter definitions editor (center)
 
+use super::profile_editor_widgets::{param_table, section_header};
+use super::state::AnalysisParams;
+use super::workspace_widgets::analysis_mode_button;
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
-use super::state::AnalysisParams;
-use super::profile_editor_widgets::{param_table, section_header};
-use super::workspace_widgets::analysis_mode_button;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 use osl_kicad::KicadSimulationDirectiveKind;
@@ -62,9 +62,11 @@ pub(crate) fn draw_component_params(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
         );
         ui.add_space(4.0);
         if ui.small_button("+ Add Component").clicked() {
-            app.simulation_profile_editor
-                .component_params
-                .push((String::new(), String::new(), String::new()));
+            app.simulation_profile_editor.component_params.push((
+                String::new(),
+                String::new(),
+                String::new(),
+            ));
         }
     });
 }
@@ -81,16 +83,14 @@ pub(crate) fn draw_model_params(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
             format!("{count} model(s) defined"),
         ));
         ui.add_space(4.0);
-        param_table(
-            ui,
-            mode,
-            &mut app.simulation_profile_editor.model_params,
-        );
+        param_table(ui, mode, &mut app.simulation_profile_editor.model_params);
         ui.add_space(4.0);
         if ui.small_button("+ Add Model").clicked() {
-            app.simulation_profile_editor
-                .model_params
-                .push((String::new(), String::new(), String::new()));
+            app.simulation_profile_editor.model_params.push((
+                String::new(),
+                String::new(),
+                String::new(),
+            ));
         }
     });
 }
@@ -191,47 +191,15 @@ pub(crate) fn draw_parameter_definitions(app: &mut NekoSpiceApp, ui: &mut egui::
 }
 
 /// Analysis modes available in the profile editor.
-fn profile_analysis_modes() -> [(
-    KicadSimulationDirectiveKind,
-    &'static str,
-    &'static str,
-); 7] {
+fn profile_analysis_modes() -> [(KicadSimulationDirectiveKind, &'static str, &'static str); 7] {
     [
-        (
-            KicadSimulationDirectiveKind::Tran,
-            ".tran",
-            "time domain",
-        ),
-        (
-            KicadSimulationDirectiveKind::Ac,
-            ".ac",
-            "small signal",
-        ),
-        (
-            KicadSimulationDirectiveKind::Dc,
-            ".dc",
-            "sweep",
-        ),
-        (
-            KicadSimulationDirectiveKind::Op,
-            ".op",
-            "operating point",
-        ),
-        (
-            KicadSimulationDirectiveKind::Noise,
-            ".noise",
-            "noise",
-        ),
-        (
-            KicadSimulationDirectiveKind::Disto,
-            ".disto",
-            "distortion",
-        ),
-        (
-            KicadSimulationDirectiveKind::Sens,
-            ".sens",
-            "sensitivity",
-        ),
+        (KicadSimulationDirectiveKind::Tran, ".tran", "time domain"),
+        (KicadSimulationDirectiveKind::Ac, ".ac", "small signal"),
+        (KicadSimulationDirectiveKind::Dc, ".dc", "sweep"),
+        (KicadSimulationDirectiveKind::Op, ".op", "operating point"),
+        (KicadSimulationDirectiveKind::Noise, ".noise", "noise"),
+        (KicadSimulationDirectiveKind::Disto, ".disto", "distortion"),
+        (KicadSimulationDirectiveKind::Sens, ".sens", "sensitivity"),
     ]
 }
 

@@ -5,15 +5,15 @@
 //! for detailed analysis of the simulation results.
 
 use crate::app::NekoSpiceApp;
-use crate::app::navigation::StudioWorkspace;
-use eframe::egui;
 use crate::app::localization::UiText;
-use crate::app::status_strip::severity_color;
-use crate::app::theme::StudioTheme;
+use crate::app::navigation::StudioWorkspace;
 use crate::app::simulation::artifacts_panel::draw_simulation_artifacts_panel;
 use crate::app::simulation::report_panel::draw_simulation_report_panel;
 use crate::app::simulation::waveform_panel::draw_simulation_waveform_panel;
+use crate::app::status_strip::severity_color;
+use crate::app::theme::StudioTheme;
 use crate::waveform_summary::GuiWaveformSummaryState;
+use eframe::egui;
 use osl_core::RunStatus;
 use osl_kicad::KicadDiagnosticSeverity;
 
@@ -41,46 +41,57 @@ impl NekoSpiceApp {
         if let Some(run) = &self.simulation_panel.last_run {
             let log_path = run.output_dir.join("ngspice.log");
             let fallback = run.output_dir.join("xyce.log");
-            let actual = if log_path.is_file() { log_path } else { fallback };
-            if actual.is_file() {
-                if let Ok(content) = std::fs::read_to_string(&actual) {
-                    // Parse the log for structured error/warning display
-                    let (errors, warnings, summary) = osl_sim::parse_ngspice_log(&content);
-                    if !errors.is_empty() || !warnings.is_empty() || summary.is_some() {
-                        ui.separator();
-                        let palette = self.theme_palette();
-                        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-                            ui.label(StudioTheme::section_title_for(mode, "Log Summary"));
-                            if let Some(summary) = &summary {
-                                ui.label(egui::RichText::new(summary).color(palette.text));
+            let actual = if log_path.is_file() {
+                log_path
+            } else {
+                fallback
+            };
+            if actual.is_file()
+                && let Ok(content) = std::fs::read_to_string(&actual)
+            {
+                // Parse the log for structured error/warning display
+                let (errors, warnings, summary) = osl_sim::parse_ngspice_log(&content);
+                if !errors.is_empty() || !warnings.is_empty() || summary.is_some() {
+                    ui.separator();
+                    let palette = self.theme_palette();
+                    StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+                        ui.label(StudioTheme::section_title_for(mode, "Log Summary"));
+                        if let Some(summary) = &summary {
+                            ui.label(egui::RichText::new(summary).color(palette.text));
+                        }
+                        if !errors.is_empty() {
+                            ui.colored_label(palette.danger, format!("{} error(s):", errors.len()));
+                            for err in errors.iter().take(3) {
+                                ui.label(
+                                    egui::RichText::new(format!("  {}", err))
+                                        .size(11.0)
+                                        .color(palette.text_muted),
+                                );
                             }
-                            if !errors.is_empty() {
-                                ui.colored_label(palette.danger, format!("{} error(s):", errors.len()));
-                                for err in errors.iter().take(3) {
-                                    ui.label(egui::RichText::new(format!("  {}", err)).size(11.0).color(palette.text_muted));
-                                }
-                            }
-                            if !warnings.is_empty() {
-                                ui.colored_label(palette.warning, format!("{} warning(s)", warnings.len()));
-                            }
-                        });
-                    }
-                    // Collapsible raw log for advanced users
-                    egui::CollapsingHeader::new(
-                        egui::RichText::new("Raw Log").color(self.theme_palette().text_muted),
-                    )
-                    .id_salt("ngspice_raw_log")
-                    .default_open(false)
-                    .show(ui, |ui| {
-                        egui::ScrollArea::vertical()
-                            .id_salt("ngspice_log_viewer")
-                            .max_height(100.0)
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
-                                ui.monospace(&content);
-                            });
+                        }
+                        if !warnings.is_empty() {
+                            ui.colored_label(
+                                palette.warning,
+                                format!("{} warning(s)", warnings.len()),
+                            );
+                        }
                     });
                 }
+                // Collapsible raw log for advanced users
+                egui::CollapsingHeader::new(
+                    egui::RichText::new("Raw Log").color(self.theme_palette().text_muted),
+                )
+                .id_salt("ngspice_raw_log")
+                .default_open(false)
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("ngspice_log_viewer")
+                        .max_height(100.0)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.monospace(&content);
+                        });
+                });
             }
         }
         if let Some(run) = &self.simulation_panel.last_run {
@@ -112,11 +123,17 @@ impl NekoSpiceApp {
                     .spacing([8.0, 4.0])
                     .show(ui, |ui| {
                         ui.label(StudioTheme::muted_for(mode, "Duration"));
-                        ui.label(egui::RichText::new(format!("{} ms", run.metadata.duration_ms)).monospace());
+                        ui.label(
+                            egui::RichText::new(format!("{} ms", run.metadata.duration_ms))
+                                .monospace(),
+                        );
                         ui.end_row();
 
                         ui.label(StudioTheme::muted_for(mode, "Exit Code"));
-                        ui.label(egui::RichText::new(format!("{:?}", run.metadata.exit_code)).monospace());
+                        ui.label(
+                            egui::RichText::new(format!("{:?}", run.metadata.exit_code))
+                                .monospace(),
+                        );
                         ui.end_row();
 
                         ui.label(StudioTheme::muted_for(mode, "Backend"));
@@ -124,7 +141,11 @@ impl NekoSpiceApp {
                         ui.end_row();
 
                         ui.label(StudioTheme::muted_for(mode, "Output"));
-                        ui.label(egui::RichText::new(run.output_dir.display().to_string()).monospace().size(10.0));
+                        ui.label(
+                            egui::RichText::new(run.output_dir.display().to_string())
+                                .monospace()
+                                .size(10.0),
+                        );
                         ui.end_row();
                     });
             });
