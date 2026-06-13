@@ -219,6 +219,13 @@ pub(crate) enum StepSweep {
         stop: String,
         step: String,
     },
+    /// Temperature sweep: `.step TEMP lin start stop step`
+    Temperature {
+        sweep_mode: String,
+        start: String,
+        stop: String,
+        step: String,
+    },
 }
 
 impl Default for StepSweep {
@@ -249,12 +256,38 @@ impl StepSweep {
                     )),
                 }
             }
+            Self::Temperature { sweep_mode, start, stop, step } => {
+                match sweep_mode.as_str() {
+                    "lin" => Some(format!(
+                        ".step TEMP lin {} {} {}", start, stop, step
+                    )),
+                    "dec" => Some(format!(
+                        ".step TEMP dec {} {} {}", step, start, stop
+                    )),
+                    "oct" => Some(format!(
+                        ".step TEMP oct {} {} {}", step, start, stop
+                    )),
+                    _ => Some(format!(
+                        ".step TEMP lin {} {} {}", start, stop, step
+                    )),
+                }
+            }
         }
     }
 
     /// Parse a `.step` directive body into structured parameters.
     pub(crate) fn from_directive_body(body: &str) -> Self {
         let parts: Vec<&str> = body.split_whitespace().collect();
+        // Handle .step TEMP ...
+        if parts.len() >= 3 && parts.get(0) == Some(&"TEMP") {
+            let sweep_mode = parts[1].to_string();
+            return Self::Temperature {
+                sweep_mode,
+                start: parts.get(2).map(|s| s.to_string()).unwrap_or_default(),
+                stop: parts.get(3).map(|s| s.to_string()).unwrap_or_default(),
+                step: parts.get(4).map(|s| s.to_string()).unwrap_or_default(),
+            };
+        }
         if parts.len() < 3 || parts[0] != "param" {
             return Self::None;
         }
