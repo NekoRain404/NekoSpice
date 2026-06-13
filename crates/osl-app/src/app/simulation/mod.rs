@@ -23,6 +23,7 @@ pub(crate) mod analysis;
 pub(crate) mod step_sweep;
 pub(crate) mod state;
 pub(crate) mod panel;
+pub(crate) mod panel_sections;
 pub(crate) mod directive_editor;
 pub(crate) mod run_controller;
 pub(crate) mod status_display;
