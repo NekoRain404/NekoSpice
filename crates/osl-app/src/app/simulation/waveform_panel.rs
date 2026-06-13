@@ -36,18 +36,32 @@ fn draw_ready_waveform_summary(
     summary: &GuiWaveformSummary,
     selected_signal: &mut Option<String>,
 ) {
-    ui.separator();
-    ui.label(format!(
-        "Waveform: {} points, {} variables",
-        summary.point_count, summary.variable_count
-    ));
-    if !summary.plot_name.is_empty() {
-        ui.label(format!("Plot: {}", summary.plot_name));
-    }
+    let palette = crate::app::theme::StudioTheme::palette(mode);
+
+    // Waveform metadata header
+    ui.label(crate::app::theme::StudioTheme::section_title_for(mode, "Waveform Data"));
+    ui.add_space(2.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            egui::RichText::new(format!("{} points", summary.point_count))
+                .monospace().size(11.0).color(palette.text_muted),
+        );
+        ui.separator();
+        ui.label(
+            egui::RichText::new(format!("{} variables", summary.variable_count))
+                .monospace().size(11.0).color(palette.text_muted),
+        );
+        if summary.omitted_variable_count > 0 {
+            ui.separator();
+            ui.label(
+                egui::RichText::new(format!("+{} omitted", summary.omitted_variable_count))
+                    .monospace().size(11.0).color(palette.warning),
+            );
+        }
+    });
     if !summary.title.is_empty() {
-        ui.label(format!("Title: {}", summary.title));
+        ui.label(egui::RichText::new(&summary.title).size(11.0).color(palette.text));
     }
-    ui.monospace(summary.raw_path.display().to_string());
 
     draw_waveform_preview_selector(ui, summary, selected_signal);
     if let Some(signal) = selected_signal.as_deref()
