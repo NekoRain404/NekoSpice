@@ -97,6 +97,12 @@ NekoSpice/
 │           ├── lib.rs            # 库根，模块声明与常量
 │           ├── document.rs       # KicadGuiDocument 封装
 │           ├── document_ops.rs
+│           ├── document_tests/             # ── 文档测试模块 ──
+│           │   ├── mod.rs               # 共享测试辅助函数
+│           │   ├── editing.rs            # 删除/移动操作测试
+│           │   ├── placement.rs          # 符号放置和属性编辑测试
+│           │   ├── items.rs              # 原理图图元创建测试
+│           │   └── simulation.rs         # 仿真指令和网表测试
 │           ├── library.rs        # KicadGuiLibrary 封装
 │           ├── viewport.rs       # CanvasViewport 缩放/平移
 │           ├── canvas.rs         # 画布渲染
@@ -252,7 +258,11 @@ NekoSpice/
 │               │   ├── mod.rs
 │               │   ├── state.rs
 │               │   ├── workspace.rs
-│               │   ├── sections.rs
+│               │   ├── sections/
+│               │   │   ├── mod.rs        # 标签页切换 + 总结面板
+│               │   │   ├── targets.rs    # 优化目标编辑面板
+│               │   │   ├── sweep.rs      # 参数扫描面板
+│               │   │   └── monte_carlo.rs # 蒙特卡洛分析面板
 │               │   └── widgets.rs
 │               │
 │               ├── review/               # ── 设计审查工作区 ──
