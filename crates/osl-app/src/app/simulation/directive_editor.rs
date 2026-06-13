@@ -11,8 +11,8 @@
 
 use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
-use eframe::egui;
 use osl_kicad::KicadSimulationDirectiveKind;
+use eframe::egui;
 use super::state::AnalysisParams;
 use super::profile_editor_widgets::labeled_edit;
 
@@ -89,6 +89,7 @@ impl NekoSpiceApp {
     fn draw_analysis_params_fields(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         let palette = self.theme_palette();
+        
         match &mut self.simulation_panel.analysis_params {
             AnalysisParams::Tran { tstep, tstop, tstart, tmax, uic } => {
                 egui::Grid::new("tran_params_grid")
@@ -227,6 +228,14 @@ impl NekoSpiceApp {
                             .on_hover_text("Stop frequency (Hz)");
                     });
             }
+        }
+
+        // Draw analysis-specific range presets after grids to avoid borrow conflicts
+        match self.simulation_panel.directive_kind {
+            osl_kicad::KicadSimulationDirectiveKind::Tran => self.draw_tran_range_presets(ui, mode),
+            osl_kicad::KicadSimulationDirectiveKind::Ac => self.draw_ac_range_presets(ui, mode),
+            osl_kicad::KicadSimulationDirectiveKind::Dc => self.draw_dc_range_presets(ui, mode),
+            _ => {}
         }
     }
 
