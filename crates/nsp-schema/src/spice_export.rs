@@ -127,11 +127,11 @@ impl NspSchematic {
             && let Some(end_idx) = lines
                 .iter()
                 .rposition(|l| l.trim().eq_ignore_ascii_case(".end"))
-            {
-                for (i, model) in injected.iter().enumerate() {
-                    lines.insert(end_idx + i, model.clone());
-                }
+        {
+            for (i, model) in injected.iter().enumerate() {
+                lines.insert(end_idx + i, model.clone());
             }
+        }
         Ok(format!("{}\n", lines.join("\n")))
     }
 
@@ -274,9 +274,9 @@ impl NspSchematic {
                     .property("Spice_Primitive")
                     .map(str::trim)
                     .filter(|v| !v.is_empty())
-                {
-                    device = prim.to_ascii_uppercase();
-                }
+            {
+                device = prim.to_ascii_uppercase();
+            }
         }
         let primitive = if explicit_device.is_some() || device == "SPICE" {
             spice_primitive_for_device(&device)?
@@ -317,7 +317,6 @@ impl NspSchematic {
             value.clone()
         };
 
-        
         match primitive.as_str() {
             "R" | "C" | "L" | "V" | "I" | "D"
                 if nodes.len() >= 2 && !effective_value.is_empty() =>
