@@ -118,3 +118,20 @@ pub(crate) fn profile_row(
         });
     });
 }
+
+/// Analysis modes available in the overview and profile editor.
+pub(crate) fn analysis_modes() -> [(
+    osl_kicad::KicadSimulationDirectiveKind,
+    &'static str,
+    &'static str,
+); 7] {
+    [
+        (osl_kicad::KicadSimulationDirectiveKind::Op, ".op", "operating point"),
+        (osl_kicad::KicadSimulationDirectiveKind::Dc, ".dc", "sweep"),
+        (osl_kicad::KicadSimulationDirectiveKind::Tran, ".tran", "time domain"),
+        (osl_kicad::KicadSimulationDirectiveKind::Ac, ".ac", "small signal"),
+        (osl_kicad::KicadSimulationDirectiveKind::Noise, ".noise", "noise analysis"),
+        (osl_kicad::KicadSimulationDirectiveKind::Disto, ".disto", "distortion"),
+        (osl_kicad::KicadSimulationDirectiveKind::Sens, ".sens", "sensitivity"),
+    ]
+}

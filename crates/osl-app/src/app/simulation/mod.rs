@@ -44,6 +44,7 @@ pub(crate) mod waveform_panel;
 pub(crate) mod workspace;
 pub(crate) mod artifacts_panel;
 pub(crate) mod workspace_sections;
+pub(crate) mod profile_summary;
 pub(crate) mod history;
 pub(crate) mod measure_editor;
 pub(crate) mod history_panel;
