@@ -1,12 +1,12 @@
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
-use super::preview::{draw_stacked_waveform_preview, format_compact_f64};
+use super::preview::draw_stacked_waveform_preview;
 use super::freq_domain_preview::{draw_fft_magnitude_plot, draw_bode_plot, draw_noise_plot};
 use super::interactive::draw_interactive_waveform_plot;
 use super::workspace::WaveformAnalysisTab;
 use super::workspace_widgets::{
-    MeasurementTableLabels, cursor_row, measurement_table, run_stat_row, trace_chip,
+    MeasurementTableLabels, measurement_table, run_stat_row, trace_chip, trace_chip_toggle,
     waveform_empty_state, waveform_mode_tab,
 };
 use crate::waveform_summary::{GuiWaveformSummary, GuiWaveformSummaryState};
@@ -190,17 +190,28 @@ impl NekoSpiceApp {
         }
     }
 
+
     fn draw_waveform_trace_chips(&mut self, ui: &mut egui::Ui, summary: &GuiWaveformSummary) {
         let mode = self.theme_mode();
+        let overlay = self.waveform_workspace.overlay_mode;
         ui.horizontal_wrapped(|ui| {
             for preview in summary.previews.iter().take(6) {
-                let selected = self
-                    .simulation_panel
-                    .selected_waveform_signal
-                    .as_deref()
-                    .is_some_and(|signal| signal.eq_ignore_ascii_case(&preview.signal));
-                if trace_chip(ui, mode, &preview.signal, &preview.unit, selected) {
-                    self.simulation_panel.selected_waveform_signal = Some(preview.signal.clone());
+                if overlay {
+                    // Overlay mode: toggle visibility for multi-signal display
+                    let visible = self.waveform_workspace.is_signal_visible(&preview.signal);
+                    if trace_chip_toggle(ui, mode, &preview.signal, &preview.unit, visible) {
+                        self.waveform_workspace.toggle_signal(&preview.signal);
+                    }
+                } else {
+                    // Single-select mode: click to select one signal
+                    let selected = self
+                        .simulation_panel
+                        .selected_waveform_signal
+                        .as_deref()
+                        .is_some_and(|signal| signal.eq_ignore_ascii_case(&preview.signal));
+                    if trace_chip(ui, mode, &preview.signal, &preview.unit, selected) {
+                        self.simulation_panel.selected_waveform_signal = Some(preview.signal.clone());
+                    }
                 }
             }
             if summary.omitted_preview_count > 0 {
