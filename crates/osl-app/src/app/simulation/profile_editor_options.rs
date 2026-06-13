@@ -4,6 +4,7 @@
 //! the user modifies any simulation option field.
 //!
 //! Delegates to:
+//! - `options_preset` — quick-apply simulation presets
 //! - `options_environment` — temperature, nominal temperature
 //! - `options_solver` — transient solver, convergence, output control
 //! - `options_ic` — initial conditions (.ic / .nodeset)
@@ -13,11 +14,11 @@ use crate::app::NekoSpiceApp;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
 
+use super::options_preset::draw_preset_selector;
 use super::options_environment::draw_environment_section;
 use super::options_solver::{draw_transient_solver_section, draw_convergence_section, draw_output_section};
 use super::options_ic::draw_initial_conditions_section;
 use super::options_status::{draw_run_status_summary, draw_recent_runs};
-
 
 /// Draw the complete right-column options panel with all sections.
 ///
@@ -27,6 +28,10 @@ pub(crate) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     let mode = app.theme_mode();
     let palette = StudioTheme::palette(mode);
     let mut any_changed = false;
+
+    // Preset selector (top of panel)
+    any_changed |= draw_preset_selector(app, ui, mode);
+    ui.add_space(8.0);
 
     // Environment (temperature, TNOM)
     any_changed |= draw_environment_section(app, ui, mode);
