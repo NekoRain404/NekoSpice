@@ -82,7 +82,7 @@ pub(crate) struct SimulationProfileEditorState {
 impl SimulationProfileEditorState {
     /// Load simulation settings from disk. Falls back to defaults if unavailable.
     pub(crate) fn from_disk() -> Self {
-        let (opts, preset, backend, directive_kind) = crate::app::preferences::StudioPreferences::load_simulation_settings();
+        let (opts, preset, backend, directive_kind, toggles) = crate::app::preferences::StudioPreferences::load_simulation_settings();
         Self {
             sub_view: SimulationSubView::default(),
             component_params: Vec::new(),
@@ -93,7 +93,7 @@ impl SimulationProfileEditorState {
             active_preset: preset,
             persisted_backend: backend,
             persisted_directive_kind: directive_kind,
-            toggles: super::section_toggles::SimSectionToggles::default(),
+            toggles,
         }
     }
 }

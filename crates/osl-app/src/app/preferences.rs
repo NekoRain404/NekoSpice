@@ -66,6 +66,7 @@ impl StudioPreferences {
         preset: &str,
         backend: &str,
         directive_kind: &str,
+        toggles: &super::simulation::section_toggles::SimSectionToggles,
     ) {
         let file = SettingsFile {
             theme_mode: self.theme_mode.as_str().to_string(),
@@ -94,18 +95,32 @@ impl StudioPreferences {
                 active_preset: preset.to_string(),
                 backend: backend.to_string(),
                 directive_kind: directive_kind.to_string(),
+                section_toggles: super::preferences_persistence::SectionTogglesFile {
+                    step_sweep: toggles.step_sweep,
+                    measurements: toggles.measurements,
+                    initial_conditions: toggles.initial_conditions,
+                    component_params: toggles.component_params,
+                    model_params: toggles.model_params,
+                    quick_start: toggles.quick_start,
+                    netlist_preview: toggles.netlist_preview,
+                    run_status: toggles.run_status,
+                    transient_solver: toggles.transient_solver,
+                    convergence: toggles.convergence,
+                    output_control: toggles.output_control,
+                },
             },
         };
         write_settings_file(&file);
     }
 
     /// 从磁盘加载仿真选项（如果存在）。
-    /// 返回 (SimOptions, active_preset_name, backend, directive_kind)。
+    /// 返回 (SimOptions, active_preset_name, backend, directive_kind, section_toggles)。
     pub(super) fn load_simulation_settings() -> (
         super::simulation::sim_options::SimOptions,
         String,
         String,
         String,
+        super::simulation::section_toggles::SimSectionToggles,
     ) {
         let path = settings_path();
         let data = match fs::read_to_string(&path) {
@@ -115,6 +130,7 @@ impl StudioPreferences {
                 "default".to_string(),
                 "ngspice".to_string(),
                 "tran".to_string(),
+                super::simulation::section_toggles::SimSectionToggles::default(),
             ),
         };
         let file: SettingsFile = match serde_json::from_str(&data) {
@@ -124,6 +140,7 @@ impl StudioPreferences {
                 "default".to_string(),
                 "ngspice".to_string(),
                 "tran".to_string(),
+                super::simulation::section_toggles::SimSectionToggles::default(),
             ),
         };
         let s = file.simulation;
@@ -147,7 +164,20 @@ impl StudioPreferences {
             pivrel: s.pivrel,
             numdgt: s.numdgt,
         };
-        (opts, s.active_preset, s.backend, s.directive_kind)
+        let toggles = super::simulation::section_toggles::SimSectionToggles {
+            step_sweep: s.section_toggles.step_sweep,
+            measurements: s.section_toggles.measurements,
+            initial_conditions: s.section_toggles.initial_conditions,
+            component_params: s.section_toggles.component_params,
+            model_params: s.section_toggles.model_params,
+            quick_start: s.section_toggles.quick_start,
+            netlist_preview: s.section_toggles.netlist_preview,
+            run_status: s.section_toggles.run_status,
+            transient_solver: s.section_toggles.transient_solver,
+            convergence: s.section_toggles.convergence,
+            output_control: s.section_toggles.output_control,
+        };
+        (opts, s.active_preset, s.backend, s.directive_kind, toggles)
     }
 }
 
@@ -203,6 +233,7 @@ impl NekoSpiceApp {
             &self.simulation_profile_editor.active_preset,
             self.simulation_panel.backend.label(),
             &self.simulation_panel.directive_kind.to_string(),
+            &self.simulation_profile_editor.toggles,
         );
     }
 

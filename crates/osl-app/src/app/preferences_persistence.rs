@@ -46,6 +46,47 @@ pub(super) struct SimulationSettingsFile {
     pub(super) backend: String,
     #[serde(default)]
     pub(super) directive_kind: String,
+    /// Section visibility toggles for the profile editor.
+    #[serde(default = "default_section_toggles")]
+    pub(super) section_toggles: SectionTogglesFile,
+}
+
+/// Persisted section toggle states.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(super) struct SectionTogglesFile {
+    pub step_sweep: bool,
+    pub measurements: bool,
+    pub initial_conditions: bool,
+    pub component_params: bool,
+    pub model_params: bool,
+    pub quick_start: bool,
+    pub netlist_preview: bool,
+    pub run_status: bool,
+    pub transient_solver: bool,
+    pub convergence: bool,
+    pub output_control: bool,
+}
+
+fn default_section_toggles() -> SectionTogglesFile {
+    SectionTogglesFile::default()
+}
+
+impl Default for SectionTogglesFile {
+    fn default() -> Self {
+        Self {
+            step_sweep: true,
+            measurements: true,
+            initial_conditions: false,
+            component_params: true,
+            model_params: false,
+            quick_start: true,
+            netlist_preview: true,
+            run_status: true,
+            transient_solver: false,
+            convergence: false,
+            output_control: true,
+        }
+    }
 }
 
 impl Default for SimulationSettingsFile {
@@ -72,6 +113,7 @@ impl Default for SimulationSettingsFile {
             active_preset: "default".to_string(),
             backend: "ngspice".to_string(),
             directive_kind: "tran".to_string(),
+            section_toggles: SectionTogglesFile::default(),
         }
     }
 }

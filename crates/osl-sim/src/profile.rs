@@ -251,6 +251,60 @@ pub fn simulation_preset(name: &str) -> SimulationProfile {
             profile.itl1 = "200".to_string();
             profile.itl4 = "100".to_string();
         }
+        "power-electronics" => {
+            // Switching converters, motor drives, power supplies
+            profile.reltol = "0.005".to_string();
+            profile.abstol = "1e-10".to_string();
+            profile.vntol = "1e-5".to_string();
+            profile.itl4 = "30".to_string();
+            profile.itl1 = "150".to_string();
+            profile.min_timestep = "1n".to_string();
+            profile.method = SpiceMethod::Trap;
+        }
+        "low-power" => {
+            // Ultra-low-power IoT, battery-operated, sensor circuits
+            profile.reltol = "1e-4".to_string();
+            profile.abstol = "1e-15".to_string();
+            profile.vntol = "1e-9".to_string();
+            profile.gmin = "1e-14".to_string();
+            profile.chgtol = "1e-16".to_string();
+            profile.itl4 = "40".to_string();
+            profile.itl1 = "200".to_string();
+            profile.method = SpiceMethod::Trap;
+        }
+        "precision" => {
+            // Precision instrumentation, ADC/DAC, measurement frontends
+            profile.reltol = "1e-6".to_string();
+            profile.abstol = "1e-16".to_string();
+            profile.vntol = "1e-9".to_string();
+            profile.gmin = "1e-15".to_string();
+            profile.chgtol = "1e-18".to_string();
+            profile.itl4 = "80".to_string();
+            profile.itl1 = "300".to_string();
+            profile.numdgt = "8".to_string();
+            profile.method = SpiceMethod::Gear;
+        }
+        "mixed-signal" => {
+            // ADCs, PLLs, clock recovery — mix of fast and slow dynamics
+            profile.reltol = "1e-4".to_string();
+            profile.abstol = "1e-12".to_string();
+            profile.vntol = "1e-6".to_string();
+            profile.itl4 = "40".to_string();
+            profile.itl5 = "10000".to_string();
+            profile.srcsteps = "20".to_string();
+            profile.gminsteps = "5".to_string();
+            profile.method = SpiceMethod::Trap;
+        }
+        "rf" => {
+            // RF circuits, mixers, oscillators — tight accuracy + high frequency
+            profile.reltol = "1e-4".to_string();
+            profile.abstol = "1e-13".to_string();
+            profile.vntol = "1e-7".to_string();
+            profile.itl4 = "60".to_string();
+            profile.itl1 = "200".to_string();
+            profile.method = SpiceMethod::Gear;
+            profile.numdgt = "8".to_string();
+        }
         _ => {} // "default" or unknown → return default profile
     }
     profile
@@ -259,11 +313,16 @@ pub fn simulation_preset(name: &str) -> SimulationProfile {
 /// Returns the list of available preset names for display in the UI.
 pub fn available_presets() -> &'static [(&'static str, &'static str)] {
     &[
-        ("default", "Default (balanced)"),
-        ("fast", "Fast (relaxed tolerances)"),
-        ("accurate", "Accurate (tight tolerances)"),
+        ("default", "Default"),
+        ("fast", "Fast"),
+        ("accurate", "Accurate"),
         ("high-freq", "High Frequency"),
         ("convergence-help", "Convergence Aid"),
+        ("power-electronics", "Power Electronics"),
+        ("low-power", "Low Power"),
+        ("precision", "Precision"),
+        ("mixed-signal", "Mixed Signal"),
+        ("rf", "RF"),
     ]
 }
 

@@ -31,6 +31,11 @@ pub(crate) fn draw_preset_indicator(
             "accurate" => "Tight tolerances with Gear integration.",
             "high-freq" => "Optimized for high-frequency circuits.",
             "convergence-help" => "Aggressive convergence aids.",
+            "power-electronics" => "Switching converters, motor drives, power supplies.",
+            "low-power" => "Ultra-low-power IoT, battery-operated sensor circuits.",
+            "precision" => "Precision instrumentation, ADC/DAC, measurement frontends.",
+            "mixed-signal" => "ADCs, PLLs, clock recovery — mixed dynamics.",
+            "rf" => "RF circuits, mixers, oscillators — tight accuracy.",
             _ => "Standard SPICE defaults.",
         };
         ui.label(StudioTheme::muted_for(mode, description));

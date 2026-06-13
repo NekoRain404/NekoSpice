@@ -70,6 +70,8 @@ pub(crate) struct SimulationPanelState {
     pub(crate) step_sweep: StepSweep,
     /// When the current simulation run started (for elapsed time display).
     pub(crate) run_start_time: Option<Instant>,
+    /// Auto-run simulation when schematic changes (sweep parameter or temperature).
+    pub(crate) auto_run_enabled: bool,
 }
 
 impl Default for SimulationPanelState {
@@ -86,6 +88,7 @@ impl Default for SimulationPanelState {
             netlist_warnings: Vec::new(),
             step_sweep: StepSweep::None,
             run_start_time: None,
+            auto_run_enabled: false,
         }
     }
 }
@@ -95,7 +98,7 @@ impl SimulationPanelState {
     /// Restores backend and directive_kind to their last-saved values.
     #[allow(dead_code)]
     pub(crate) fn from_disk() -> Self {
-        let (_opts, _preset, backend_str, directive_str) =
+        let (_opts, _preset, backend_str, directive_str, _toggles) =
             crate::app::preferences::StudioPreferences::load_simulation_settings();
         let backend = match backend_str.as_str() {
             "Xyce" | "xyce" => SimulationBackendKind::Xyce,

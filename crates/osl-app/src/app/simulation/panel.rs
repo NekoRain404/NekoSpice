@@ -191,6 +191,21 @@ impl NekoSpiceApp {
                 self.run_simulation_from_panel();
             }
         }
+
+        ui.add_space(4.0);
+
+        // Auto-run toggle
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(StudioTheme::muted_for(mode, "Auto-run on schematic change"));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(egui::Checkbox::without_text(&mut self.simulation_panel.auto_run_enabled)).changed() {
+                        self.save_simulation_settings();
+                    }
+                });
+            });
+            ui.label(StudioTheme::muted_for(mode, "Re-run simulation when schematic parameters change"));
+        });
     }
 }
 
