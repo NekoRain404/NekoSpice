@@ -7,7 +7,9 @@ use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
 use eframe::egui;
+use std::collections::HashSet;
 
+/// Analysis tabs available in the waveform workspace.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum WaveformAnalysisTab {
     #[default]
@@ -55,15 +57,10 @@ impl WaveformAnalysisTab {
 /// via mouse scroll and drag interactions.
 #[derive(Debug, Clone)]
 pub(crate) struct WaveformViewport {
-    /// Left edge of the visible range (time or frequency).
     pub(crate) x_min: f64,
-    /// Right edge of the visible range.
     pub(crate) x_max: f64,
-    /// Bottom edge of the visible Y range.
     pub(crate) y_min: f64,
-    /// Top edge of the visible Y range.
     pub(crate) y_max: f64,
-    /// Whether the viewport has been user-modified from the default.
     pub(crate) user_modified: bool,
 }
 
@@ -117,9 +114,12 @@ impl WaveformViewport {
     }
 }
 
+/// Persistent state for the waveform workspace.
 #[derive(Debug, Default)]
 pub(crate) struct WaveformWorkspaceState {
+    /// Currently active analysis tab.
     pub(crate) analysis_tab: WaveformAnalysisTab,
+    /// Whether cursor overlay is enabled.
     pub(crate) cursor_overlay: bool,
     /// Interactive viewport for zoom/pan.
     pub(crate) viewport: WaveformViewport,
@@ -130,6 +130,32 @@ pub(crate) struct WaveformWorkspaceState {
     pub(crate) is_panning: bool,
     /// Drag start position for pan calculation.
     pub(crate) pan_start: Option<egui::Pos2>,
+    /// When true, all visible signals are drawn in overlay on a single lane.
+    pub(crate) overlay_mode: bool,
+    /// Set of signal names currently visible in overlay mode.
+    /// If empty and overlay_mode is true, all signals are shown.
+    pub(crate) visible_signals: HashSet<String>,
+}
+
+impl WaveformWorkspaceState {
+    /// Toggle a signal's visibility in overlay mode.
+    pub(crate) fn toggle_signal(&mut self, signal: &str) {
+        if self.visible_signals.contains(signal) {
+            self.visible_signals.remove(signal);
+        } else {
+            self.visible_signals.insert(signal.to_string());
+        }
+    }
+
+    /// Check if a signal should be displayed.
+    /// In overlay mode, checks the visible_signals set.
+    /// If the set is empty (all toggled off), shows everything.
+    pub(crate) fn is_signal_visible(&self, signal: &str) -> bool {
+        if !self.overlay_mode {
+            return true;
+        }
+        self.visible_signals.is_empty() || self.visible_signals.contains(signal)
+    }
 }
 
 impl NekoSpiceApp {
@@ -155,11 +181,10 @@ impl NekoSpiceApp {
 
     fn draw_waveform_workspace_header(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
-        
+
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 ui.heading(self.text(UiText::WaveformAnalysis));
-                // Show analysis tab description as subtitle
                 let tab_desc = self.waveform_workspace.analysis_tab.description();
                 ui.label(StudioTheme::muted_for(mode, tab_desc));
             });
@@ -174,7 +199,6 @@ impl NekoSpiceApp {
                 {
                     self.run_simulation_from_panel();
                 }
-                // Show signal count if available
                 if let Some(run) = &self.simulation_panel.last_run {
                     if let crate::waveform_summary::GuiWaveformSummaryState::Ready(summary) =
                         &run.waveform

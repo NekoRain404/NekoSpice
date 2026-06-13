@@ -42,6 +42,17 @@ impl NekoSpiceApp {
                     }
                 }
             }
+            ui.separator();
+            let overlay_label = if self.waveform_workspace.overlay_mode { "Overlay: ON" } else { "Overlay: OFF" };
+            if ui.selectable_label(self.waveform_workspace.overlay_mode, overlay_label).on_hover_text("Toggle multi-signal overlay mode").clicked() {
+                self.waveform_workspace.overlay_mode = !self.waveform_workspace.overlay_mode;
+                self.waveform_workspace.visible_signals.clear();
+                if self.waveform_workspace.overlay_mode {
+                    self.status_message = Some("Overlay mode: all signals shown on single lane".to_string());
+                } else {
+                    self.status_message = Some("Overlay mode: single signal view".to_string());
+                }
+            }
         });
     }
 

@@ -1,9 +1,14 @@
+//! Waveform workspace UI widgets — tabs, trace chips, measurement tables,
+//! cursor rows, and summary cards. Pure rendering helpers with no state.
+//!
+//! `trace_chip` supports both single-select and multi-select modes.
+
 use crate::app::theme::{StudioTheme, StudioThemeMode};
 use super::preview::format_compact_f64;
 use crate::waveform_summary::GuiWaveformVariableSummary;
 use eframe::egui::{self, RichText};
 
-/// waveform mode tab。
+/// Tab button for switching waveform analysis modes.
 pub(crate) fn waveform_mode_tab(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -14,25 +19,13 @@ pub(crate) fn waveform_mode_tab(
     ui.add_sized(
         [104.0, 30.0],
         egui::Button::new(label)
-            .fill(if selected {
-                palette.accent_soft
-            } else {
-                palette.panel_soft
-            })
-            .stroke(egui::Stroke::new(
-                1.0,
-                if selected {
-                    palette.accent
-                } else {
-                    palette.border
-                },
-            ))
+            .fill(if selected { palette.accent_soft } else { palette.panel_soft })
+            .stroke(egui::Stroke::new(1.0, if selected { palette.accent } else { palette.border }))
             .corner_radius(5),
-    )
-    .clicked()
+    ).clicked()
 }
 
-/// trace chip。
+/// Single-select trace chip — highlights when active.
 pub(crate) fn trace_chip(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -48,25 +41,36 @@ pub(crate) fn trace_chip(
     };
     ui.add(
         egui::Button::new(RichText::new(caption).monospace())
-            .fill(if selected {
-                palette.accent_soft
-            } else {
-                palette.panel_soft
-            })
-            .stroke(egui::Stroke::new(
-                1.0,
-                if selected {
-                    palette.accent
-                } else {
-                    palette.border
-                },
-            ))
+            .fill(if selected { palette.accent_soft } else { palette.panel_soft })
+            .stroke(egui::Stroke::new(1.0, if selected { palette.accent } else { palette.border }))
             .corner_radius(5),
-    )
-    .clicked()
+    ).clicked()
 }
 
-/// waveform empty state。
+/// Multi-select trace chip — toggles visibility in overlay mode.
+/// Returns whether the button was clicked.
+pub(crate) fn trace_chip_toggle(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    signal: &str,
+    unit: &str,
+    visible: bool,
+) -> bool {
+    let palette = StudioTheme::palette(mode);
+    let caption = if unit.is_empty() {
+        signal.to_string()
+    } else {
+        format!("{signal}  {unit}")
+    };
+    ui.add(
+        egui::Button::new(RichText::new(caption).monospace())
+            .fill(if visible { palette.accent_soft } else { palette.panel_soft })
+            .stroke(egui::Stroke::new(1.0, if visible { palette.accent } else { palette.border }))
+            .corner_radius(5),
+    ).clicked()
+}
+
+/// Empty state placeholder for waveform workspace.
 pub(crate) fn waveform_empty_state(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -82,7 +86,7 @@ pub(crate) fn waveform_empty_state(
     });
 }
 
-/// measurement table。
+/// Measurement table showing signal statistics.
 pub(crate) fn measurement_table(
     ui: &mut egui::Ui,
     labels: &MeasurementTableLabels<'_>,
@@ -112,15 +116,11 @@ pub(crate) fn measurement_table(
             }
         });
     if variables.len() > limit {
-        ui.label(format!(
-            "{} {}",
-            variables.len() - limit,
-            labels.more_variables
-        ));
+        ui.label(format!("{} {}", variables.len() - limit, labels.more_variables));
     }
 }
 
-/// `MeasurementTableLabels` 类型定义。
+/// Labels for measurement table columns (supports localization).
 pub(crate) struct MeasurementTableLabels<'a> {
     pub(crate) signal: &'a str,
     pub(crate) last: &'a str,
@@ -131,7 +131,7 @@ pub(crate) struct MeasurementTableLabels<'a> {
     pub(crate) more_variables: &'a str,
 }
 
-/// run stat row。
+/// Single row in run statistics display.
 pub(crate) fn run_stat_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: &str) {
     let palette = StudioTheme::palette(mode);
     ui.horizontal(|ui| {
@@ -143,7 +143,7 @@ pub(crate) fn run_stat_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str
     ui.separator();
 }
 
-/// cursor row。
+/// Cursor readout row — shows signal name and interpolated value.
 pub(crate) fn cursor_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -161,7 +161,7 @@ pub(crate) fn cursor_row(
     });
 }
 
-/// waveform summary card。
+/// Summary card for a completed simulation run.
 pub(crate) fn waveform_summary_card(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
