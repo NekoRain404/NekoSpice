@@ -178,9 +178,10 @@ NekoSpice/
 │               │       ├── editing.rs
 │               │       └── preview.rs
 │               │
-│               ├── simulation/           # ── 仿真工作区（25 文件）──
+│               ├── simulation/           # ── 仿真工作区（28 文件）──
 │               │   ├── mod.rs
-│               │   ├── analysis.rs       # AnalysisParams + StepSweep（结构化分析参数）
+│               │   ├── analysis.rs       # AnalysisParams（结构化分析参数）
+│               │   ├── step_sweep.rs     # StepSweep（参数/温度扫描配置）
 │               │   ├── state.rs          # SimulationPanelState + SimulationBackendKind
 │               │   ├── panel.rs          # 右侧仿真面板调度
 │               │   ├── directive_editor.rs # 分析指令编辑器 UI
