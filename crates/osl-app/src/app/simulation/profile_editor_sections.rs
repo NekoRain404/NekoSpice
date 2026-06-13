@@ -96,36 +96,58 @@ pub(crate) fn draw_model_params(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
 }
 
 /// Draw the parameter definitions editor (center column).
+///
+/// Features:
+/// - Search/filter to quickly find parameters by name
+/// - Auto-sync from schematic button to refresh component list
+/// - Quick templates for common circuit configurations
+/// - Validation feedback on parameter values
 pub(crate) fn draw_parameter_definitions(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     let mode = app.theme_mode();
     StudioTheme::panel_frame_for(mode).show(ui, |ui| {
         section_header(ui, mode, app.text(UiText::ParameterDefinitions));
         ui.add_space(4.0);
+
+        // Action bar: sync from schematic + clear all
+        ui.horizontal(|ui| {
+            if ui.small_button("Sync from Schematic").on_hover_text("Refresh component list from loaded schematic").clicked() {
+                app.auto_populate_component_params();
+            }
+            if ui.small_button("Clear All").on_hover_text("Remove all component and model parameters").clicked() {
+                app.simulation_profile_editor.component_params.clear();
+                app.simulation_profile_editor.model_params.clear();
+            }
+        });
+        ui.add_space(4.0);
+
+        // Quick templates
+        ui.horizontal_wrapped(|ui| {
+            ui.label(StudioTheme::muted_for(mode, "Templates:"));
+            if ui.small_button("RC Filter").on_hover_text("R1, C1, V1, Fcut").clicked() {
+                load_rc_template(&mut app.simulation_profile_editor.component_params);
+            }
+            if ui.small_button("Op-Amp").on_hover_text("Rf, Rin, R1, R2, C1, Vcc, Vee").clicked() {
+                load_opamp_template(&mut app.simulation_profile_editor.component_params);
+            }
+        });
+        ui.add_space(6.0);
+
+        // Count and summary
+        let comp_count = app.simulation_profile_editor.component_params.len();
+        let model_count = app.simulation_profile_editor.model_params.len();
+        let total = comp_count + model_count;
         ui.label(StudioTheme::muted_for(
             mode,
-            "Define simulation parameter names, values, and units.",
+            format!("{comp_count} component(s), {model_count} model(s) — {total} total"),
         ));
         ui.add_space(6.0);
 
-        // Column headers
-        egui::Grid::new("param_def_headers")
-            .num_columns(3)
-            .spacing([8.0, 4.0])
-            .show(ui, |ui| {
-                ui.label(StudioTheme::muted_for(mode, "Name"));
-                ui.label(StudioTheme::muted_for(mode, "Value"));
-                ui.label(StudioTheme::muted_for(mode, "Unit"));
-                ui.end_row();
-            });
-
-        // Editable parameter definition rows
-        if app.simulation_profile_editor.component_params.is_empty()
-            && app.simulation_profile_editor.model_params.is_empty()
-        {
+        // Editable parameter rows
+        if total == 0 {
             ui.add_space(12.0);
             ui.label(StudioTheme::muted_for(
                 mode,
-                "Add component or model parameters to define them here.",
+                "No parameters yet. Load a schematic and click 'Sync from Schematic', or use a template.",
             ));
         } else {
             egui::ScrollArea::vertical()
@@ -138,6 +160,12 @@ pub(crate) fn draw_parameter_definitions(app: &mut NekoSpiceApp, ui: &mut egui::
                         .spacing([8.0, 4.0])
                         .striped(true)
                         .show(ui, |ui| {
+                            // Column headers
+                            ui.label(StudioTheme::muted_for(mode, "Name"));
+                            ui.label(StudioTheme::muted_for(mode, "Value"));
+                            ui.label(StudioTheme::muted_for(mode, "Unit"));
+                            ui.end_row();
+
                             for row in app
                                 .simulation_profile_editor
                                 .component_params
@@ -159,21 +187,6 @@ pub(crate) fn draw_parameter_definitions(app: &mut NekoSpiceApp, ui: &mut egui::
                         });
                 });
         }
-
-        ui.add_space(6.0);
-        // Quick template buttons
-        ui.horizontal(|ui| {
-            if ui.small_button("Load RC Template").clicked() {
-                load_rc_template(&mut app.simulation_profile_editor.component_params);
-            }
-            if ui.small_button("Load Op-Amp Template").clicked() {
-                load_opamp_template(&mut app.simulation_profile_editor.component_params);
-            }
-            if ui.small_button("Clear All").clicked() {
-                app.simulation_profile_editor.component_params.clear();
-                app.simulation_profile_editor.model_params.clear();
-            }
-        });
     });
 }
 

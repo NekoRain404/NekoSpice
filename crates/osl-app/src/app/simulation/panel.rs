@@ -42,6 +42,12 @@ impl NekoSpiceApp {
                         }
                     });
             });
+            // Backend-specific hint
+            let hint = match self.simulation_panel.backend {
+                SimulationBackendKind::Ngspice => "ngspice: batch mode (-b), binary raw output",
+                SimulationBackendKind::Xyce => "Xyce: .print directives for waveform output",
+            };
+            ui.label(StudioTheme::muted_for(mode, hint));
             ui.add_space(4.0);
 
             let running = self.simulation_panel.active_task.is_some();
