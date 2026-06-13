@@ -51,20 +51,17 @@ impl NspSchematic {
             ));
         }
 
+        let mut ref_usage: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
         for symbol in &self.symbols {
             let definition = self.resolved_symbol_definition_with_fallback(
                 &symbol.lib_id,
                 symbol.lib_name.as_deref(),
             );
-            if symbol.reference().unwrap_or_default().trim() == "D1" {
-                let _sp_line = self.symbol_to_spice_line(symbol, &graph);
-                let _leg_line = self.symbol_to_spice_line_legacy(symbol, &graph);
-            }
-            match self.symbol_to_spice_line(symbol, &graph) {
+            match self.symbol_to_spice_line_dedup(symbol, &graph, &mut ref_usage) {
                 Some(line) => lines.push(line),
                 None if symbol.sim_enabled(definition.as_ref()) == Some(false) => {}
                 None => {
-                    // Silently skip power symbols (#PWR*, #FLG*) — they define net names, not components
                     let ref_name = symbol.reference().unwrap_or_default().trim();
                     let lib = symbol.lib_id.trim();
                     if ref_name.starts_with('#')
@@ -73,7 +70,9 @@ impl NspSchematic {
                     {
                         continue;
                     }
-                    if let Some(line) = self.symbol_to_spice_line_legacy(symbol, &graph) {
+                    if let Some(line) =
+                        self.symbol_to_spice_line_legacy_dedup(symbol, &graph, &mut ref_usage)
+                    {
                         lines.push(line);
                     } else {
                         lines.push(format!("* Unsupported schema symbol {} {}", ref_name, lib));
@@ -546,6 +545,55 @@ impl NspSchematic {
             }
             _ => None,
         }
+    }
+
+    /// SPICE line with reference deduplication for multi-unit symbols.
+    fn symbol_to_spice_line_dedup(
+        &self,
+        symbol: &NspSymbolInstance,
+        graph: &NspNetGraph,
+        ref_usage: &mut std::collections::HashMap<String, u32>,
+    ) -> Option<String> {
+        let nodes = self.symbol_pin_nets(symbol, graph)?;
+        let line = self.symbol_to_spice_line_with_nodes(symbol, &nodes)?;
+        let ref_key = symbol.reference().unwrap_or_default().trim().to_string();
+        if ref_key.is_empty() || ref_key.starts_with('#') {
+            return Some(line);
+        }
+        let count = ref_usage.entry(ref_key).or_insert(0);
+        *count += 1;
+        if *count > 1 {
+            let suffix = format!("_{}", count);
+            let parts: Vec<&str> = line.splitn(2, ' ').collect();
+            if parts.len() == 2 {
+                return Some(format!("{}{} {}", parts[0], suffix, parts[1]));
+            }
+        }
+        Some(line)
+    }
+
+    /// Legacy SPICE line with reference deduplication.
+    fn symbol_to_spice_line_legacy_dedup(
+        &self,
+        symbol: &NspSymbolInstance,
+        graph: &NspNetGraph,
+        ref_usage: &mut std::collections::HashMap<String, u32>,
+    ) -> Option<String> {
+        let line = self.symbol_to_spice_line_legacy(symbol, graph)?;
+        let ref_key = symbol.reference().unwrap_or_default().trim().to_string();
+        if ref_key.is_empty() || ref_key.starts_with('#') {
+            return Some(line);
+        }
+        let count = ref_usage.entry(ref_key).or_insert(0);
+        *count += 1;
+        if *count > 1 {
+            let suffix = format!("_{}", count);
+            let parts: Vec<&str> = line.splitn(2, ' ').collect();
+            if parts.len() == 2 {
+                return Some(format!("{}{} {}", parts[0], suffix, parts[1]));
+            }
+        }
+        Some(line)
     }
 
     fn symbol_pin_nets(
