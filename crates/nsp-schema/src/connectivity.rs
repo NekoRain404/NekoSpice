@@ -108,7 +108,10 @@ impl NspNetGraph {
                 }
                 if !value.is_empty() {
                     // Get the power pin position
-                    if let Some(definition) = schematic.resolved_symbol_definition(&symbol.lib_id) {
+                    if let Some(definition) = schematic.resolved_symbol_definition_with_fallback(
+                        &symbol.lib_id,
+                        symbol.lib_name.as_deref(),
+                    ) {
                         for pin in definition.scoped_pins(symbol.unit, symbol.body_style) {
                             if let Some(pin_at) = pin.at {
                                 let world_point = transform_symbol_point(

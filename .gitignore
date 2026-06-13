@@ -23,3 +23,7 @@ Thumbs.db
 *~
 docs/screenshot_current.png
 tmp/
+
+# Reference simulation demos (not part of project source)
+KiCad-Simulations-main/
+KiCad-Spice-Library-master/

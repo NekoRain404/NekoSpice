@@ -74,7 +74,7 @@ impl NspSchematic {
                 continue;
             };
             let definition = self
-                .resolved_symbol_definition(&symbol.lib_id)
+                .resolved_symbol_definition_with_fallback(&symbol.lib_id, symbol.lib_name.as_deref())
                 .unwrap_or_else(|| NspResolvedSymbolDef::from_symbol(definition));
             if symbol.sim_enabled(Some(&definition)) == Some(false) {
                 diagnostics.push(schema_diagnostic(

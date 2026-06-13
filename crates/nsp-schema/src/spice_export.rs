@@ -52,7 +52,14 @@ impl NspSchematic {
         }
 
         for symbol in &self.symbols {
-            let definition = self.resolved_symbol_definition(&symbol.lib_id);
+            let definition = self.resolved_symbol_definition_with_fallback(
+                &symbol.lib_id,
+                symbol.lib_name.as_deref(),
+            );
+            if symbol.reference().unwrap_or_default().trim() == "D1" {
+                let _sp_line = self.symbol_to_spice_line(symbol, &graph);
+                let _leg_line = self.symbol_to_spice_line_legacy(symbol, &graph);
+            }
             match self.symbol_to_spice_line(symbol, &graph) {
                 Some(line) => lines.push(line),
                 None if symbol.sim_enabled(definition.as_ref()) == Some(false) => {}
@@ -83,9 +90,48 @@ impl NspSchematic {
             }
             lines.push(directive.to_string());
         }
+
+        // Inject default model definitions for commonly used device types
+        // that appear in the netlist but have no corresponding .model or .include
+        let netlist_text = lines.join("\n");
+        let default_models = [
+            ("NMOS", ".model NMOS NMOS LEVEL=1"),
+            ("PMOS", ".model PMOS PMOS LEVEL=1"),
+            ("NPN", ".model NPN NPN LEVEL=1"),
+            ("PNP", ".model PNP PNP LEVEL=1"),
+            ("D", ".model D D LEVEL=1"),
+        ];
+        let mut injected = Vec::new();
+        for (name, def) in &default_models {
+            // Check if model name appears as a component value (after node names)
+            // e.g., "Q1 0 gg sout NMOS" or "D1 anode cathode D"
+            let used = netlist_text.lines().any(|line| {
+                let trimmed = line.trim();
+                if trimmed.starts_with('*') || trimmed.starts_with('.') {
+                    return false;
+                }
+                // Check if the last token matches the model name
+                trimmed.split_whitespace().last() == Some(name)
+            });
+            let has_model = netlist_text
+                .lines()
+                .any(|line| line.trim().starts_with(&format!(".model {}", name)));
+            if used && !has_model {
+                injected.push(def.to_string());
+            }
+        }
         if !has_end {
             lines.push(".end".to_string());
         }
+        if !injected.is_empty()
+            && let Some(end_idx) = lines
+                .iter()
+                .rposition(|l| l.trim().eq_ignore_ascii_case(".end"))
+            {
+                for (i, model) in injected.iter().enumerate() {
+                    lines.insert(end_idx + i, model.clone());
+                }
+            }
         Ok(format!("{}\n", lines.join("\n")))
     }
 
@@ -136,7 +182,10 @@ impl NspSchematic {
     pub fn spice_include_directives(&self) -> Vec<String> {
         let mut includes = BTreeSet::new();
         for symbol in &self.symbols {
-            let definition = self.resolved_symbol_definition(&symbol.lib_id);
+            let definition = self.resolved_symbol_definition_with_fallback(
+                &symbol.lib_id,
+                symbol.lib_name.as_deref(),
+            );
             if symbol.sim_enabled(definition.as_ref()) == Some(false) {
                 continue;
             }
@@ -169,7 +218,8 @@ impl NspSchematic {
         symbol: &NspSymbolInstance,
         nodes: &[String],
     ) -> Option<String> {
-        let definition = self.resolved_symbol_definition(&symbol.lib_id);
+        let definition = self
+            .resolved_symbol_definition_with_fallback(&symbol.lib_id, symbol.lib_name.as_deref());
         if symbol.sim_enabled(definition.as_ref()) == Some(false) {
             return None;
         }
@@ -219,15 +269,14 @@ impl NspSchematic {
         // to Spice_Primitive from the definition (which gives the actual type).
         if device == "SPICE" && !value.contains("${REFERENCE}") && !value.contains("${N") {
             // Check definition for Spice_Primitive to get actual device type
-            if let Some(def) = &definition {
-                if let Some(prim) = def
+            if let Some(def) = &definition
+                && let Some(prim) = def
                     .property("Spice_Primitive")
                     .map(str::trim)
                     .filter(|v| !v.is_empty())
                 {
                     device = prim.to_ascii_uppercase();
                 }
-            }
         }
         let primitive = if explicit_device.is_some() || device == "SPICE" {
             spice_primitive_for_device(&device)?
@@ -238,6 +287,7 @@ impl NspSchematic {
                 .map(|character| character.to_ascii_uppercase().to_string())
                 .unwrap_or_default()
         };
+
         if primitive.is_empty() {
             return None;
         }
@@ -255,31 +305,62 @@ impl NspSchematic {
             return Some(expand_spice_template(&value, &spice_reference, nodes));
         }
 
+        // When Sim.Device is set but no model name, provide sensible defaults
+        let effective_value = if value.is_empty() && explicit_device.is_some() {
+            match device.as_str() {
+                "D" => "D".to_string(),
+                "Q" | "NPN" | "PNP" | "NMOS" | "PMOS" => device.clone(),
+                "M" => "NMOS".to_string(),
+                _ => value.clone(),
+            }
+        } else {
+            value.clone()
+        };
+
+        
         match primitive.as_str() {
-            "R" | "C" | "L" | "V" | "I" | "D" if nodes.len() >= 2 && !value.is_empty() => Some(
-                format!("{spice_reference} {} {} {value}", nodes[0], nodes[1]),
-            ),
-            "Q" | "J" if nodes.len() >= 3 && !value.is_empty() => Some(format!(
-                "{spice_reference} {} {} {} {value}",
+            "R" | "C" | "L" | "V" | "I" | "D"
+                if nodes.len() >= 2 && !effective_value.is_empty() =>
+            {
+                Some(format!(
+                    "{spice_reference} {} {} {effective_value}",
+                    nodes[0], nodes[1]
+                ))
+            }
+            "Q" | "J" if nodes.len() >= 3 && !effective_value.is_empty() => Some(format!(
+                "{spice_reference} {} {} {} {effective_value}",
                 nodes[0], nodes[1], nodes[2]
             )),
-            "M" if nodes.len() >= 4 && !value.is_empty() => Some(format!(
-                "{spice_reference} {} {} {} {} {value}",
+            "M" if nodes.len() >= 3 && !effective_value.is_empty() => {
+                // MOSFET requires 4 nodes: drain gate source bulk
+                // KiCad symbols often omit bulk pin; default to ground (0)
+                let bulk = if nodes.len() >= 4 {
+                    nodes[3].clone()
+                } else {
+                    "0".to_string()
+                };
+                Some(format!(
+                    "{spice_reference} {} {} {} {} {effective_value}",
+                    nodes[0], nodes[1], nodes[2], bulk
+                ))
+            }
+            "S" | "W" if nodes.len() >= 4 && !effective_value.is_empty() => Some(format!(
+                "{spice_reference} {} {} {} {} {effective_value}",
                 nodes[0], nodes[1], nodes[2], nodes[3]
             )),
-            "S" | "W" if nodes.len() >= 4 && !value.is_empty() => Some(format!(
-                "{spice_reference} {} {} {} {} {value}",
+            "E" | "F" | "G" | "H" if nodes.len() >= 4 && !effective_value.is_empty() => {
+                Some(format!(
+                    "{spice_reference} {} {} {} {} {effective_value}",
+                    nodes[0], nodes[1], nodes[2], nodes[3]
+                ))
+            }
+            "T" if nodes.len() >= 4 && !effective_value.is_empty() => Some(format!(
+                "{spice_reference} {} {} {} {} {effective_value}",
                 nodes[0], nodes[1], nodes[2], nodes[3]
             )),
-            "E" | "F" | "G" | "H" if nodes.len() >= 4 && !value.is_empty() => Some(format!(
-                "{spice_reference} {} {} {} {} {value}",
-                nodes[0], nodes[1], nodes[2], nodes[3]
-            )),
-            "T" if nodes.len() >= 4 && !value.is_empty() => Some(format!(
-                "{spice_reference} {} {} {} {} {value}",
-                nodes[0], nodes[1], nodes[2], nodes[3]
-            )),
-            "K" if !value.is_empty() => Some(format!("{spice_reference} {value}")),
+            "K" if !effective_value.is_empty() => {
+                Some(format!("{spice_reference} {effective_value}"))
+            }
             _ => None,
         }
     }
@@ -337,7 +418,8 @@ impl NspSchematic {
         graph: &NspNetGraph,
     ) -> Option<Vec<String>> {
         let symbol_at = symbol.at?;
-        let definition = self.resolved_symbol_definition(&symbol.lib_id)?;
+        let definition = self
+            .resolved_symbol_definition_with_fallback(&symbol.lib_id, symbol.lib_name.as_deref())?;
         let pins = symbol_ordered_pins(symbol, &definition);
 
         Some(
@@ -392,7 +474,10 @@ impl NspHierarchyExport {
                 .map(|node| scoped_net_name(scope, node, net_aliases))
                 .collect::<Vec<_>>();
             let scoped_symbol = scoped_symbol_instance(symbol, scope);
-            let definition = schematic.resolved_symbol_definition(&symbol.lib_id);
+            let definition = schematic.resolved_symbol_definition_with_fallback(
+                &symbol.lib_id,
+                symbol.lib_name.as_deref(),
+            );
             match schematic.symbol_to_spice_line_with_nodes(&scoped_symbol, &mapped_nodes) {
                 Some(line) => self.components.push(line),
                 None if scoped_symbol.sim_enabled(definition.as_ref()) == Some(false) => {}

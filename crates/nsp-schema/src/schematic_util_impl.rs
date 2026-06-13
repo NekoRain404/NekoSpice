@@ -171,7 +171,7 @@ impl NspSchematic {
                 let Some(symbol_at) = symbol.at else {
                     return Vec::new();
                 };
-                self.resolved_symbol_definition(&symbol.lib_id)
+                self.resolved_symbol_definition_with_fallback(&symbol.lib_id, symbol.lib_name.as_deref())
                     .map(|definition| {
                         definition
                             .scoped_pins(symbol.unit, symbol.body_style)

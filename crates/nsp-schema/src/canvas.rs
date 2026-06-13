@@ -148,7 +148,10 @@ impl NspCanvasScene {
             .symbols
             .iter()
             .filter_map(|symbol| {
-                let definition = schematic.resolved_symbol_definition(&symbol.lib_id)?;
+                let definition = schematic.resolved_symbol_definition_with_fallback(
+                    &symbol.lib_id,
+                    symbol.lib_name.as_deref(),
+                )?;
                 let at = symbol.at.unwrap_or(NspAt {
                     x: 0.0,
                     y: 0.0,

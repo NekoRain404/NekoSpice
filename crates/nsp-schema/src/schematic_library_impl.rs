@@ -128,6 +128,30 @@ impl NspSchematic {
         resolve_symbol_definition(definition, &self.library_symbols)
     }
 
+    /// Resolve symbol definition trying lib_id first, then lib_name as fallback.
+    /// This handles KiCad schematics where lib_name points to the actual library
+    /// symbol while lib_id may reference a different namespace.
+    pub(crate) fn resolved_symbol_definition_with_fallback(
+        &self,
+        lib_id: &str,
+        lib_name: Option<&str>,
+    ) -> Option<NspResolvedSymbolDef> {
+        // Try lib_id first
+        if let Some(result) = self.resolved_symbol_definition(lib_id) {
+            return Some(result);
+        }
+        // Fallback to lib_name
+        if let Some(name) = lib_name {
+            for _sym in &self.library_symbols {
+            }
+            let _def = self.symbol_definition(name);
+            if let Some(result) = self.resolved_symbol_definition(name) {
+                return Some(result);
+            } 
+        }
+        None
+    }
+
     pub fn resolve_project_symbol_libraries(
         &mut self,
         project_dir: &Path,

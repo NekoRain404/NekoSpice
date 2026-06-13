@@ -53,6 +53,7 @@ pub(crate) fn parse_symbol_instance(node: &Sexp) -> Option<NspSymbolInstance> {
     let items = list_items(node);
     Some(NspSymbolInstance {
         lib_id: child_value(items, "lib_id")?,
+        lib_name: child_value(items, "lib_name"),
         at: child(items, "at").and_then(parse_at),
         mirror: child(items, "mirror").and_then(parse_symbol_mirror),
         unit: child_value(items, "unit").and_then(|value| value.parse().ok()),

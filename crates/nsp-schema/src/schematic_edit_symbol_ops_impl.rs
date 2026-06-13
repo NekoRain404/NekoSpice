@@ -661,6 +661,7 @@ impl NspSchematic {
 
         self.symbols.push(NspSymbolInstance {
             lib_id: lib_id.clone(),
+            lib_name: None,
             at: Some(at),
             mirror: None,
             unit: Some(unit),

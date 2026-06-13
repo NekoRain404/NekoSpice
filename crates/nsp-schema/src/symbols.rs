@@ -26,6 +26,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone, PartialEq)]
 pub struct NspSymbolInstance {
     pub lib_id: String,
+    pub lib_name: Option<String>,
     pub at: Option<NspAt>,
     pub mirror: Option<String>,
     pub unit: Option<u32>,
