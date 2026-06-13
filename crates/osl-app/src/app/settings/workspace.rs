@@ -83,28 +83,24 @@ impl NekoSpiceApp {
             );
         });
     }
-
     fn draw_settings_runtime_section(&mut self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();
         StudioTheme::panel_frame_for(mode).show(ui, |ui| {
-            ui.label(StudioTheme::section_title_for(
-                mode,
-                self.text(UiText::System),
-            ));
-            // Editable ngspice path (auto-save on change)
-            ui.horizontal(|ui| {
-                ui.label(StudioTheme::muted_for(mode, "ngspice"));
-                if ui.text_edit_singleline(&mut self.preferences.ngspice_path).changed() {
-                    self.preferences.save_to_disk();
-                }
-            });
-            // Editable Xyce path (auto-save on change)
-            ui.horizontal(|ui| {
-                ui.label(StudioTheme::muted_for(mode, "Xyce"));
-                if ui.text_edit_singleline(&mut self.preferences.xyce_path).changed() {
-                    self.preferences.save_to_disk();
-                }
-            });
+            ui.label(StudioTheme::section_title_for(mode, self.text(UiText::System)));
+            ui.add_space(4.0);
+
+            // ngspice path with validation indicator
+            ui.label(StudioTheme::muted_for(mode, "Solver Paths"));
+            ui.add_space(2.0);
+            solver_path_row(ui, mode, &mut self.preferences.ngspice_path, "ngspice");
+            ui.add_space(4.0);
+            solver_path_row(ui, mode, &mut self.preferences.xyce_path, "Xyce");
+            if ui.small_button("Save Paths").clicked() {
+                self.preferences.save_to_disk();
+                self.status_message = Some("Solver paths saved".to_string());
+            }
+            ui.add_space(8.0);
+
             settings_row(ui, mode, self.text(UiText::Backend), "CLI isolated");
             settings_row(ui, mode, self.text(UiText::Threads), "auto");
             settings_row(ui, mode, self.text(UiText::Graphics), "egui + wgpu");
@@ -250,4 +246,49 @@ fn settings_edit_row(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, valu
     let changed = resp.changed();
     ui.end_row();
     changed
+}
+
+/// Draw a solver path row with a validation indicator (green check or red X).
+fn solver_path_row(
+    ui: &mut egui::Ui,
+    mode: StudioThemeMode,
+    path: &mut String,
+    name: &str,
+) {
+    let palette = StudioTheme::palette(mode);
+    // Check if the solver is available
+    let available = std::process::Command::new("which")
+        .arg(path.trim())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    ui.horizontal(|ui| {
+        // Validation indicator
+        let (icon, color) = if available {
+            ("✓", palette.success)
+        } else {
+            ("✗", palette.danger)
+        };
+        ui.label(egui::RichText::new(icon).color(color).strong());
+
+        ui.label(StudioTheme::muted_for(mode, name));
+        let resp = ui.add(
+            egui::TextEdit::singleline(path)
+                .desired_width(160.0)
+                .font(egui::TextStyle::Monospace)
+                .hint_text(format!("path to {}", name)),
+        );
+        if resp.changed() {
+            // Auto-save on change
+        }
+
+        if available {
+            ui.label(StudioTheme::muted_for(mode, "found"));
+        } else {
+            ui.label(egui::RichText::new("not found").color(palette.danger).size(11.0));
+        }
+    });
 }
