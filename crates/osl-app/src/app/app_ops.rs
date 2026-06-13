@@ -113,6 +113,56 @@ impl NekoSpiceApp {
                 self.simulation_panel.step_sweep = StepSweep::from_directive_body(body);
             }
         }
+
+        // Auto-populate component parameters from schematic
+        self.auto_populate_component_params();
+    }
+
+    /// Auto-populate component parameters from the loaded schematic.
+    ///
+    /// Scans all symbol instances in the schematic for passive components
+    /// (R, C, L) and independent sources (V, I), extracting their Reference
+    /// and Value properties into the simulation profile's component_params.
+    pub(super) fn auto_populate_component_params(&mut self) {
+        let Some(document) = &self.document else {
+            return;
+        };
+        let schematic = &document.schematic;
+        // Clear existing component params and rebuild from schematic
+        self.simulation_profile_editor.component_params.clear();
+
+        for symbol in &schematic.symbols {
+            let lib_id = &symbol.lib_id;
+            let reference = symbol.reference().unwrap_or("");
+            let value = symbol.property("Value").unwrap_or("");
+
+            // Skip power symbols and non-component items
+            if reference.is_empty() || reference.starts_with('#') {
+                continue;
+            }
+
+            // Classify by lib_id prefix
+            let kind = classify_spice_component(lib_id);
+            if kind.is_empty() {
+                continue;
+            }
+
+            // Extract unit from the kind
+            let unit = match kind {
+                "R" => "ohm",
+                "C" => "F",
+                "L" => "H",
+                "V" => "V",
+                "I" => "A",
+                _ => "",
+            };
+
+            self.simulation_profile_editor.component_params.push((
+                reference.to_string(),
+                value.to_string(),
+                unit.to_string(),
+            ));
+        }
     }
 
     /// 从指定路径加载 KiCad 符号库。
@@ -303,6 +353,45 @@ impl NekoSpiceApp {
             Err(error) => {
                 self.status_message = Some(error.to_string());
             }
+        }
+    }
+}
+
+/// Classify a KiCad lib_id into its SPICE component prefix.
+///
+/// Returns "R" for resistors, "C" for capacitors, etc.
+/// Returns empty string for non-SPICE components.
+fn classify_spice_component(lib_id: &str) -> &'static str {
+    let lower = lib_id.to_lowercase();
+    // Common KiCad library prefixes
+    if lower.contains(":r") || lower == "device:r" {
+        "R"
+    } else if lower.contains(":c") || lower == "device:c" {
+        "C"
+    } else if lower.contains(":l") || lower == "device:l" {
+        "L"
+    } else if lower.starts_with("power:") {
+        "" // Skip power symbols
+    } else if lower.contains(":v") || lower.contains("voltage") {
+        "V"
+    } else if lower.contains(":i") || lower.contains("current") {
+        "I"
+    } else if lower.contains(":d") || lower.contains("diode") {
+        "D"
+    } else if lower.contains(":q") || lower.contains("transistor") {
+        "Q"
+    } else if lower.contains(":op") || lower.contains("opamp") || lower.contains("op-amp") {
+        "U"
+    } else {
+        // Try to match by component name patterns in lib_id
+        let parts: Vec<&str> = lower.split(':').collect();
+        if let Some(name) = parts.last() {
+            if name.starts_with('r') && name.len() <= 3 { "R" }
+            else if name.starts_with('c') && name.len() <= 3 { "C" }
+            else if name.starts_with('l') && name.len() <= 3 { "L" }
+            else { "" }
+        } else {
+            ""
         }
     }
 }
