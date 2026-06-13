@@ -205,6 +205,8 @@ NekoSpice/
 │               │   ├── waveform_panel.rs          # 波形预览卡片
 │               │   ├── report_panel.rs            # 报告摘要
 │               │   ├── export_panel.rs             # 导出选项面板
+│               │   ├── custom_presets.rs           # 自定义预设保存/加载
+│               │   ├── step_sweep_grids.rs          # 步进扫描输入网格
 │               │   └── artifacts_panel.rs         # 仿真产物
 │               │
 │               ├── waveform/             # ── 波形分析工作区（10 文件）──
