@@ -107,6 +107,31 @@ impl NekoSpiceApp {
         // Quick configuration summary
         self.draw_panel_config_summary(ui);
 
+        ui.add_space(8.0);
+
+        // Step sweep editor (collapsible in sidebar)
+        egui::CollapsingHeader::new(
+            egui::RichText::new("Parameter Sweep").color(palette.text),
+        )
+        .id_salt("panel_step_sweep")
+        .default_open(false)
+        .show(ui, |ui| {
+            self.draw_step_sweep_editor(ui, mode);
+        });
+
+        ui.add_space(4.0);
+
+        // Measurements editor (collapsible in sidebar)
+        egui::CollapsingHeader::new(
+            egui::RichText::new("Measurements").color(palette.text),
+        )
+        .id_salt("panel_measurements")
+        .default_open(false)
+        .show(ui, |ui| {
+            self.draw_measure_editor(ui, mode);
+        });
+
+        ui.add_space(8.0);
 
         // Collapsible netlist preview
         self.draw_panel_netlist_preview(ui);
@@ -161,14 +186,26 @@ impl NekoSpiceApp {
                     }
 
                     // Step sweep status
-                    if let super::state::StepSweep::Parametric { param_name, sweep_mode, .. } = &self.simulation_panel.step_sweep {
-                        ui.label(StudioTheme::muted_for(mode, "Step"));
-                        ui.label(
-                            egui::RichText::new(format!(".step {} {}", param_name, sweep_mode))
-                                .monospace()
-                                .color(self.theme_palette().accent),
-                        );
-                        ui.end_row();
+                    match &self.simulation_panel.step_sweep {
+                        super::state::StepSweep::Parametric { param_name, sweep_mode, .. } => {
+                            ui.label(StudioTheme::muted_for(mode, "Step"));
+                            ui.label(
+                                egui::RichText::new(format!(".step {} {}", param_name, sweep_mode))
+                                    .monospace()
+                                    .color(self.theme_palette().accent),
+                            );
+                            ui.end_row();
+                        }
+                        super::state::StepSweep::Temperature { sweep_mode, start, stop, .. } => {
+                            ui.label(StudioTheme::muted_for(mode, "Step"));
+                            ui.label(
+                                egui::RichText::new(format!(".step TEMP {} {}–{}", sweep_mode, start, stop))
+                                    .monospace()
+                                    .color(self.theme_palette().accent),
+                            );
+                            ui.end_row();
+                        }
+                        super::state::StepSweep::None => {}
                     }
 
                     // Measurement count
