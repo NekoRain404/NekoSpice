@@ -2,7 +2,7 @@
 // Included at module level by localization.rs.
 
 impl UiText {
-    fn zh_hans(self) -> &'static str {
+    pub(super) fn zh_hans(self) -> &'static str {
         match self {
             Self::ActiveProject => "当前项目",
             Self::AiAssistant => "AI 助手",

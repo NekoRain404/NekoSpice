@@ -1,118 +1,15 @@
 //! 用户偏好管理。存储语言、主题、网格显示等界面设置。
 //!
 //! 偏好设置持久化到 `~/.config/nekospice/settings.json`。
-//! 启动时自动加载，修改时自动保存。
-//!
-//! 持久化内容包括:
-//! - UI 偏好（主题、语言）
-//! - 求解器路径（ngspice、xyce）
-//! - 仿真设置（温度、容差、迭代限制等）
+//! 持久化结构定义见 [`preferences_persistence`]。
 
+use super::preferences_persistence::{SettingsFile, SimulationSettingsFile, settings_path};
 use super::NekoSpiceApp;
 use super::localization::{StudioLocale, UiText};
 use super::theme::{StudioPalette, StudioTheme, StudioThemeMode};
 use std::fs;
-use std::path::PathBuf;
 
-/// 持久化到磁盘的偏好设置 JSON 结构。
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct SettingsFile {
-    theme_mode: String,
-    locale: String,
-    ngspice_path: String,
-    xyce_path: String,
-    /// 仿真设置（可选，旧版本配置文件可能不含此字段）。
-    #[serde(default)]
-    simulation: SimulationSettingsFile,
-}
-
-/// 仿真设置的持久化表示。
-/// 使用 serde(default) 保证向后兼容：旧配置文件不含此字段时使用默认值。
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct SimulationSettingsFile {
-    temperature: String,
-    tnom: String,
-    method: String,
-    itl1: String,
-    itl2: String,
-    itl4: String,
-    itl5: String,
-    min_timestep: String,
-    srcsteps: String,
-    gminsteps: String,
-    reltol: String,
-    abstol: String,
-    vntol: String,
-    gmin: String,
-    chgtol: String,
-    pivtol: String,
-    pivrel: String,
-    numdgt: String,
-    active_preset: String,
-    #[serde(default)]
-    backend: String,
-    #[serde(default)]
-    directive_kind: String,
-}
-
-impl Default for SimulationSettingsFile {
-    fn default() -> Self {
-        Self {
-            temperature: "27".to_string(),
-            tnom: "27".to_string(),
-            method: "Trap".to_string(),
-            itl1: "100".to_string(),
-            itl2: "50".to_string(),
-            itl4: "10".to_string(),
-            itl5: "5000".to_string(),
-            min_timestep: "0".to_string(),
-            srcsteps: "0".to_string(),
-            gminsteps: "0".to_string(),
-            reltol: "0.001".to_string(),
-            abstol: "1e-12".to_string(),
-            vntol: "1e-6".to_string(),
-            gmin: "1e-12".to_string(),
-            chgtol: "1e-14".to_string(),
-            pivtol: "1e-13".to_string(),
-            pivrel: "1e-3".to_string(),
-            numdgt: "6".to_string(),
-            active_preset: "default".to_string(),
-            backend: "ngspice".to_string(),
-            directive_kind: "tran".to_string(),
-        }
-    }
-}
-
-impl Default for SettingsFile {
-    fn default() -> Self {
-        Self {
-            theme_mode: "Dark".to_string(),
-            locale: "en".to_string(),
-            ngspice_path: "ngspice".to_string(),
-            xyce_path: "xyce".to_string(),
-            simulation: SimulationSettingsFile::default(),
-        }
-    }
-}
-
-/// 获取设置文件路径：`~/.config/nekospice/settings.json`
-fn settings_path() -> PathBuf {
-    dirs_or_fallback()
-        .join("nekospice")
-        .join("settings.json")
-}
-
-/// 优先使用 XDG_CONFIG_HOME，回退到 HOME/.config
-fn dirs_or_fallback() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::var_os("HOME")
-                .map(|home| PathBuf::from(home).join(".config"))
-                .unwrap_or_else(|| PathBuf::from("."))
-        })
-}
-
+/// 运行时偏好设置（从磁盘加载，内存中修改）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct StudioPreferences {
     pub(super) theme_mode: StudioThemeMode,
@@ -148,10 +45,7 @@ impl StudioPreferences {
         })
     }
 
-    /// 保存当前偏好设置到磁盘。
-    ///
-    /// 包括 UI 设置和当前仿真选项。仿真选项从 app 的
-    /// `simulation_profile_editor.options` 中读取。
+    /// 保存当前偏好设置到磁盘（不含仿真选项）。
     pub(super) fn save_to_disk(&self) {
         let file = SettingsFile {
             theme_mode: self.theme_mode.as_str().to_string(),
@@ -160,19 +54,19 @@ impl StudioPreferences {
             xyce_path: self.xyce_path.clone(),
             simulation: SimulationSettingsFile::default(),
         };
-        let path = settings_path();
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        if let Ok(json) = serde_json::to_string_pretty(&file) {
-            let _ = fs::write(&path, json);
-        }
+        write_settings_file(&file);
     }
 
     /// 保存偏好设置到磁盘，同时包含仿真选项。
     ///
     /// 由 app 在仿真选项变更时调用，确保选项持久化。
-    pub(super) fn save_with_simulation(&self, sim_opts: &super::simulation::profile_editor::SimOptions, preset: &str, backend: &str, _directive_kind: &str) {
+    pub(super) fn save_with_simulation(
+        &self,
+        sim_opts: &super::simulation::profile_editor::SimOptions,
+        preset: &str,
+        backend: &str,
+        directive_kind: &str,
+    ) {
         let file = SettingsFile {
             theme_mode: self.theme_mode.as_str().to_string(),
             locale: self.locale.as_str().to_string(),
@@ -199,29 +93,38 @@ impl StudioPreferences {
                 numdgt: sim_opts.numdgt.clone(),
                 active_preset: preset.to_string(),
                 backend: backend.to_string(),
-                directive_kind: _directive_kind.to_string(),
+                directive_kind: directive_kind.to_string(),
             },
         };
-        let path = settings_path();
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        if let Ok(json) = serde_json::to_string_pretty(&file) {
-            let _ = fs::write(&path, json);
-        }
+        write_settings_file(&file);
     }
 
     /// 从磁盘加载仿真选项（如果存在）。
-    /// 返回 (SimOptions, active_preset_name)。
-    pub(super) fn load_simulation_settings() -> (super::simulation::profile_editor::SimOptions, String, String, String) {
+    /// 返回 (SimOptions, active_preset_name, backend, directive_kind)。
+    pub(super) fn load_simulation_settings() -> (
+        super::simulation::profile_editor::SimOptions,
+        String,
+        String,
+        String,
+    ) {
         let path = settings_path();
         let data = match fs::read_to_string(&path) {
             Ok(d) => d,
-            Err(_) => return (super::simulation::profile_editor::SimOptions::default(), "default".to_string(), "ngspice".to_string(), "tran".to_string()),
+            Err(_) => return (
+                super::simulation::profile_editor::SimOptions::default(),
+                "default".to_string(),
+                "ngspice".to_string(),
+                "tran".to_string(),
+            ),
         };
         let file: SettingsFile = match serde_json::from_str(&data) {
             Ok(f) => f,
-            Err(_) => return (super::simulation::profile_editor::SimOptions::default(), "default".to_string(), "ngspice".to_string(), "tran".to_string()),
+            Err(_) => return (
+                super::simulation::profile_editor::SimOptions::default(),
+                "default".to_string(),
+                "ngspice".to_string(),
+                "tran".to_string(),
+            ),
         };
         let s = file.simulation;
         let opts = super::simulation::profile_editor::SimOptions {
@@ -245,6 +148,17 @@ impl StudioPreferences {
             numdgt: s.numdgt,
         };
         (opts, s.active_preset, s.backend, s.directive_kind)
+    }
+}
+
+/// 将 SettingsFile 序列化并写入磁盘。
+fn write_settings_file(file: &SettingsFile) {
+    let path = settings_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(file) {
+        let _ = fs::write(&path, json);
     }
 }
 

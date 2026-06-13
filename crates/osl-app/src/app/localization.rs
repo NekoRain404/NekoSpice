@@ -1,64 +1,8 @@
 //! 国际化框架。定义 [`UiText`] 枚举和中英文翻译实现。
 //!
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(super) enum StudioLocale {
-    #[default]
-    English,
-    SimplifiedChinese,
-}
+//! 语言区域选择见 [`super::locale::StudioLocale`]。
 
-impl StudioLocale {
-    /// from_str。
-    pub(super) fn from_str(s: &str) -> Self {
-        match s {
-            "zh" | "Chinese" => Self::SimplifiedChinese,
-            _ => Self::English,
-        }
-    }
-
-    /// to_string。
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::English => "en",
-            Self::SimplifiedChinese => "zh",
-        }
-    }
-
-       pub(super) const ALL: [Self; 2] = [Self::English, Self::SimplifiedChinese];
-
-    /// native name。
-    pub(super) fn native_name(self) -> &'static str {
-        match self {
-            Self::English => "English",
-            Self::SimplifiedChinese => "简体中文",
-        }
-    }
-
-    /// short code。
-    pub(super) fn short_code(self) -> &'static str {
-        match self {
-            Self::English => "EN",
-            Self::SimplifiedChinese => "中",
-        }
-    }
-
-    /// next。
-    pub(super) fn next(self) -> Self {
-        match self {
-            Self::English => Self::SimplifiedChinese,
-            Self::SimplifiedChinese => Self::English,
-        }
-    }
-
-    /// text。
-    pub(super) fn text(self, key: UiText) -> &'static str {
-        match self {
-            Self::English => key.en(),
-            Self::SimplifiedChinese => key.zh_hans(),
-        }
-    }
-}
-
+pub(super) use super::locale::StudioLocale;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(super) enum UiText {
@@ -326,7 +270,6 @@ pub(super) enum UiText {
     Critical,
     Yield,
 }
-
 
 include!("localization_en_impl.rs");
 include!("localization_zh_impl.rs");

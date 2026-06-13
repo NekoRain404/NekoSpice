@@ -7,5 +7,6 @@ pub(crate) mod checklist;
 pub(crate) mod state;
 pub(crate) mod widgets;
 pub(crate) mod workspace;
+pub(crate) mod workspace_panel;
 
 pub(crate) use state::ReviewWorkspaceState;

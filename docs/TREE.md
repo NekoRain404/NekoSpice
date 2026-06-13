@@ -108,7 +108,9 @@ NekoSpice/
 │           ├── canvas/           # ── 画布渲染层 ──
 │           │   ├── colors.rs
 │           │   ├── hover.rs
-│           │   ├── scene_renderer.rs
+│           │   ├── scene_renderer.rs         # 编排 + 结构层（sheets, graphics, symbols）
+│           │   ├── scene_renderer_wires.rs   # 连接层（wires, buses）
+│           │   ├── scene_renderer_annotations.rs # 标注层（labels, text, junctions）
 │           │   ├── transforms.rs
 │           │   └── primitives/
 │           │       ├── mod.rs
@@ -122,7 +124,8 @@ NekoSpice/
 │               │                 #   + sync_sim_panel_from_schematic (指令自动同步)
 │               ├── panels.rs     # 根面板布局调度
 │               ├── runtime.rs    # 原生窗口运行时入口
-│               ├── preferences.rs # 用户偏好（主题/语言/求解器路径）
+│               ├── preferences.rs              # 用户偏好（主题/语言/求解器路径）
+│               ├── preferences_persistence.rs  # 持久化 JSON 结构（SettingsFile）
 │               ├── history.rs    # 撤销/重做历史栈
 │               ├── navigation.rs # StudioWorkspace 枚举
 │               │
@@ -144,6 +147,7 @@ NekoSpice/
 │               ├── placement.rs          # 符号放置状态
 │               ├── widgets.rs            # 通用 UI 组件
 │               ├── theme.rs              # StudioTheme 主题系统
+│               ├── locale.rs              # 语言区域选择（StudioLocale）
 │               ├── localization.rs       # 多语言支持（中/英）
 │               ├── localization_en_impl.rs
 │               ├── localization_zh_impl.rs
@@ -247,7 +251,8 @@ NekoSpice/
 │               │   ├── mod.rs
 │               │   ├── state.rs
 │               │   ├── checklist.rs
-│               │   ├── workspace.rs
+│               │   ├── workspace.rs              # 中心画布 + 辅助方法
+│               │   ├── workspace_panel.rs      # 侧边面板（操作按钮 + 风险快照）
 │               │   └── widgets.rs
 │               │
 │               ├── reports/              # ── 报告工作区 ──

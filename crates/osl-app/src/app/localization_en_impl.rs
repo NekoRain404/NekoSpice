@@ -2,7 +2,7 @@
 // Included at module level by localization.rs.
 
 impl UiText {
-    fn en(self) -> &'static str {
+    pub(super) fn en(self) -> &'static str {
         match self {
             Self::ActiveProject => "Active Project",
             Self::AiAssistant => "AI Assistant",
