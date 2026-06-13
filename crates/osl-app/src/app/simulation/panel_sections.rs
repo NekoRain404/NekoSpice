@@ -114,6 +114,78 @@ impl NekoSpiceApp {
         });
     }
 
+    /// Netlist validation status indicator — shows pass/warning/error
+    /// for the current netlist configuration.
+    pub(crate) fn draw_panel_validation_status(&self, ui: &mut egui::Ui) {
+        let mode = self.theme_mode();
+        let palette = StudioTheme::palette(mode);
+
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(mode, "Validation Status"));
+            ui.add_space(4.0);
+
+            if self.document.is_none() {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("●").color(palette.text_muted).size(10.0));
+                    ui.label(StudioTheme::muted_for(mode, "No schematic loaded"));
+                });
+                return;
+            }
+
+            // Check netlist validity
+            let profile = self.build_simulation_profile();
+            let netlist_ok = self.document.as_ref().map(|doc| {
+                doc.spice_netlist_preview().map(|raw| {
+                    osl_sim::inject_profile_directives(&raw, &profile)
+                })
+            });
+
+            match netlist_ok {
+                Some(Ok(netlist)) => {
+                    let warnings = osl_sim::validate_netlist_for_simulation(&netlist);
+                    if warnings.is_empty() {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("●").color(palette.success).size(10.0));
+                            ui.label(egui::RichText::new("Netlist valid").color(palette.success));
+                        });
+                    } else {
+                        for w in &warnings {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("●").color(palette.warning).size(10.0));
+                                ui.label(StudioTheme::muted_for(mode, w));
+                            });
+                        }
+                    }
+                    // Show backend-specific status
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        let backend_color = match self.simulation_panel.backend {
+                            super::state::SimulationBackendKind::Ngspice => palette.accent,
+                            super::state::SimulationBackendKind::Xyce => palette.success,
+                        };
+                        ui.label(egui::RichText::new("●").color(backend_color).size(10.0));
+                        ui.label(StudioTheme::muted_for(
+                            mode,
+                            &format!("{} backend ready", self.simulation_panel.backend.label()),
+                        ));
+                    });
+                }
+                Some(Err(err)) => {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("●").color(palette.danger).size(10.0));
+                        ui.label(StudioTheme::muted_for(mode, &err));
+                    });
+                }
+                None => {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("●").color(palette.text_muted).size(10.0));
+                        ui.label(StudioTheme::muted_for(mode, "No document"));
+                    });
+                }
+            }
+        });
+    }
+
     /// Collapsible netlist preview in the sidebar panel.
     pub(crate) fn draw_panel_netlist_preview(&self, ui: &mut egui::Ui) {
         let mode = self.theme_mode();

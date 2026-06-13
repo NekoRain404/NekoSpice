@@ -64,7 +64,7 @@ pub(crate) fn draw_transient_solver_section(
         ui.add_space(6.0);
         // Reset to SPICE defaults
         if ui.small_button("Reset Transient Defaults").clicked() {
-            let defaults = super::profile_editor::SimOptions::default();
+            let defaults = super::sim_options::SimOptions::default();
             app.simulation_profile_editor.options.method = defaults.method;
             app.simulation_profile_editor.options.itl1 = defaults.itl1;
             app.simulation_profile_editor.options.itl2 = defaults.itl2;
@@ -110,7 +110,7 @@ pub(crate) fn draw_convergence_section(
         ui.add_space(6.0);
         // Reset to SPICE defaults
         if ui.small_button("Reset Convergence Defaults").clicked() {
-            let defaults = super::profile_editor::SimOptions::default();
+            let defaults = super::sim_options::SimOptions::default();
             app.simulation_profile_editor.options.reltol = defaults.reltol;
             app.simulation_profile_editor.options.abstol = defaults.abstol;
             app.simulation_profile_editor.options.vntol = defaults.vntol;

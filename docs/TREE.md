@@ -297,13 +297,22 @@ load_schematic(path)
 ### Key Design Principles
 - **解耦**: 每个工作区独立子模块，通过 `app/` 下的 `impl NekoSpiceApp` 扩展
 - **文件管理**: 单文件不超过 300 行，超过时拆分为独立模块
-- **状态分离**: `state.rs` 定义状态结构，`analysis.rs` 定义参数逻辑
+- **状态分离**: `state.rs` 定义状态结构，`sim_options.rs` 定义指令参数
 - **UI 组件**: `*_widgets.rs` 提供无状态渲染函数
+- **可选区块**: `section_toggles.rs` 控制仿真设置中的可选区块开关
 - **双向兼容**: 兼容 KiCad 原理图格式，支持 ngspice + Xyce 双后端
+
+### Simulation Workflow
+```
+Section Toggles → 控制左侧/右侧可选区块的显示/隐藏
+SimOptions      → SPICE .options 指令的 GUI 编辑映射
+Xyce Options    → Xyce 专用求解参数（Newton/SourceStepping）
+Run Compare     → 选择两个历史仿真运行进行对比
+```
 
 ### Build & Test
 ```bash
 cargo build -p osl-app          # 构建 GUI
-cargo test --workspace           # 运行所有测试（171 预期）
+cargo test --workspace           # 运行所有测试（224 预期）
 cargo run -p osl-app             # 启动 GUI
 ```

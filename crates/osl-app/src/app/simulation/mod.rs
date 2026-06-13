@@ -21,6 +21,7 @@
 
 pub(crate) mod analysis;
 pub(crate) mod step_sweep;
+pub(crate) mod sim_options;
 pub(crate) mod state;
 pub(crate) mod panel;
 pub(crate) mod panel_sections;
@@ -48,6 +49,9 @@ pub(crate) mod measure_editor;
 pub(crate) mod history_panel;
 pub(crate) mod step_sweep_editor;
 pub(crate) mod workspace_widgets;
+pub(crate) mod section_toggles;
+pub(crate) mod options_xyce;
+pub(crate) mod run_compare;
 
 pub(crate) use state::SimulationPanelState;
 pub(crate) use history::SimulationHistory;

@@ -62,7 +62,7 @@ impl StudioPreferences {
     /// 由 app 在仿真选项变更时调用，确保选项持久化。
     pub(super) fn save_with_simulation(
         &self,
-        sim_opts: &super::simulation::profile_editor::SimOptions,
+        sim_opts: &super::simulation::sim_options::SimOptions,
         preset: &str,
         backend: &str,
         directive_kind: &str,
@@ -102,7 +102,7 @@ impl StudioPreferences {
     /// 从磁盘加载仿真选项（如果存在）。
     /// 返回 (SimOptions, active_preset_name, backend, directive_kind)。
     pub(super) fn load_simulation_settings() -> (
-        super::simulation::profile_editor::SimOptions,
+        super::simulation::sim_options::SimOptions,
         String,
         String,
         String,
@@ -111,7 +111,7 @@ impl StudioPreferences {
         let data = match fs::read_to_string(&path) {
             Ok(d) => d,
             Err(_) => return (
-                super::simulation::profile_editor::SimOptions::default(),
+                super::simulation::sim_options::SimOptions::default(),
                 "default".to_string(),
                 "ngspice".to_string(),
                 "tran".to_string(),
@@ -120,14 +120,14 @@ impl StudioPreferences {
         let file: SettingsFile = match serde_json::from_str(&data) {
             Ok(f) => f,
             Err(_) => return (
-                super::simulation::profile_editor::SimOptions::default(),
+                super::simulation::sim_options::SimOptions::default(),
                 "default".to_string(),
                 "ngspice".to_string(),
                 "tran".to_string(),
             ),
         };
         let s = file.simulation;
-        let opts = super::simulation::profile_editor::SimOptions {
+        let opts = super::simulation::sim_options::SimOptions {
             temperature: s.temperature,
             tnom: s.tnom,
             method: s.method,

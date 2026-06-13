@@ -67,6 +67,8 @@ use schematic::SelectionPropertyEditorState;
 use simulation::SimulationHistory;
 use simulation::measure_editor::MeasureEntry;
 use simulation::SimulationPanelState;
+use simulation::options_xyce::XyceOptions;
+use simulation::run_compare::RunCompareState;
 
 const EDIT_NUDGE_MM: f64 = 2.54;
 
@@ -112,6 +114,10 @@ pub struct NekoSpiceApp {
     pub(super) simulation_profile_editor: SimulationProfileEditorState,
     pub(super) simulation_history: SimulationHistory,
     pub(super) simulation_measurements: Vec<MeasureEntry>,
+    /// Xyce-specific solver options.
+    pub(crate) xyce_options: XyceOptions,
+    /// Run comparison state for comparing two historical runs.
+    pub(crate) run_compare: RunCompareState,
     optimization_workspace: OptimizationWorkspaceState,
     review_workspace: ReviewWorkspaceState,
     reports_workspace: ReportsWorkspaceState,
@@ -182,6 +188,8 @@ impl Default for NekoSpiceApp {
             simulation_profile_editor: SimulationProfileEditorState::from_disk(),
             simulation_history: SimulationHistory::default(),
             simulation_measurements: Vec::new(),
+            xyce_options: XyceOptions::default(),
+            run_compare: RunCompareState::default(),
             optimization_workspace: OptimizationWorkspaceState::default(),
             review_workspace: ReviewWorkspaceState::default(),
             reports_workspace: ReportsWorkspaceState::default(),

@@ -96,6 +96,11 @@ impl NekoSpiceApp {
 
         ui.add_space(8.0);
 
+        // Validation status
+        self.draw_panel_validation_status(ui);
+
+        ui.add_space(8.0);
+
         // Analysis directive editor
         self.draw_simulation_directive_editor(ui);
 
