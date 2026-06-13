@@ -85,6 +85,20 @@ impl NekoSpiceApp {
 
         ui.add_space(8.0);
 
+        // Workflow step indicator
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            ui.label(StudioTheme::section_title_for(mode, "Workflow"));
+            ui.add_space(2.0);
+            let has_doc = self.document.is_some();
+            let running = self.simulation_panel.active_task.is_some();
+            let has_result = self.simulation_panel.last_run.is_some();
+            ui.horizontal(|ui| {
+                workflow_step(ui, mode, "1", "Configure", has_doc, !running);
+                workflow_step(ui, mode, "2", "Run", has_doc && !running, running);
+                workflow_step(ui, mode, "3", "Analyze", has_result, has_result);
+            });
+        });
+
         // Quick analysis directive editor
         self.draw_simulation_directive_editor(ui);
 
@@ -200,4 +214,35 @@ impl NekoSpiceApp {
                 });
         });
     }
+}
+
+/// Draw a workflow step indicator dot with label.
+///
+/// Shows a colored circle (completed/active/pending) and label text.
+/// Used in the simulation panel to guide the user through the
+/// configure → run → analyze workflow.
+fn workflow_step(
+    ui: &mut egui::Ui,
+    mode: crate::app::theme::StudioThemeMode,
+    num: &str,
+    label: &str,
+    completed: bool,
+    active: bool,
+) {
+    let palette = StudioTheme::palette(mode);
+    let color = if completed {
+        palette.success
+    } else if active {
+        palette.accent
+    } else {
+        palette.text_muted
+    };
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(num).strong().color(color).size(12.0));
+        ui.label(
+            egui::RichText::new(label)
+                .color(if active || completed { palette.text } else { palette.text_muted })
+                .size(11.0),
+        );
+    });
 }
