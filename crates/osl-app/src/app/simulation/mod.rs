@@ -20,6 +20,7 @@
 //! - `workspace_widgets` — shared widget helpers
 
 pub(crate) mod analysis;
+pub(crate) mod step_sweep;
 pub(crate) mod state;
 pub(crate) mod panel;
 pub(crate) mod directive_editor;
