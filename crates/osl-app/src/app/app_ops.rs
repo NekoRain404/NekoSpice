@@ -7,9 +7,10 @@ use crate::document::KicadGuiDocument;
 use crate::library::KicadGuiLibrary;
 use crate::placement_config::SymbolPlacementConfig;
 use crate::DEFAULT_GUI_LIBRARY_TABLE;
-use osl_kicad::KicadPoint;
+use osl_kicad::{KicadPoint, KicadSimulationDirectiveKind};
 use std::path::PathBuf;
 
+use super::simulation::analysis::{AnalysisParams, StepSweep};
 use super::NekoSpiceApp;
 
 impl NekoSpiceApp {
@@ -33,6 +34,7 @@ impl NekoSpiceApp {
     }
 
     /// 从指定路径加载 KiCad 原理图文件，重置视口和编辑历史。
+    /// 加载成功后自动同步仿真面板状态（从原理图中提取仿真指令）。
     pub(super) fn load_schematic(&mut self, path: PathBuf) {
         match KicadGuiDocument::load(path.clone()) {
             Ok(document) => {
@@ -46,11 +48,69 @@ impl NekoSpiceApp {
                 self.schematic_tools.clear_pending();
                 self.load_error = None;
                 self.history.clear();
+                // Sync simulation panel state from schematic directives
+                self.sync_sim_panel_from_schematic();
                 self.status_message = Some("Loaded schematic".to_string());
             }
             Err(error) => {
                 self.load_error = Some(error.to_string());
                 self.status_message = None;
+            }
+        }
+    }
+
+    /// Read simulation directives from the loaded schematic and update
+    /// the simulation panel state (analysis kind, body, step sweep, etc.).
+    ///
+    /// Ensures the simulation panel always reflects what's actually
+    /// in the schematic file, rather than showing stale defaults.
+    pub(super) fn sync_sim_panel_from_schematic(&mut self) {
+        let Some(document) = &self.document else {
+            return;
+        };
+        let directives = document.simulation_directives();
+        if directives.is_empty() {
+            return;
+        }
+
+        // Find the first analysis directive
+        for directive in &directives {
+            match directive.kind {
+                KicadSimulationDirectiveKind::Tran
+                | KicadSimulationDirectiveKind::Ac
+                | KicadSimulationDirectiveKind::Dc
+                | KicadSimulationDirectiveKind::Op
+                | KicadSimulationDirectiveKind::Noise
+                | KicadSimulationDirectiveKind::Disto
+                | KicadSimulationDirectiveKind::Sens => {
+                    self.simulation_panel.directive_kind = directive.kind;
+                    // Extract body text after the directive keyword
+                    let body = directive
+                        .text
+                        .trim()
+                        .strip_prefix(directive.kind.keyword().unwrap_or(""))
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    self.simulation_panel.analysis_params =
+                        AnalysisParams::for_kind(directive.kind);
+                    self.simulation_panel.analysis_params.parse_body(&body);
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        // Look for .step directive
+        for directive in &directives {
+            if directive.kind == KicadSimulationDirectiveKind::Step {
+                let body = directive
+                    .text
+                    .trim()
+                    .strip_prefix(".step")
+                    .unwrap_or("")
+                    .trim();
+                self.simulation_panel.step_sweep = StepSweep::from_directive_body(body);
             }
         }
     }
@@ -101,7 +161,6 @@ impl NekoSpiceApp {
             return;
         };
 
-        // 编辑前保存快照以支持撤销
         self.history.push(document.snapshot());
 
         match document.delete_item(&uuid) {
@@ -112,18 +171,18 @@ impl NekoSpiceApp {
                 self.selected_hit = None;
                 self.clear_property_editor();
                 self.load_error = None;
+                self.history.clear_redo();
                 self.status_message =
                     Some(format!("Deleted {} {}", summary.operation, summary.target));
-                self.history.clear_redo();
             }
             Err(error) => {
-                self.status_message = Some(error.to_string());
+                self.status_message = Some(error);
             }
         }
     }
 
-    /// 将选中元素移动指定偏移量（内部方法）。
-    fn move_selected(&mut self, delta: KicadPoint) {
+    /// 移动选中元素到指定偏移量，自动创建撤销快照。
+    pub(super) fn move_selected(&mut self, delta: KicadPoint) {
         let Some(uuid) = self.selected_hit.as_ref().and_then(|hit| hit.uuid.clone()) else {
             self.status_message = Some("Selected item has no KiCad UUID".to_string());
             return;
@@ -138,7 +197,6 @@ impl NekoSpiceApp {
         match document.move_item(&uuid, delta) {
             Ok(summary) => {
                 let scene = document.scene();
-                self.selected_hit = scene.item_hit_by_uuid(&uuid);
                 self.scene = Some(scene);
                 self.sync_property_editor_from_selection();
                 self.load_error = None;
@@ -173,7 +231,6 @@ impl NekoSpiceApp {
         match document.rotate_item(&uuid, 90.0) {
             Ok(summary) => {
                 let scene = document.scene();
-                self.selected_hit = scene.item_hit_by_uuid(&uuid);
                 self.scene = Some(scene);
                 self.sync_property_editor_from_selection();
                 self.load_error = None;

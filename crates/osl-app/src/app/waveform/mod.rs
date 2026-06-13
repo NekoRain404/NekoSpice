@@ -10,6 +10,7 @@
 //! - `preview.rs` — static single/stacked waveform preview
 //! - `interactive.rs` — interactive zoom/pan/cursor waveform plot
 //! - `preview_primitives.rs` — low-level drawing primitives (grid, buckets)
+//! - `freq_domain_primitives.rs` — frequency-domain drawing helpers (log scale, traces)
 //! - `freq_domain_preview.rs` — FFT/Bode/Noise frequency-domain plots
 //! - `helpers.rs` — shared helper functions (trace ordering, labels)
 
@@ -17,6 +18,7 @@ pub(crate) mod helpers;
 pub(crate) mod preview;
 pub(crate) mod preview_primitives;
 pub(crate) mod interactive;
+pub(crate) mod freq_domain_primitives;
 pub(crate) mod freq_domain_preview;
 pub(crate) mod workspace;
 pub(crate) mod workspace_sections;

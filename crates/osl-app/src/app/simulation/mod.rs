@@ -1,7 +1,8 @@
 //! Simulation workspace module.
 //!
 //! Architecture:
-//! - `state` — SimulationBackendKind, AnalysisParams, SimulationPanelState
+//! - `analysis` — Structured analysis parameters and step sweep config
+//! - `state` — SimulationBackendKind, SimulationPanelState (re-exports from analysis)
 //! - `panel` — thin sidebar orchestrator composing editor + controller + display
 //! - `directive_editor` — structured analysis parameter editing UI
 //! - `run_controller` — profile building, run launch, task polling
@@ -18,6 +19,7 @@
 //! - `waveform_panel`, `artifacts_panel`, `report_panel` — result sub-panels
 //! - `workspace_widgets` — shared widget helpers
 
+pub(crate) mod analysis;
 pub(crate) mod state;
 pub(crate) mod panel;
 pub(crate) mod directive_editor;
