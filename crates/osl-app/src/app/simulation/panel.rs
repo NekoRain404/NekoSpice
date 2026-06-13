@@ -175,6 +175,28 @@ impl NekoSpiceApp {
                         );
                         ui.end_row();
                     }
+
+                    // Component parameters count
+                    let comp_count = self.simulation_profile_editor.component_params.len();
+                    if comp_count > 0 {
+                        ui.label(StudioTheme::muted_for(mode, "Components"));
+                        ui.label(
+                            egui::RichText::new(format!("{} defined", comp_count))
+                                .monospace(),
+                        );
+                        ui.end_row();
+                    }
+
+                    // Model parameters count
+                    let model_count = self.simulation_profile_editor.model_params.len();
+                    if model_count > 0 {
+                        ui.label(StudioTheme::muted_for(mode, "Models"));
+                        ui.label(
+                            egui::RichText::new(format!("{} defined", model_count))
+                                .monospace(),
+                        );
+                        ui.end_row();
+                    }
                 });
         });
     }
