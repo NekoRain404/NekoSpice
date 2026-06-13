@@ -48,6 +48,7 @@ pub(crate) mod history;
 pub(crate) mod measure_editor;
 pub(crate) mod history_panel;
 pub(crate) mod step_sweep_editor;
+pub(crate) mod step_sweep_grids;
 pub(crate) mod workspace_widgets;
 pub(crate) mod section_toggles;
 pub(crate) mod options_xyce;
