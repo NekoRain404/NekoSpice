@@ -61,6 +61,21 @@ impl NekoSpiceApp {
                 self.redo();
             }
 
+            // ── Ctrl+X: Cut ──────────────────────────────────────────
+            if ctrl && !shift && input.key_pressed(egui::Key::X) {
+                self.cut_selected_to_clipboard(ctx);
+            }
+
+            // ── Ctrl+C: Copy ─────────────────────────────────────────
+            if ctrl && !shift && input.key_pressed(egui::Key::C) {
+                self.copy_selected_to_clipboard(ctx);
+            }
+
+            // ── Ctrl+V: Paste ────────────────────────────────────────
+            if ctrl && !shift && input.key_pressed(egui::Key::V) {
+                self.paste_from_clipboard();
+            }
+
             // ── Ctrl+1..9: Switch workspaces ─────────────────────────
             if ctrl && !shift {
                 let workspace = match input.key_pressed(egui::Key::Num1) {

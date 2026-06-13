@@ -52,13 +52,13 @@ impl NekoSpiceApp {
                     self.rotate_selected();
                 }
                 ContextMenuAction::CutSelected => {
-                    self.status_message = Some("Cut (clipboard not yet supported)".to_string());
+                    self.cut_selected_to_clipboard(ui.ctx());
                 }
                 ContextMenuAction::CopySelected => {
-                    self.status_message = Some("Copy (clipboard not yet supported)".to_string());
+                    self.copy_selected_to_clipboard(ui.ctx());
                 }
                 ContextMenuAction::PasteAtCursor => {
-                    self.status_message = Some("Paste (clipboard not yet supported)".to_string());
+                    self.paste_from_clipboard();
                 }
                 ContextMenuAction::FitToScreen => {
                     self.viewport

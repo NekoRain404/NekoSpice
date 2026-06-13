@@ -17,6 +17,7 @@ mod app_sim_sync;
 mod canvas_context_menu;
 mod canvas_panel;
 mod canvas_shortcuts;
+mod clipboard;
 mod global_shortcuts;
 mod center_workspace;
 mod diagnostics_panel;
@@ -105,6 +106,8 @@ pub struct NekoSpiceApp {
     pub(super) hovered_hit: Option<KicadCanvasHit>,
     /// 快捷键帮助叠加层是否可见。
     pub(super) show_shortcuts_overlay: bool,
+    /// Internal clipboard buffer for cut/copy/paste operations.
+    pub(crate) clipboard_buffer: Option<clipboard::ClipboardBuffer>,
     pub(super) selected_symbol_id: Option<String>,
     pub(super) selected_symbol_placement: SymbolPlacementConfig,
     pub(crate) placement: Option<SymbolPlacementState>,
@@ -181,6 +184,7 @@ impl Default for NekoSpiceApp {
             selected_hit: None,
             hovered_hit: None,
             show_shortcuts_overlay: false,
+            clipboard_buffer: None,
             selected_symbol_id: None,
             selected_symbol_placement: SymbolPlacementConfig::default(),
             placement: None,
