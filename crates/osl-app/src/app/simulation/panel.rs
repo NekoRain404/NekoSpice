@@ -54,15 +54,21 @@ impl NekoSpiceApp {
             if running {
                 ui.horizontal(|ui| {
                     ui.label(StudioTheme::status_dot(palette.warning));
+                    let elapsed = self.simulation_panel.run_start_time
+                        .map(|t| t.elapsed().as_secs())
+                        .unwrap_or(0);
                     ui.label(
-                        egui::RichText::new(self.text(UiText::Running))
+                        egui::RichText::new(format!("Running ({}s)", elapsed))
                             .color(palette.warning)
                             .strong(),
                     );
-                    if ui.button("Stop").on_hover_text("Cancel running simulation").clicked() {
-                        self.simulation_panel.active_task = None;
-                        self.status_message = Some("Simulation cancelled".to_string());
-                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Stop").on_hover_text("Cancel running simulation").clicked() {
+                            self.simulation_panel.active_task = None;
+                            self.simulation_panel.run_start_time = None;
+                            self.status_message = Some("Simulation cancelled".to_string());
+                        }
+                    });
                 });
             } else {
                 let run_btn = ui.add_enabled(

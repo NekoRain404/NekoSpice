@@ -120,12 +120,16 @@ impl NekoSpiceApp {
                         .clicked()
                     {
                         self.simulation_panel.active_task = None;
+                        self.simulation_panel.run_start_time = None;
                         self.status_message = Some("Simulation cancelled".to_string());
                     }
-                    // Show running indicator
+                    // Show running indicator with elapsed time
                     ui.label(StudioTheme::status_dot(palette.warning));
+                    let elapsed = self.simulation_panel.run_start_time
+                        .map(|t| t.elapsed().as_secs())
+                        .unwrap_or(0);
                     ui.label(
-                        egui::RichText::new(self.text(UiText::Running))
+                        egui::RichText::new(format!("{} ({}s)", self.text(UiText::Running), elapsed))
                             .color(palette.warning)
                             .strong(),
                     );

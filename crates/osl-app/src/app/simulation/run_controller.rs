@@ -144,6 +144,7 @@ impl NekoSpiceApp {
                         &ngspice,
                         &xyce,
                     ));
+                self.simulation_panel.run_start_time = Some(std::time::Instant::now());
                 self.status_message =
                     Some(format!("Simulation started ({})", self.simulation_panel.backend.label()));
             }
@@ -165,6 +166,7 @@ impl NekoSpiceApp {
             return;
         };
         self.simulation_panel.active_task = None;
+        self.simulation_panel.run_start_time = None;
         match result {
             Ok(run) => {
                 if run.metadata.status == osl_core::RunStatus::Failed {

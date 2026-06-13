@@ -7,6 +7,7 @@
 pub(crate) use super::analysis::{AnalysisParams, StepSweep};
 
 use crate::simulation::{GuiSimulationRun, GuiSimulationTask};
+use std::time::Instant;
 use osl_kicad::KicadSimulationDirectiveKind;
 
 // ── Backend Engine ────────────────────────────────────────────────────
@@ -67,6 +68,8 @@ pub(crate) struct SimulationPanelState {
     pub(crate) netlist_warnings: Vec<String>,
     /// `.step` parameter sweep configuration.
     pub(crate) step_sweep: StepSweep,
+    /// When the current simulation run started (for elapsed time display).
+    pub(crate) run_start_time: Option<Instant>,
 }
 
 impl Default for SimulationPanelState {
@@ -82,6 +85,7 @@ impl Default for SimulationPanelState {
             backend: SimulationBackendKind::Ngspice,
             netlist_warnings: Vec::new(),
             step_sweep: StepSweep::None,
+            run_start_time: None,
         }
     }
 }
