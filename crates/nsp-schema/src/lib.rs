@@ -29,6 +29,7 @@ mod sexpr;
 mod sheet;
 mod simulation;
 mod spice_export;
+mod spice_export_helpers;
 mod style;
 mod symbol_library;
 mod symbols;
@@ -105,7 +106,7 @@ use pins::{compare_pin_numbers, schema_pin_alternate_value, schema_pin_display_v
 use sexpr::format_number;
 use sheet::sheet_properties;
 use simulation::is_spice_analysis_directive_text;
-use spice_export::spice_primitive_for_device;
+use spice_export_helpers::spice_primitive_for_device;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 pub(crate) use style::{
