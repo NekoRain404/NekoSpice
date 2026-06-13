@@ -117,5 +117,5 @@ impl KicadGuiDocument {
 
 
 #[cfg(test)]
-#[path = "document_tests.rs"]
+#[path = "document_tests/mod.rs"]
 mod tests;
