@@ -334,9 +334,30 @@ Xyce Options    → Xyce 专用求解参数（Newton/SourceStepping）
 Run Compare     → 选择两个历史仿真运行进行对比
 ```
 
+### Solver Presets
+```
+default            → Standard SPICE defaults
+fast               → Relaxed tolerances for quick iteration
+accurate           → Tight tolerances with Gear integration
+high-freq          → Optimized for high-frequency circuits
+convergence-help   → Aggressive convergence aids (SRCSTEPS, GMINSTEPS)
+power-electronics  → Switching converters, motor drives, power supplies
+low-power          → Ultra-low-power IoT, battery-operated sensor circuits
+precision          → Precision instrumentation, ADC/DAC, measurement frontends
+mixed-signal       → ADCs, PLLs, clock recovery — mixed dynamics
+rf                 → RF circuits, mixers, oscillators — tight accuracy
+```
+
+### Settings Persistence
+```
+~/.config/nekospice/settings.json     → UI prefs + simulation options + section toggles
+~/.config/nekospice/simulation_history.json  → Last 20 run records
+~/.config/nekospice/presets/*.preset  → User-defined custom presets
+```
+
 ### Build & Test
 ```bash
 cargo build -p osl-app          # 构建 GUI
-cargo test --workspace           # 运行所有测试（224 预期）
+cargo test --workspace           # 运行所有测试（218 预期）
 cargo run -p osl-app             # 启动 GUI
 ```
