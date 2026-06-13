@@ -52,6 +52,7 @@ pub(crate) mod workspace_widgets;
 pub(crate) mod section_toggles;
 pub(crate) mod options_xyce;
 pub(crate) mod run_compare;
+pub(crate) mod export_panel;
 
 pub(crate) use state::SimulationPanelState;
 pub(crate) use history::SimulationHistory;

@@ -69,21 +69,23 @@ impl NekoSpiceApp {
         });
     }
 
-    /// Overview sub-view: solver metrics + analysis + config summary + netlist + run output.
+    /// Overview sub-view: solver metrics + analysis + config summary + netlist + run output + export.
     fn draw_simulation_overview(&mut self, ui: &mut egui::Ui) {
         self.draw_simulation_solver_metrics(ui);
         ui.add_space(8.0);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
-                ui.set_width((ui.available_width() * 0.36).max(260.0));
+                ui.set_width((ui.available_width() * 0.34).max(260.0));
                 self.draw_simulation_analysis_setup(ui);
                 ui.add_space(8.0);
                 self.draw_simulation_netlist_preview(ui);
             });
             ui.add_space(8.0);
             ui.vertical(|ui| {
-                ui.set_width((ui.available_width() * 0.50).max(240.0));
+                ui.set_width((ui.available_width() * 0.48).max(240.0));
                 self.draw_simulation_profile_summary(ui);
+                ui.add_space(8.0);
+                self.draw_export_options_panel(ui);
             });
             ui.add_space(8.0);
             ui.vertical(|ui| {
