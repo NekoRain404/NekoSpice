@@ -11,6 +11,7 @@ use osl_kicad::{KicadCanvasHit, KicadCanvasScene};
 
 // ── 编辑操作（从本文件拆分）────────────────────────────────────────────
 mod app_ops;
+mod app_sim_sync;
 
 // ── Cross-cutting app modules (stay at app level) ──────────────────────
 mod canvas_context_menu;
