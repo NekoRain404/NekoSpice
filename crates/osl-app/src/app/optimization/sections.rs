@@ -7,8 +7,8 @@ use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use super::state::{MonteCarloMeasurement, MonteCarloParam, OptimizationTarget, SweepParam};
 use super::widgets::{
-    definition_row, measurement_row, metric_card, mini_donut, parameter_row, progress_bar,
-    result_row, status_chip, sweep_row,
+    metric_card, mini_donut, parameter_row,
+    result_row, status_chip,
 };
 use crate::app::theme::StudioTheme;
 use eframe::egui;

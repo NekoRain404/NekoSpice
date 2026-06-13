@@ -54,6 +54,7 @@ pub(crate) fn result_row(
 }
 
 /// sweep row。
+#[allow(dead_code)]
 pub(crate) fn sweep_row(
     ui: &mut egui::Ui,
     parameter: &str,
@@ -69,6 +70,7 @@ pub(crate) fn sweep_row(
 }
 
 /// definition row。
+#[allow(dead_code)]
 pub(crate) fn definition_row(
     ui: &mut egui::Ui,
     mode: StudioThemeMode,
@@ -93,6 +95,7 @@ pub(crate) fn definition_row(
 }
 
 /// measurement row。
+#[allow(dead_code)]
 pub(crate) fn measurement_row(
     ui: &mut egui::Ui,
     measurement: &str,
@@ -108,6 +111,7 @@ pub(crate) fn measurement_row(
 }
 
 /// progress bar。
+#[allow(dead_code)]
 pub(crate) fn progress_bar(ui: &mut egui::Ui, mode: StudioThemeMode, label: &str, value: f32) {
     let palette = StudioTheme::palette(mode);
     ui.horizontal(|ui| {
