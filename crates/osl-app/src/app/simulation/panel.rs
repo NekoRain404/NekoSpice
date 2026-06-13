@@ -103,6 +103,27 @@ impl NekoSpiceApp {
             });
         });
 
+        // Current config summary bar
+        StudioTheme::panel_frame_for(mode).show(ui, |ui| {
+            let kind = self.simulation_panel.directive_kind;
+            let body = self.simulation_panel.analysis_params.to_body();
+            let backend = self.simulation_panel.backend.label();
+            let temp = &self.simulation_profile_editor.options.temperature;
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("{} {}", kind, body.trim()))
+                        .monospace().size(11.0).color(palette.accent),
+                );
+                ui.separator();
+                ui.label(
+                    egui::RichText::new(format!("{} | {}°C", backend, temp))
+                        .monospace().size(11.0).color(palette.text_muted),
+                );
+            });
+        });
+
+        ui.add_space(8.0);
+
         // Quick Start templates
         super::quick_start::draw_quick_start_panel(self, ui, mode);
 
@@ -153,6 +174,23 @@ impl NekoSpiceApp {
 
         // Diagnostics
         self.draw_document_diagnostics_panel(ui, 150.0);
+
+        // Re-run button when previous run exists
+        if self.simulation_panel.last_run.is_some() && self.simulation_panel.active_task.is_none() {
+            ui.add_space(4.0);
+            let rerun_btn = ui.add_enabled(
+                self.document.is_some(),
+                egui::Button::new(
+                    egui::RichText::new("Re-Run Simulation").color(palette.text),
+                )
+                .fill(palette.panel_soft)
+                .stroke(egui::Stroke::new(1.0, palette.border))
+                .min_size(egui::Vec2::new(ui.available_width(), 28.0)),
+            );
+            if rerun_btn.clicked() {
+                self.run_simulation_from_panel();
+            }
+        }
     }
 }
 
