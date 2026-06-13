@@ -89,6 +89,10 @@ pub(crate) fn draw_profile_options(app: &mut NekoSpiceApp, ui: &mut egui::Ui) {
     app.draw_run_compare_panel(ui, mode);
     ui.add_space(8.0);
 
+    // Custom Presets — save/load user-defined configurations
+    app.draw_custom_presets_panel(ui, mode);
+    ui.add_space(8.0);
+
     // Customize View — collapsible section toggles
     egui::CollapsingHeader::new(
         egui::RichText::new("Customize View").color(palette.text_muted),

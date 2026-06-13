@@ -55,6 +55,7 @@ pub(crate) mod section_toggles;
 pub(crate) mod options_xyce;
 pub(crate) mod run_compare;
 pub(crate) mod export_panel;
+pub(crate) mod custom_presets;
 
 pub(crate) use state::SimulationPanelState;
 pub(crate) use history::SimulationHistory;

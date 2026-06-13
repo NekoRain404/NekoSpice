@@ -116,6 +116,8 @@ pub struct NekoSpiceApp {
     pub(super) simulation_measurements: Vec<MeasureEntry>,
     /// Xyce-specific solver options.
     pub(crate) xyce_options: XyceOptions,
+    /// Name for saving a new custom preset.
+    pub(crate) custom_preset_name: String,
     /// Run comparison state for comparing two historical runs.
     pub(crate) run_compare: RunCompareState,
     optimization_workspace: OptimizationWorkspaceState,
@@ -189,6 +191,7 @@ impl Default for NekoSpiceApp {
             simulation_history: SimulationHistory::default(),
             simulation_measurements: Vec::new(),
             xyce_options: XyceOptions::default(),
+            custom_preset_name: String::new(),
             run_compare: RunCompareState::default(),
             optimization_workspace: OptimizationWorkspaceState::default(),
             review_workspace: ReviewWorkspaceState::default(),
