@@ -136,7 +136,7 @@ pub(crate) fn mini_donut(ui: &mut egui::Ui, mode: StudioThemeMode, pass_ratio: f
     painter.text(
         center,
         egui::Align2::CENTER_CENTER,
-        "93.3%",
+        format!("{:.1}%", pass_ratio * 100.0),
         egui::FontId::proportional(14.0),
         palette.text,
     );
