@@ -208,24 +208,17 @@ impl NekoSpiceApp {
                 self.text(UiText::ExportReport),
             ));
             ui.horizontal_wrapped(|ui| {
-                if ui.button("PDF").clicked() {
-                    self.status_message = Some("Export: PDF report generation not yet available".to_string());
+                if ui.button("HTML").on_hover_text("Export simulation report as HTML").clicked() {
+                    self.export_report_html();
                 }
-                if ui.button("HTML").clicked() {
-                    if let Some(run) = &self.simulation_panel.last_run {
-                        let html = osl_sim::run_report_html(&run.metadata);
-                        let path = run.output_dir.join("report.html");
-                        if let Err(e) = std::fs::write(&path, &html) {
-                            self.status_message = Some(format!("Export failed: {}", e));
-                        } else {
-                            self.status_message = Some(format!("HTML report: {}", path.display()));
-                        }
-                    } else {
-                        self.status_message = Some("No simulation run to export".to_string());
-                    }
+                if ui.button("CSV").on_hover_text("Export measurement data as CSV").clicked() {
+                    self.export_measurements_csv();
                 }
-                if ui.button("DOCX").clicked() {
-                    self.status_message = Some("Export: DOCX report generation not yet available".to_string());
+                if ui.button("Markdown").on_hover_text("Export report as Markdown").clicked() {
+                    self.export_report_markdown();
+                }
+                if ui.button("Netlist").on_hover_text("Export SPICE netlist to file").clicked() {
+                    self.export_netlist_dialog();
                 }
             });
             report_row(

@@ -1,7 +1,6 @@
 use crate::app::NekoSpiceApp;
 use crate::app::localization::UiText;
 use crate::app::theme::StudioTheme;
-use super::preview::draw_stacked_waveform_preview;
 use super::freq_domain_preview::{draw_fft_magnitude_plot, draw_bode_plot, draw_noise_plot};
 use super::interactive::draw_interactive_waveform_plot;
 use super::workspace::WaveformAnalysisTab;
@@ -52,6 +51,13 @@ impl NekoSpiceApp {
                 } else {
                     self.status_message = Some("Overlay mode: single signal view".to_string());
                 }
+            }
+            ui.separator();
+            if ui.button("Export CSV").on_hover_text("Export all waveform data as CSV").clicked() {
+                self.export_measurements_csv();
+            }
+            if ui.button("Export Report").on_hover_text("Export simulation report as HTML").clicked() {
+                self.export_report_html();
             }
         });
     }
@@ -108,15 +114,25 @@ impl NekoSpiceApp {
                             );
                         }
                         super::workspace::WaveformAnalysisTab::Eye => {
-                            // Eye diagram requires multiple periods — show time domain with note
-                            draw_stacked_waveform_preview(
+                            // Eye diagram: show all signals overlaid with period folding hint
+                            draw_interactive_waveform_plot(
                                 ui,
                                 mode,
                                 &summary,
                                 self.simulation_panel.selected_waveform_signal.as_deref(),
+                                &mut self.waveform_workspace.viewport,
+                                self.waveform_workspace.cursor_overlay,
+                                &mut self.waveform_workspace.cursor_x,
+                                &mut self.waveform_workspace.cursor_y,
+                                &mut self.waveform_workspace.is_panning,
+                                &mut self.waveform_workspace.pan_start,
                                 330.0,
                             );
-                            ui.label(StudioTheme::muted_for(mode, "Eye diagram requires multi-period data"));
+                            ui.add_space(4.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(StudioTheme::muted_for(mode,
+                                    "Tip: Eye diagram works best with periodic digital signals. Use .step to overlay multiple periods."));
+                            });
                         }
                     }
                 }

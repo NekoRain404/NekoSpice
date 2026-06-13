@@ -9,5 +9,6 @@ pub(crate) mod sections;
 pub(crate) mod state;
 pub(crate) mod widgets;
 pub(crate) mod workspace;
+pub(crate) mod export;
 
 pub(crate) use state::ReportsWorkspaceState;
