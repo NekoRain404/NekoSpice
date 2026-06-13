@@ -1,0 +1,7 @@
+* NekoSpice Eeschema generated SPICE netlist with model include
+.include "models/ideal_diode.lib"
+V1 in 0 PULSE(0 5 0 1n 1n 10u 20u)
+R1 in out 1k
+D1 out 0 DIDEAL
+.tran 100n 40u
+.end

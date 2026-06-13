@@ -1,0 +1,5 @@
+* NekoSpice model-check example: symbol pin order matches subckt pin order
+.subckt GOODAMP IN+ IN- OUT VCC VEE
+E1 OUT 0 IN+ IN- 100k
+R1 OUT 0 1Meg
+.ends GOODAMP

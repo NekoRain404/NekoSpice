@@ -1,0 +1,211 @@
+//! 符号库抽象层。提供符号库的加载和查找功能。
+//!
+use crate::placement_config::SymbolPlacementConfig;
+use nsp_schema::{
+    NspAt, NspCanvasScene, NspIndexedSymbol, NspSymbolDef, NspSymbolLibraryIndex,
+    NspSymbolLibraryIndexQuery, read_symbol_library, read_symbol_library_index,
+};
+use std::path::{Path, PathBuf};
+
+#[derive(Debug)]
+pub(crate) struct NspGuiLibrary {
+    path: PathBuf,
+    index: NspSymbolLibraryIndex,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct NspGuiSymbolDefinition {
+    pub(crate) id: String,
+    pub(crate) definition: NspSymbolDef,
+    pub(crate) library_symbols: Vec<NspSymbolDef>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct NspGuiSymbolPreview {
+    pub(crate) id: String,
+    pub(crate) scene: NspCanvasScene,
+}
+
+impl NspGuiLibrary {
+    /// load。
+    pub(crate) fn load(path: PathBuf) -> Result<Self, String> {
+        read_symbol_library_index(&path)
+            .map(|index| Self { path, index })
+            .map_err(|error| error.to_string())
+    }
+
+    /// path。
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// index。
+    pub(crate) fn index(&self) -> &NspSymbolLibraryIndex {
+        &self.index
+    }
+
+    /// filtered index。
+    pub(crate) fn filtered_index(&self, text: &str) -> NspSymbolLibraryIndex {
+        let text = text.trim();
+        let query = NspSymbolLibraryIndexQuery {
+            text: (!text.is_empty()).then(|| text.to_string()),
+            library: None,
+            footprint: None,
+        };
+        if query.is_empty() {
+            self.index.clone()
+        } else {
+            self.index.query(&query)
+        }
+    }
+
+    /// symbol。
+    pub(crate) fn symbol(&self, lib_id: &str) -> Option<&NspIndexedSymbol> {
+        self.index.symbol(lib_id)
+    }
+
+    /// symbol definition。
+    pub(crate) fn symbol_definition(&self, lib_id: &str) -> Result<NspGuiSymbolDefinition, String> {
+        let symbol = self.symbol(lib_id).ok_or_else(|| {
+            format!("schema symbol '{lib_id}' is not loaded in the library index")
+        })?;
+        let library =
+            read_symbol_library(Path::new(&symbol.source)).map_err(|error| error.to_string())?;
+        let definition = library
+            .symbol(&symbol.id)
+            .or_else(|| library.symbol_by_name_or_local_name(&symbol.name))
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "schema symbol definition '{}' was not found in {}",
+                    symbol.id, symbol.source
+                )
+            })?;
+        Ok(NspGuiSymbolDefinition {
+            id: symbol.id.clone(),
+            definition,
+            library_symbols: library.symbols,
+        })
+    }
+
+    /// symbol preview。
+    pub(crate) fn symbol_preview(
+        &self,
+        lib_id: &str,
+        config: SymbolPlacementConfig,
+    ) -> Result<NspGuiSymbolPreview, String> {
+        let symbol = self.symbol_definition(lib_id)?;
+        let scene = NspCanvasScene::from_symbol_definition(
+            symbol.id.clone(),
+            &symbol.definition,
+            &symbol.library_symbols,
+            config.unit_option(),
+            config.body_style,
+        );
+        Ok(NspGuiSymbolPreview {
+            id: symbol.id,
+            scene,
+        })
+    }
+
+    /// symbol placement preview。
+    pub(crate) fn symbol_placement_preview(
+        &self,
+        lib_id: &str,
+        at: NspAt,
+        config: SymbolPlacementConfig,
+    ) -> Result<NspGuiSymbolPreview, String> {
+        let symbol = self.symbol_definition(lib_id)?;
+        let scene = NspCanvasScene::from_symbol_definition_at(
+            symbol.id.clone(),
+            &symbol.definition,
+            &symbol.library_symbols,
+            at,
+            config.unit_option(),
+            config.body_style,
+        );
+        Ok(NspGuiSymbolPreview {
+            id: symbol.id,
+            scene,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DEFAULT_SYMBOL_LIBRARY_TABLE;
+
+    #[test]
+    fn loads_symbol_library_index_for_gui_browser() {
+        let library = NspGuiLibrary::load(
+            crate::test_support::workspace_root().join(DEFAULT_SYMBOL_LIBRARY_TABLE),
+        )
+        .unwrap();
+
+        assert_eq!(library.index().libraries.len(), 1);
+        assert_eq!(library.index().symbols.len(), 3);
+        assert!(library.symbol("NekoSpice:R").is_some());
+
+        let filtered = library.filtered_index("NekoSpice:C");
+        assert_eq!(filtered.symbols.len(), 1);
+        assert_eq!(filtered.symbols[0].id, "NekoSpice:C");
+    }
+
+    #[test]
+    fn loads_symbol_definition_for_gui_placement() {
+        let library = NspGuiLibrary::load(
+            crate::test_support::workspace_root().join(DEFAULT_SYMBOL_LIBRARY_TABLE),
+        )
+        .unwrap();
+
+        let symbol = library.symbol_definition("NekoSpice:R").unwrap();
+
+        assert_eq!(symbol.id, "NekoSpice:R");
+        assert_eq!(symbol.definition.name, "NekoSpice:R");
+        assert_eq!(symbol.library_symbols.len(), 3);
+        assert_eq!(symbol.definition.property("Reference"), Some("R"));
+    }
+
+    #[test]
+    fn builds_symbol_preview_scene_for_gui_browser() {
+        let library = NspGuiLibrary::load(
+            crate::test_support::workspace_root().join(DEFAULT_SYMBOL_LIBRARY_TABLE),
+        )
+        .unwrap();
+
+        let preview = library
+            .symbol_preview("NekoSpice:R", SymbolPlacementConfig::default())
+            .unwrap();
+
+        assert_eq!(preview.id, "NekoSpice:R");
+        assert_eq!(preview.scene.symbols.len(), 1);
+        assert_eq!(preview.scene.symbols[0].lib_id, "NekoSpice:R");
+        assert_eq!(preview.scene.symbols[0].pins.len(), 2);
+        assert!(preview.scene.bounds.is_some());
+    }
+
+    #[test]
+    fn builds_symbol_placement_preview_at_canvas_point() {
+        let library = NspGuiLibrary::load(
+            crate::test_support::workspace_root().join(DEFAULT_SYMBOL_LIBRARY_TABLE),
+        )
+        .unwrap();
+
+        let preview = library
+            .symbol_placement_preview(
+                "NekoSpice:R",
+                NspAt {
+                    x: 25.4,
+                    y: 12.7,
+                    rotation: 0.0,
+                },
+                SymbolPlacementConfig::default(),
+            )
+            .unwrap();
+
+        assert_eq!(preview.scene.symbols[0].at.x, 25.4);
+        assert_eq!(preview.scene.symbols[0].at.y, 12.7);
+        assert!(preview.scene.bounds.unwrap().min.x > 20.0);
+    }
+}

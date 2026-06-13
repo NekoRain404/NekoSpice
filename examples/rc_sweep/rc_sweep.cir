@@ -1,0 +1,11 @@
+* NekoSpice example: parameterized RC low-pass transient response
+.param rload=1000
+V1 in 0 PULSE(0 1 0 1n 1n 1u 2u)
+R1 in out {rload}
+C1 out 0 1n
+.tran 10n 10u
+.control
+run
+.endc
+.end
+

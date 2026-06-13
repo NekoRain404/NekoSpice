@@ -1,0 +1,6 @@
+* NekoSpice Eeschema generated SPICE netlist
+V1 in 0 DC 5
+R1 in out 1k
+C1 out 0 10n
+.tran 1u 1m
+.end

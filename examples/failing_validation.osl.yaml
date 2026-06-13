@@ -1,0 +1,14 @@
+project: failing_validation
+
+runs:
+  - name: rc_filter_expected_failure
+    netlist: rc_filter/rc.cir
+    checks:
+      - name: impossible_steady_average
+        kind: avg
+        signal: v(out)
+        from: 8us
+        to: 10us
+        min: 0.9
+        max: 1.0
+

@@ -1,0 +1,21 @@
+[package]
+name = "nsp-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "nk"
+path = "src/main.rs"
+
+[dependencies]
+nsp-core = { path = "../nsp-core" }
+nsp-schema = { path = "../nsp-schema" }
+nsp-model = { path = "../nsp-model" }
+nsp-netlist = { path = "../nsp-netlist" }
+nsp-report = { path = "../nsp-report" }
+nsp-render = { path = "../nsp-render" }
+nsp-sim = { path = "../nsp-sim" }
+nsp-waveform = { path = "../nsp-waveform" }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"

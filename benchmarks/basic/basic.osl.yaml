@@ -1,0 +1,68 @@
+project: basic_bench
+
+runs:
+  - name: rc_filter
+    netlist: ../../examples/rc_filter/rc.cir
+    checks:
+      - name: final_output_decay
+        kind: final_value
+        signal: v(out)
+        min: 0.20
+        max: 0.35
+      - name: steady_average_output
+        kind: avg
+        signal: v(out)
+        from: 8us
+        to: 10us
+        min: 0.48
+        max: 0.52
+      - name: source_current_rms
+        kind: rms
+        signal: i(v1)
+        min: 0.0004
+        max: 0.0007
+  - name: rc_load_sweep
+    netlist: ../../examples/rc_sweep/rc_sweep.cir
+    sweep:
+      rload: [500, 1000, 2000]
+    checks:
+      - name: steady_average_output
+        kind: avg
+        signal: v(out)
+        from: 8us
+        to: 10us
+        min: 0.48
+        max: 0.52
+  - name: diode_rectifier
+    netlist: ../../examples/diode_rectifier/rectifier.cir
+    checks:
+      - name: final_output_near_zero
+        kind: final_value
+        signal: v(out)
+        min: -0.01
+        max: 0.01
+      - name: peak_output
+        kind: max
+        signal: v(out)
+        min: 9.0
+        max: 9.5
+  - name: rlc_resonance
+    netlist: ../../examples/rlc_resonance/rlc.cir
+    checks:
+      - name: final_output_negative
+        kind: final_value
+        signal: v(out)
+        min: -8.0
+        max: -7.0
+      - name: peak_to_peak
+        kind: pp
+        signal: v(out)
+        min: 20.0
+        max: 21.0
+      - name: output_rms
+        kind: rms
+        signal: v(out)
+        from: 100us
+        to: 200us
+        min: 7.8
+        max: 8.2

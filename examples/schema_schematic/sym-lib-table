@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "NekoSpice")(type "NekoSpice")(uri "${KIPRJMOD}/neko_spice.nsp_sym")(options "")(descr "NekoSpice analog simulation symbols"))
+)
