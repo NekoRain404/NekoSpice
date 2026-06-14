@@ -94,7 +94,11 @@ pub struct VendorImportResult {
 
 /// 从单个文件导入 SPICE 模型
 pub fn import_spice_model_file(path: &Path) -> OslResult<VendorImportResult> {
-    let content = nsp_core::read_text(path)?;
+    // Some vendor model files contain non-UTF-8 binary data (e.g. compiled
+    // models). Read the raw bytes and use lossy conversion to handle them.
+    let bytes = std::fs::read(path)
+        .map_err(|err| OslError::io(format!("read {}", path.display()), err))?;
+    let content = String::from_utf8_lossy(&bytes).to_string();
     let vendor = VendorKind::detect(path);
     parse_spice_model_content(&content, path, vendor)
 }
