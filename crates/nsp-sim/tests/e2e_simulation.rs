@@ -226,3 +226,47 @@ fn full_bridge_simulation() {
         run_demo_simulation("KiCad-Simulations-main/FullBridge", &[]).unwrap();
     eprintln!("  FullBridge status={:?} log:\n{log}", meta.status);
 }
+
+// ─── Additional demo circuit tests ─────────────────────────────────────────
+
+#[test]
+fn sallen_key_highpass_simulation() {
+    let (meta, _raw, _log) =
+        run_demo_simulation("KiCad-Simulations-main/sallen-key-highpass", &["ad8051.lib"]).unwrap();
+    assert_eq!(meta.status, nsp_core::RunStatus::Passed);
+}
+
+#[test]
+fn opamp_741_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/741", &["bipmod.lib"]).unwrap();
+    eprintln!("741 opamp status={:?}\n{log}", meta.status);
+}
+
+#[test]
+fn pwm_audio_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/pwm-audio", &[]).unwrap();
+    eprintln!("pwm-audio status={:?}\n{log}", meta.status);
+}
+
+#[test]
+fn analog_multiplier_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/analog-multiplier", &[]).unwrap();
+    eprintln!("analog-multiplier status={:?}\n{log}", meta.status);
+}
+
+#[test]
+fn cmos555_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/CMOS555_4", &[]).unwrap();
+    eprintln!("CMOS555 status={:?}\n{log}", meta.status);
+}
+
+#[test]
+fn gain_ctrl_amp_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/gain-ctrl-amp", &[]).unwrap();
+    eprintln!("gain-ctrl-amp status={:?}\n{log}", meta.status);
+}
