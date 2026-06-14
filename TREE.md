@@ -6,34 +6,22 @@
 
 ```
 NekoSpice/
-├── Cargo.toml              # 工作空间根配置
+├── Cargo.toml              # 工作空间根配置（10 个 crate）
 ├── Cargo.lock              # 依赖锁定文件
 ├── README.md               # 项目说明（中文）
 ├── TREE.md                 # 本文件：项目结构说明
-├── crates/                 # 所有 Rust crate
+├── crates/                 # 所有 Rust crate（277 个源文件，62K 行）
 ├── docs/                   # 文档和 UI 参考图
-│   ├── README.md           # 文档说明
 │   ├── USER_MANUAL.md      # 用户手册（中文）
-│   ├── TREE.md             # 旧结构文件
-│   ├── ui/                 # UI 参考设计图
-│   │   ├── ui-ref-01.png   # 首页仪表板
-│   │   ├── ui-ref-02.png   # 原理图编辑器
-│   │   ├── ui-ref-03.png   # 库浏览
-│   │   ├── ui-ref-04.png   # 仿真配置
-│   │   ├── ui-ref-05.png   # 波形查看器
-│   │   ├── ui-ref-06.png   # 优化工作台
-│   │   ├── ui-ref-07.png   # 设计审查
-│   │   ├── ui-ref-08.png   # 报告生成
-│   │   ├── ui-ref-09.png   # 设置面板
-│   │   └── ui-ref-10.png   # 高级功能
+│   ├── ui/                 # UI 参考设计图（10 张）
 │   ├── dev.md              # 开发者笔记
-│   ├── development-plan.md # 开发计划
-│   └── three-day-sprint.md # 三日冲刺计划
+│   └── development-plan.md # 开发计划
 ├── scripts/                # 构建和运行脚本
-│   ├── run.sh              # GUI 启动脚本（设置栈空间）
-│   └── screenshot.sh       # UI 截图脚本
+│   └── run.sh              # GUI 启动脚本（设置栈空间 ≥ 256MB）
 ├── examples/               # 示例原理图
 │   └── cm5_minima/         # CM5 最小示例
+├── benchmarks/             # 性能基准测试
+├── libs/                   # 外部库文件
 └── runs/                   # 仿真运行输出（gitignore）
 ```
 
@@ -41,194 +29,140 @@ NekoSpice/
 
 ### 核心层（Core Layer）
 
-```
-crates/
-├── nsp-core/               # 核心类型和工具
-│   └── src/
-│       └── lib.rs          # OslResult, RunStatus, 基础类型
-│
-├── nsp-schema/             # 原理图格式解析和 SPICE 导出
-│   ├── src/
-│   │   ├── lib.rs          # 模块入口，公共类型导出
-│   │   ├── spice_export.rs # SPICE 网表导出（MOSFET检测、子电路处理）
-│   │   ├── symbols.rs      # 符号实例和属性定义
-│   │   ├── symbols_parse_impl.rs  # S-expression 符号解析
-│   │   ├── connectivity.rs # 连接性图和网络分析
-│   │   ├── simulation.rs   # 仿真指令解析
-│   │   ├── schematic_library_impl.rs  # 库符号解析
-│   │   ├── schematic_check_impl.rs    # ERC 检查
-│   │   └── transform.rs    # 坐标变换
-│   ├── tests/              # 集成测试
-│   └── docs/               # crate 文档
-│
-├── nsp-netlist/            # 网表解析和格式转换
-│   ├── src/
-│   │   ├── lib.rs          # 公共接口
-│   │   └── ...             # 网表解析器
-│   └── tests/
-│
-├── nsp-waveform/           # 波形数据解析
-│   └── src/
-│       ├── lib.rs          # 公共接口
-│       ├── raw.rs          # ngspice raw 格式解析
-│       ├── csv.rs          # CSV 波形解析
-│       └── fft.rs          # FFT 频域分析
-│
-└── nsp-model/              # 厂商模型库
-    └── src/
-        ├── lib.rs          # 模型目录接口
-        ├── ti.rs           # TI SPICE 模型
-        └── adi.rs          # ADI SPICE 模型
-```
+| Crate | 职责 | 关键模块 |
+|-------|------|----------|
+| `nsp-core` | 基础类型、错误处理、运行工具 | `OslResult`, `RunStatus`, `make_run_id` |
+| `nsp-schema` | 原理图格式解析和 SPICE 导出 | `sexpr`, `spice_export`, `connectivity`, `canvas` |
+| `nsp-model` | SPICE 模型验证和厂商导入 | `model_check`, `vendor_import` |
+| `nsp-render` | SVG 原理图渲染 | `svg_render`, `svg_helpers` |
 
 ### 仿真层（Simulation Layer）
 
-```
-crates/
-├── nsp-sim/                # 仿真后端引擎
-│   └── src/
-│       ├── lib.rs          # 仿真引擎 trait 和实现
-│       │                 # - NgspiceCliBackend
-│       │                 # - XyceCliBackend
-│       │                 # - ensure_ngspice_control_exports()
-│       │                 # - 默认 .tran 注入
-│       └── ...             # 网表注入、控制块处理
-│
-├── nsp-report/             # 仿真报告生成
-│   └── src/
-│       ├── lib.rs          # 报告生成接口
-│       ├── html.rs         # HTML 报告
-│       ├── json.rs         # JSON 报告
-│       └── markdown.rs     # Markdown 报告
-│
-└── nsp-render/             # SVG 原理图渲染
-    └── src/
-        ├── lib.rs          # 渲染接口
-        └── svg_render_impl.rs  # SVG 渲染实现
-```
+| Crate | 职责 | 关键模块 |
+|-------|------|----------|
+| `nsp-sim` | 仿真后端、配置注入、日志解析 | `NgspiceCliBackend`, `XyceCliBackend`, `SimulationProfile` |
+| `nsp-netlist` | 网表导入和格式转换 | `schema_import`, `netlist_parse`, `ltspice_import` |
+| `nsp-waveform` | 波形数据解析和 FFT | `raw_parser`, `fft` |
+
+### 报告层（Report Layer）
+
+| Crate | 职责 |
+|-------|------|
+| `nsp-report` | HTML/JSON/Markdown/JUnit 报告生成 |
 
 ### 应用层（Application Layer）
 
-```
-crates/
-├── nsp-cli/                # 命令行工具
-│   └── src/
-│       ├── main.rs         # CLI 入口
-│       ├── cli_run.rs      # run-schematic 命令
-│       │                 # - normalize_spice_models()
-│       │                 # - resolve_include_paths()
-│       │                 # - normalize_included_lib_files()
-│       └── ...             # 其他子命令
-│
-└── nsp-app/                # GUI 应用（egui + wgpu）
-    └── src/
-        ├── main.rs         # 应用入口
-        ├── lib.rs          # run_native() 启动
-        ├── app.rs          # 主应用结构
-        ├── document.rs     # 文档模型
-        ├── simulation.rs   # 仿真管理
-        ├── library.rs      # 库管理
-        ├── viewport.rs     # 视口管理
-        │
-        ├── app/            # UI 模块（按功能组织）
-        │   ├── home/       # 首页仪表板
-        │   ├── schematic/  # 原理图编辑器
-        │   │   ├── toolbar.rs        # 工具栏
-        │   │   ├── workspace.rs      # 工作区布局
-        │   │   ├── inspector/        # 属性面板
-        │   │   ├── bottom_dock/      # 底部面板
-        │   │   └── tools/            # 编辑工具
-        │   ├── library/    # 库浏览
-        │   ├── simulation/ # 仿真配置
-        │   │   ├── state.rs          # 仿真状态
-        │   │   ├── analysis.rs       # 分析参数
-        │   │   ├── profile_editor.rs # 配置编辑器
-        │   │   ├── run_controller.rs # 运行控制
-        │   │   ├── options_solver.rs # 求解器选项
-        │   │   ├── waveform_panel.rs # 波形面板
-        │   │   └── ...               # 更多子模块
-        │   ├── waveform/   # 波形分析
-        │   ├── optimization/ # 参数优化
-        │   ├── review/     # 设计审查
-        │   ├── reports/    # 报告生成
-        │   ├── settings/   # 设置面板
-        │   ├── theme.rs    # 主题定义
-        │   ├── locale.rs   # 国际化
-        │   └── navigation.rs # 导航管理
-        │
-        ├── canvas/         # 原理图画布
-        │   ├── scene_renderer.rs     # 场景渲染器
-        │   ├── scene_renderer_wires.rs  # 导线渲染
-        │   ├── scene_renderer_annotations.rs # 标注渲染
-        │   ├── primitives/ # 渲染图元
-        │   │   ├── grid.rs           # 网格
-        │   │   ├── sheet.rs          # 图纸边框
-        │   │   ├── symbol.rs         # 符号渲染
-        │   │   └── text.rs           # 文本渲染
-        │   ├── transforms.rs # 坐标变换
-        │   └── colors.rs   # 颜色定义
-        │
-        ├── document_tests/ # 文档模型测试
-        └── simulation_tests.rs # 仿真测试
-```
+| Crate | 职责 |
+|-------|------|
+| `nsp-app` | eframe GUI 应用（wgpu 硬件加速） |
+| `nsp-cli` | 命令行工具 |
 
-## 仿真工作流
+## nsp-app 模块结构
 
 ```
-原理图 (.kicad_sch / .nsp_sch)
-    ↓ 解析
-NspSchematic (内存模型)
-    ↓ 连接性分析
-NspNetGraph (网络图)
-    ↓ SPICE 导出
-spice_export.rs → netlist text
-    ├─ 符号 → SPICE 元件行
-    ├─ 连线 → 节点连接
-    ├─ .include → 库引用
-    ├─ .model → 默认模型注入
-    ├─ .tran → 默认分析注入
-    └─ .end → 结束标记
-    ↓ 后处理
-normalize_spice_models() → 修正模型类型
-resolve_include_paths() → 解析库路径
-normalize_included_lib_files() → 修正库内模型
-    ↓ 仿真引擎
-NgspiceCliBackend / XyceCliBackend
-    ↓ 结果解析
-RunMetadata + WaveformData
-    ↓ 可视化
-波形显示 / FFT 分析 / Bode 图
+crates/nsp-app/src/
+├── main.rs                    # 入口点
+├── lib.rs                     # crate 入口
+├── document.rs                # 原理图文档抽象层
+├── document_ops.rs            # 文档编辑操作
+├── library.rs                 # 符号库加载和浏览
+├── viewport.rs                # 画布视口变换
+├── simulation.rs              # 仿真任务分发器
+├── simulation_run_loader.rs   # 运行结果加载
+├── waveform_summary.rs        # 波形摘要
+├── report_summary.rs          # 报告摘要
+├── canvas/                    # 画布渲染
+│   ├── scene_renderer.rs      # 场景渲染
+│   ├── scene_renderer_wires.rs
+│   └── primitives/            # 基础图元
+├── placement_config.rs        # 符号放置配置
+├── test_support.rs            # 测试辅助
+└── app/                       # UI 主模块
+    ├── app.rs                 # NekoSpiceApp 核心结构体
+    ├── app_ops.rs             # 编辑操作
+    ├── runtime.rs             # 窗口启动配置
+    ├── theme.rs               # 主题和样式
+    ├── navigation.rs          # 导航状态
+    ├── schematic/             # 原理图编辑界面
+    │   ├── toolbar.rs
+    │   ├── workspace.rs
+    │   ├── inspector/         # 属性检查器
+    │   ├── tools/             # 编辑工具
+    │   └── bottom_dock/       # 底部面板（波形、调试）
+    ├── simulation/            # 仿真配置界面
+    │   ├── panel.rs           # 仿真右侧面板
+    │   ├── run_controller.rs  # 运行控制逻辑
+    │   ├── analysis.rs        # 分析类型配置
+    │   ├── directive_editor.rs
+    │   ├── waveform_panel.rs
+    │   └── options_*.rs       # 求解器选项
+    ├── library/               # 符号库浏览界面
+    ├── home/                  # 首页仪表板
+    ├── optimization/          # 参数优化
+    ├── review/                # 设计审查
+    ├── reports/               # 报告生成
+    ├── settings/              # 应用设置
+    └── locale.rs / localization*.rs  # 国际化
 ```
 
-## 技术栈
+## 测试覆盖
 
-| 组件 | 技术 |
-|------|------|
-| GUI 框架 | egui 0.34 + wgpu |
-| 仿真后端 | ngspice / Xyce |
-| 原理图格式 | KiCad S-expression (.kicad_sch) |
-| 波形格式 | ngspice raw / CSV |
-| 报告格式 | HTML / JSON / Markdown |
-| 构建系统 | Cargo workspace |
-| 版本控制 | Git |
-| 平台支持 | Linux (Wayland/X11) |
+### 单元测试（239 通过，2 忽略）
 
-## 快速命令
+| 测试套件 | 通过 | 描述 |
+|----------|------|------|
+| `nsp-schema` | 80 | 原理图解析、SPICE 导出、连通性 |
+| `nsp-app` | 40 | UI 逻辑、文档操作 |
+| `nsp-netlist` | 26 | 网表导入和转换 |
+| `nsp-sim` | 14 + 15 e2e | 仿真后端 + **15 个端到端电路测试** |
+| `nsp-waveform` | 11 | 波形解析和 FFT |
+| `nsp-core` | 10 | 核心类型 |
+| 其他 | 43 | 报告、渲染、模型 |
+
+### 端到端仿真测试（15 个真实 KiCad 电路）
+
+| 电路 | 结果 | 说明 |
+|------|------|------|
+| RC filter | ✅ + 波形解析 | RC 低通滤波器 |
+| 555-bipolar | ✅ + 波形解析 | 555 定时器（BJT） |
+| Sallen-Key lowpass | ✅ + 波形解析 | 二阶有源低通 |
+| Sallen-Key highpass | ✅ | 二阶有源高通 |
+| Buck converter | ✅ | 开关电源（MOSFET） |
+| Boost converter | ✅ | 升压转换器 |
+| CMOS555 | ✅ | CMOS 555 定时器 |
+| 741 opamp | ✅ | 运算放大器 |
+| analog-multiplier | ✅ | 模拟乘法器 |
+| PWM audio | ✅ | PWM 音频放大 |
+| Class-D | ⚠️ | 复杂模型，ngspice 兼容性有限 |
+| FullBridge | ⚠️ | table() E-source 不支持 |
+
+## 构建和运行
 
 ```bash
-# 构建 GUI
-cargo build -p nsp-app
+# 构建
+cargo build --release
 
-# 运行 GUI
-bash scripts/run.sh
+# 运行 GUI（需要 ≥ 256MB 栈空间）
+./scripts/run.sh
+# 或手动：ulimit -s unlimited && cargo run -p nsp-app
 
-# 运行所有测试（215 个）
-cargo test --workspace -- --skip placement
+# 运行所有测试
+cargo test --workspace
 
-# CLI 仿真
-cargo run -p nsp-cli -- run-schematic <file.kicad_sch>
+# 运行端到端仿真测试
+cargo test -p nsp-sim --test e2e_simulation -- --nocapture
+```
 
-# 代码检查
-cargo clippy --workspace --all-targets
-cargo fmt --all
+## 依赖架构
+
+```
+nsp-app → nsp-schema, nsp-sim, nsp-waveform, nsp-report, nsp-model, nsp-core
+nsp-cli → nsp-schema, nsp-netlist, nsp-core
+nsp-sim → nsp-core, nsp-waveform
+nsp-netlist → nsp-schema, nsp-core
+nsp-schema → nsp-core
+nsp-render → nsp-core
+nsp-waveform → nsp-core
+nsp-report → nsp-core
+nsp-model → nsp-core
 ```
