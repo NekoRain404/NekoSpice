@@ -11,3 +11,6 @@ path = "src/lib.rs"
 regex = "1"
 nsp-core = { path = "../nsp-core" }
 nsp-waveform = { path = "../nsp-waveform" }
+
+[dev-dependencies]
+nsp-schema = { path = "../nsp-schema" }

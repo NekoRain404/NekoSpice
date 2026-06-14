@@ -1785,6 +1785,7 @@ name = "nsp-sim"
 version = "0.1.0"
 dependencies = [
  "nsp-core",
+ "nsp-schema",
  "nsp-waveform",
  "regex",
 ]

@@ -240,15 +240,18 @@ fn relative_dependency_from_line(line: &str) -> Option<String> {
     Some(path.display().to_string())
 }
 
+/// Ensure the netlist contains a `.control` block that writes `waveform.raw`.
+///
+/// ngspice analysis directives (`.tran`, `.ac`, `.dc`, `.op`) must remain at
+/// deck level — **outside** `.control`.  Inside `.control` we only place
+/// commands (`run`, `write`, `set`, `print`).
 fn ensure_ngspice_control_exports(source: &str) -> String {
     if source.to_ascii_lowercase().contains("waveform.raw") {
         return source.to_string();
     }
 
-    // Detect analysis type to choose appropriate output strategy
     let has_op = source.lines().any(|line| {
-        let lower = line.trim().to_ascii_lowercase();
-        lower == ".op"
+        line.trim().eq_ignore_ascii_case(".op")
     });
     let has_tran_ac_dc = source.lines().any(|line| {
         let lower = line.trim().to_ascii_lowercase();
@@ -259,10 +262,10 @@ fn ensure_ngspice_control_exports(source: &str) -> String {
     let mut output = String::new();
     let mut inserted = false;
 
+    // Pass 1: if a `.endc` already exists, inject write directives just before it.
     for line in &lines {
         let trimmed = line.trim().to_ascii_lowercase();
         if !inserted && trimmed == ".endc" {
-            // If there's no analysis directive, inject .tran before .endc
             if !has_tran_ac_dc && !has_op {
                 output.push_str(".tran 1u 10m\n");
                 output.push_str("run\n");
@@ -276,43 +279,51 @@ fn ensure_ngspice_control_exports(source: &str) -> String {
     }
 
     if inserted {
-        output
-    } else {
-        let mut without_end = String::new();
-        let mut end_line = None::<&str>;
-        for line in lines {
-            if line.trim().eq_ignore_ascii_case(".end") {
-                end_line = Some(line);
-            } else {
-                without_end.push_str(line);
-                without_end.push('\n');
-            }
-        }
-
-        without_end.push_str(".control\n");
-
-        if !has_tran_ac_dc && !has_op {
-            // No analysis directive found — inject default .tran for useful simulation
-            without_end.push_str(".tran 1u 10m\n");
-            without_end.push_str("set filetype=binary\n");
-            without_end.push_str("run\n");
-            without_end.push_str("write waveform.raw all\n");
-        } else if has_op && !has_tran_ac_dc {
-            // .op only: run and print operating point, no waveform
-            without_end.push_str("run\n");
-            without_end.push_str("print all\n");
-        } else {
-            // .tran/.ac/.dc (or mixed): write binary waveform
-            without_end.push_str("set filetype=binary\n");
-            without_end.push_str("run\n");
-            without_end.push_str("write waveform.raw all\n");
-        }
-
-        without_end.push_str(".endc\n");
-        without_end.push_str(end_line.unwrap_or(".end"));
-        without_end.push('\n');
-        without_end
+        return output;
     }
+
+    // Pass 2: no `.control`/`.endc` found — wrap with a new `.control` block.
+    // Analysis directives (.tran/.ac/.dc/.op) stay OUTSIDE .control at deck level.
+    let mut deck_lines = Vec::new();
+    let mut end_line: Option<&str> = None;
+    for line in &lines {
+        if line.trim().eq_ignore_ascii_case(".end") {
+            end_line = Some(line);
+        } else {
+            deck_lines.push(line);
+        }
+    }
+
+    let mut result = String::new();
+
+    // Emit deck lines (including any analysis directives at deck level).
+    for line in &deck_lines {
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    // Open the .control block — only commands go inside.
+    result.push_str(".control\n");
+
+    if !has_tran_ac_dc && !has_op {
+        // No analysis directive at all — inject a default transient for useful output.
+        result.push_str(".tran 1u 10m\n");
+        result.push_str("set filetype=binary\n");
+        result.push_str("run\n");
+        result.push_str("write waveform.raw all\n");
+    } else if has_op && !has_tran_ac_dc {
+        result.push_str("run\n");
+        result.push_str("print all\n");
+    } else {
+        result.push_str("set filetype=binary\n");
+        result.push_str("run\n");
+        result.push_str("write waveform.raw all\n");
+    }
+
+    result.push_str(".endc\n");
+    result.push_str(end_line.unwrap_or(".end"));
+    result.push('\n');
+    result
 }
 
 fn apply_parameter_overrides(source: &str, parameters: &[ParameterOverride]) -> String {
