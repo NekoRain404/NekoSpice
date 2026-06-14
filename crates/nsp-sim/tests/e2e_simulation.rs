@@ -9,6 +9,7 @@ use nsp_schema::read_schematic_with_libraries;
 use nsp_sim::{NgspiceCliBackend, SimulationProfile, SimulatorBackend, inject_profile_directives};
 use std::fs;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Root of the project workspace (contains KiCad-Simulations-main/).
 fn workspace_root() -> PathBuf {
@@ -66,7 +67,8 @@ fn run_demo_simulation(
     let complete = inject_profile_directives(&netlist, &profile);
 
     // Write netlist + deps
-    let tmp_dir = std::env::temp_dir().join(format!("nekospice_e2e_{sch_name}"));
+    let run_id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let tmp_dir = std::env::temp_dir().join(format!("nekospice_e2e_{sch_name}_{run_id}"));
     let _ = fs::remove_dir_all(&tmp_dir);
     fs::create_dir_all(&tmp_dir).map_err(|e| format!("mkdir: {e}"))?;
 

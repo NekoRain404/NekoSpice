@@ -166,6 +166,7 @@ pub(crate) fn convert_spice_params(sim_type: Option<&str>, params: &str) -> Stri
 }
 
 /// Extract a named parameter as f64, using a default if not found.
+#[allow(dead_code)]
 pub(crate) fn extract_named_f64(params: &str, name: &str, default: f64) -> f64 {
     params
         .split(|c: char| c.is_ascii_whitespace())
@@ -181,6 +182,7 @@ pub(crate) fn extract_named_f64(params: &str, name: &str, default: f64) -> f64 {
 }
 
 /// Extract a named frequency parameter, supporting SI suffixes (k, M, G, u, n, p).
+#[allow(dead_code)]
 pub(crate) fn extract_named_freq(params: &str, name: &str, default: f64) -> f64 {
     params
         .split(|c: char| c.is_ascii_whitespace())
@@ -196,6 +198,7 @@ pub(crate) fn extract_named_freq(params: &str, name: &str, default: f64) -> f64 
 }
 
 /// Parse a SPICE value with SI suffixes (1k = 1000, 1u = 1e-6, etc.)
+#[allow(dead_code)]
 pub(crate) fn parse_spice_value(value: &str) -> Option<f64> {
     let value = value.trim();
     if value.is_empty() {

@@ -5,10 +5,9 @@ use crate::diagnostics::schema_diagnostic;
 use crate::simulation::is_spice_analysis_directive_text;
 use crate::spice_export_helpers::{
     child_sheet_scope, compose_spice_model_value, convert_spice_params,
-    count_spice_directive_lines, expand_path_env_vars, expand_spice_template, extract_named_f64,
-    extract_named_freq, infer_spice_primitive_from_lib_id, is_child_sheet_nonfatal_diagnostic,
-    is_hierarchy_root_nonfatal_diagnostic, normalize_source_value, parse_spice_value,
-    quote_spice_path, sanitize_spice_identifier, scoped_net_name, scoped_reference,
+    count_spice_directive_lines, expand_path_env_vars, expand_spice_template, infer_spice_primitive_from_lib_id, is_child_sheet_nonfatal_diagnostic,
+    is_hierarchy_root_nonfatal_diagnostic, normalize_source_value,
+    quote_spice_path, scoped_net_name,
     scoped_symbol_instance, spice_item_name, spice_primitive_for_device,
 };
 use crate::symbols::{NspSymbolPropertySource, symbol_ordered_pins};
@@ -19,7 +18,6 @@ use crate::{
 };
 use nsp_core::OslResult;
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -258,6 +256,7 @@ impl NspSchematic {
             .collect()
     }
 
+    #[allow(dead_code)]
     fn symbol_to_spice_line(
         &self,
         symbol: &NspSymbolInstance,
