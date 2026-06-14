@@ -1710,6 +1710,7 @@ name = "nsp-app"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "libc",
  "nsp-core",
  "nsp-model",
  "nsp-report",

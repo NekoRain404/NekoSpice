@@ -18,7 +18,7 @@ mod test_support;
 mod viewport;
 mod waveform_summary;
 
-pub use app::{NekoSpiceApp, load_canvas_scene, run_native};
+pub use app::{NekoSpiceApp, load_canvas_scene, run_native, run_native_with_boxed};
 
 /// 测试用原理图路径（RC 滤波器，含 NekoSpice 符号库）。
 #[allow(dead_code)]

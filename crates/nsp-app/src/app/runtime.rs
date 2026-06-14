@@ -1,5 +1,4 @@
 //! 原生窗口运行时入口。封装 eframe 启动配置和应用初始化。
-//!
 use super::NekoSpiceApp;
 use super::theme::{StudioTheme, StudioThemeMode};
 use eframe::egui::{self};
@@ -11,9 +10,9 @@ const CJK_FONT_CANDIDATES: [&str; 3] = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 ];
 
-/// run native。
-pub fn run_native() -> eframe::Result {
-    let native_options = eframe::NativeOptions {
+/// 构建原生窗口启动选项（共享配置）。
+fn native_options() -> eframe::NativeOptions {
+    eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("NekoSpice")
             .with_inner_size([1440.0, 920.0])
@@ -21,14 +20,36 @@ pub fn run_native() -> eframe::Result {
             .with_app_id("nekospice"),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
-    };
+    }
+}
 
+/// 配置 eframe 上下文（字体、主题）。
+fn configure_context(cc: &eframe::CreationContext<'_>) {
+    install_system_cjk_font(&cc.egui_ctx);
+    StudioTheme::apply(&cc.egui_ctx, StudioThemeMode::default());
+}
+
+/// 使用已构造好的 Box<NekoSpiceApp> 启动原生窗口。
+///
+/// 适用于外部构造（例如大栈线程）后传递给主线程的场景。
+pub fn run_native_with_boxed(app: Box<NekoSpiceApp>) -> eframe::Result {
     eframe::run_native(
         "NekoSpice",
-        native_options,
+        native_options(),
+        Box::new(move |cc| {
+            configure_context(cc);
+            Ok(app)
+        }),
+    )
+}
+
+/// run native（保留向后兼容）。
+pub fn run_native() -> eframe::Result {
+    eframe::run_native(
+        "NekoSpice",
+        native_options(),
         Box::new(|cc| {
-            install_system_cjk_font(&cc.egui_ctx);
-            StudioTheme::apply(&cc.egui_ctx, StudioThemeMode::default());
+            configure_context(cc);
             Ok(Box::new(NekoSpiceApp::default()))
         }),
     )

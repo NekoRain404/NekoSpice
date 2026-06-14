@@ -59,7 +59,7 @@ use placement::SymbolPlacementState;
 use preferences::StudioPreferences;
 use reports::ReportsWorkspaceState;
 use review::ReviewWorkspaceState;
-pub use runtime::run_native;
+pub use runtime::{run_native, run_native_with_boxed};
 use schematic::SelectionPropertyEditorState;
 use schematic::inspector::SchematicInspectorPanelState;
 use schematic::tools::SchematicToolState;
@@ -113,9 +113,9 @@ pub struct NekoSpiceApp {
     selection_properties: SelectionPropertyEditorState,
     schematic_inspector: SchematicInspectorPanelState,
     pub(super) schematic_tools: SchematicToolState,
-    pub(super) simulation_panel: SimulationPanelState,
-    pub(super) simulation_profile_editor: SimulationProfileEditorState,
-    pub(super) simulation_history: SimulationHistory,
+    pub(super) simulation_panel: Box<SimulationPanelState>,
+    pub(super) simulation_profile_editor: Box<SimulationProfileEditorState>,
+    pub(super) simulation_history: Box<SimulationHistory>,
     pub(super) simulation_measurements: Vec<MeasureEntry>,
     /// Xyce-specific solver options.
     pub(crate) xyce_options: XyceOptions,
@@ -123,10 +123,10 @@ pub struct NekoSpiceApp {
     pub(crate) custom_preset_name: String,
     /// Run comparison state for comparing two historical runs.
     pub(crate) run_compare: RunCompareState,
-    optimization_workspace: OptimizationWorkspaceState,
-    review_workspace: ReviewWorkspaceState,
-    reports_workspace: ReportsWorkspaceState,
-    waveform_workspace: WaveformWorkspaceState,
+    optimization_workspace: Box<OptimizationWorkspaceState>,
+    review_workspace: Box<ReviewWorkspaceState>,
+    reports_workspace: Box<ReportsWorkspaceState>,
+    waveform_workspace: Box<WaveformWorkspaceState>,
     active_workspace: StudioWorkspace,
     preferences: StudioPreferences,
     pub(super) symbol_search: String,
@@ -142,7 +142,7 @@ pub struct NekoSpiceApp {
     /// 当前光标世界坐标，用于状态栏显示。
     pub(super) cursor_world: Option<nsp_schema::NspPoint>,
     /// TI/ADI 厂商模型目录
-    pub(crate) vendor_catalog: nsp_model::VendorModelCatalog,
+    pub(crate) vendor_catalog: Box<nsp_model::VendorModelCatalog>,
     /// 厂商模型搜索关键词
     pub(crate) vendor_search: String,
     /// 厂商模型目录路径
@@ -202,17 +202,17 @@ impl Default for NekoSpiceApp {
             selection_properties: SelectionPropertyEditorState::default(),
             schematic_inspector: SchematicInspectorPanelState::default(),
             schematic_tools: SchematicToolState::default(),
-            simulation_panel: SimulationPanelState::from_disk(),
-            simulation_profile_editor: SimulationProfileEditorState::from_disk(),
-            simulation_history: SimulationHistory::default(),
+            simulation_panel: Box::new(SimulationPanelState::from_disk()),
+            simulation_profile_editor: Box::new(SimulationProfileEditorState::from_disk()),
+            simulation_history: Box::new(SimulationHistory::default()),
             simulation_measurements: Vec::new(),
             xyce_options: XyceOptions::default(),
             custom_preset_name: String::new(),
             run_compare: RunCompareState::default(),
-            optimization_workspace: OptimizationWorkspaceState::default(),
-            review_workspace: ReviewWorkspaceState::default(),
-            reports_workspace: ReportsWorkspaceState::default(),
-            waveform_workspace: WaveformWorkspaceState::default(),
+            optimization_workspace: Box::new(OptimizationWorkspaceState::default()),
+            review_workspace: Box::new(ReviewWorkspaceState::default()),
+            reports_workspace: Box::new(ReportsWorkspaceState::default()),
+            waveform_workspace: Box::new(WaveformWorkspaceState::default()),
             active_workspace: initial_workspace(),
             preferences: StudioPreferences::default(),
             symbol_search: String::new(),
@@ -224,7 +224,7 @@ impl Default for NekoSpiceApp {
             history: history::EditHistory::default(),
             last_canvas_rect: None,
             cursor_world: None,
-            vendor_catalog: nsp_model::VendorModelCatalog::default(),
+            vendor_catalog: Box::new(nsp_model::VendorModelCatalog::default()),
             vendor_search: String::new(),
             vendor_model_path: String::new(),
             show_vendor_panel: false,

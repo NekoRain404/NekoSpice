@@ -119,13 +119,11 @@ fn hit_for_symbol_reference(scene: &NspCanvasScene, reference: &str) -> Option<N
 mod tests {
     use crate::app::NekoSpiceApp;
 
-    /// NekoSpiceApp::default() exceeds the test thread stack even at 16 MiB.
-    /// Skip until the app struct is boxified or reduced.
     #[test]
-    #[ignore = "NekoSpiceApp struct too large for test stack — tracked for future fix"]
+    #[ignore = "NekoSpiceApp::default() overflows even 64 MiB stack — needs field boxing"]
     fn placement_mode_starts_and_cancels_from_selected_symbol() {
         let handle = std::thread::Builder::new()
-            .stack_size(64 * 1024 * 1024)
+            .stack_size(128 * 1024 * 1024)
             .spawn(|| {
                 let mut app = NekoSpiceApp {
                     selected_symbol_id: Some("NekoSpice:R".to_string()),

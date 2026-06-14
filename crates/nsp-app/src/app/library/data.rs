@@ -94,7 +94,7 @@ impl NekoSpiceApp {
                 let total = catalog.total_count();
                 let subckt_count = catalog.subckts.len();
                 let model_count = catalog.models.len();
-                self.vendor_catalog = catalog;
+                self.vendor_catalog = Box::new(catalog);
                 self.status_message = Some(format!(
                     "Loaded {} vendor models ({} subcircuits, {} .model)",
                     total, subckt_count, model_count
