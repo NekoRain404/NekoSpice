@@ -270,3 +270,41 @@ fn gain_ctrl_amp_simulation() {
         run_demo_simulation("KiCad-Simulations-main/gain-ctrl-amp", &[]).unwrap();
     eprintln!("gain-ctrl-amp status={:?}\n{log}", meta.status);
 }
+
+// ─── Additional power electronics and analog circuit tests ────────────────
+
+#[test]
+fn llc_converter_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/LLC", &["models.lib"]).unwrap();
+    eprintln!("LLC status={:?}\n{log}", meta.status);
+}
+
+#[test]
+fn royer_converter_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/Royer", &["royer1.kicad_sch"]).unwrap();
+    // Royer has its own .lib files
+    eprintln!("Royer status={:?}\n{log}", meta.status);
+}
+
+#[test]
+fn intro4_opamp_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/intro4", &[]).unwrap();
+    eprintln!("intro4 status={:?}\n{log}", meta.status);
+}
+
+#[test]
+fn rel_osc_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/rel_osc", &["40106all.lib", "CD40106B.lib"]).unwrap();
+    eprintln!("rel_osc status={:?}\n{log}", meta.status);
+}
+
+#[test]
+fn bip_osc_simulation() {
+    let (meta, _raw, log) =
+        run_demo_simulation("KiCad-Simulations-main/bip-osc-2", &["bipmod.lib"]).unwrap();
+    eprintln!("bip-osc status={:?}\n{log}", meta.status);
+}
