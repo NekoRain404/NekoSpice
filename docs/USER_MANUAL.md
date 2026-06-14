@@ -7,17 +7,26 @@ NekoSpice 是一款基于 Rust 原生构建的 SPICE 仿真平台，兼容标准
 ### 启动应用
 
 ```bash
-cargo run -p nsp-app
+# 推荐方式（自动设置栈空间）
+./scripts/run.sh
+
+# 或手动设置栈空间后启动
+ulimit -s unlimited && cargo run -p nsp-app
 ```
+
+> **注意**: NekoSpice 使用 wgpu 硬件加速渲染，需要较大的主线程栈空间。`scripts/run.sh` 会自动设置 `ulimit -s unlimited`。
 
 应用启动后默认加载 `examples/cm5_minima/CM5.nsp_sch` 示例原理图。
 
 ### 基本工作流
 
-1. **打开原理图** — `Ctrl+O` 或菜单 File > Open
-2. **编辑仿真参数** — 切换到 Simulation 工作区
-3. **运行仿真** — `F5` 或点击 Run 按钮
-4. **查看结果** — 切换到 Waveforms 工作区查看波形
+1. **打开原理图** — `Ctrl+O` 打开 `.kicad_sch` 或 `.nsp_sch` 格式的原理图文件
+2. **配置仿真** — 切换到 Simulation 工作区，选择分析类型（Transient/AC/DC/OP）
+3. **设置参数** — 配置时间步长、频率范围、温度等参数（支持预设快速填充）
+4. **选择后端** — 选择 ngspice 或 Xyce 仿真后端
+5. **运行仿真** — 点击 Run 按钮，后台线程执行仿真
+6. **查看结果** — 底部面板查看波形、FFT 频谱、Bode 图
+7. **分析报告** — Reports 工作区查看完整的仿真报告
 
 ---
 
